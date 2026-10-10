@@ -46,6 +46,10 @@ and Super+W (close) in Linux windows.
 
 ## Building
 
+`scripts/dev.sh setup` gets a machine ready (JDKs, SDK packages, proot, an
+emulator) and `scripts/dev.sh doctor` says what's missing; see
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). By hand:
+
 ```sh
 ./scripts/fetch-proot.sh          # Termux's proot -> app/src/main/jniLibs (needs bsdtar)
 ./gradlew :app:installDebug
@@ -59,6 +63,9 @@ builds `owl/build/cli/owl.jar`, the checker the widget store's CI runs.
 In debug builds you can launch guest commands with
 `adb shell am start -n dev.omalauncher/.MainActivity --es exec foot`.
 
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): the dev environment, the
+  emulator, what can be tested where, and syncing with upstream
+- [AGENTS.md](AGENTS.md): for coding agents working on the code
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the compositor, rendering, GPU
   acceleration, and how updates reach existing installs
 - [docs/RELEASING.md](docs/RELEASING.md): Play releases and store assets

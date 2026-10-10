@@ -9,6 +9,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/app/src/main/jniLibs/arm64-v8a"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+# .deb files are ar archives, which bsdtar reads and GNU tar doesn't: macOS's tar is bsdtar, Linux needs libarchive's.
+TAR=$(command -v bsdtar || echo tar)
 
 # Pinned, so a build ships exactly the versions whose source the licenses screen links to
 # (ui/LicensesScreen.kt). Termux's pool only keeps current versions: when a download 404s, update
@@ -28,7 +30,7 @@ fetch() {
   }
   echo "$sha  $WORK/$pkg/pkg.deb" | shasum -a 256 -c --status || { echo "$file: SHA256 mismatch" >&2; exit 1; }
   # bsdtar reads .deb (ar) archives, unlike macOS ar
-  (cd "$WORK/$pkg" && tar xf pkg.deb && tar xf data.tar.*)
+  (cd "$WORK/$pkg" && "$TAR" xf pkg.deb && "$TAR" xf data.tar.*)
 }
 
 fetch proot pool/main/p/proot/proot_${PROOT}_aarch64.deb \
