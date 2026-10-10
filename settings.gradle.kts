@@ -14,6 +14,11 @@ pluginManagement {
     }
 }
 
+// Downloads a JDK the build needs (17 for owl's toolchain) when none is installed.
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 dependencyResolutionManagement {
     repositories {
         google {
