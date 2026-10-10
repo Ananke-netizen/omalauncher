@@ -103,6 +103,8 @@ fun MenuItems(
     minWidth: Dp,
     itemPadding: Dp,
     fontSize: TextUnit,
+    /** A line above the items saying what they act on, like "Chrome · work"; not tappable. */
+    title: String? = null,
 ) {
     Column(
         Modifier
@@ -111,6 +113,13 @@ fun MenuItems(
             .frame(1.dp, Palette.border, Palette.surface)
             .padding(vertical = 6.dp),
     ) {
+        if (title != null) {
+            BasicText(
+                title,
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = itemPadding),
+                style = Mono.copy(fontSize = fontSize, color = Palette.muted),
+            )
+        }
         for ((label, action) in items) {
             BasicText(
                 label,

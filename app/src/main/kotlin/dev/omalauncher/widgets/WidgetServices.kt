@@ -217,7 +217,8 @@ class WidgetServices(
                 "timezone" to Str(java.util.TimeZone.getDefault().id),
                 "launcher" to Str(BuildConfig.VERSION_NAME),
                 "theme" to (runtime.themes.current?.title?.let(::Str) ?: Null),
-                "apps" to num(runtime.androidApps.apps.size.toLong()),
+                // Apps, not copies: a work copy of a personal app isn't counted twice.
+                "apps" to num(runtime.androidApps.apps.distinctBy { it.component }.size.toLong()),
             ),
         )
     }

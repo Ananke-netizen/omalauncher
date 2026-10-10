@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import dev.omalauncher.AppProfile
 import dev.omalauncher.widgets.Folder
 import dev.omalauncher.widgets.HomeItem
 import kotlin.math.ceil
@@ -45,6 +46,8 @@ fun FolderTile(
     focused: Boolean,
     modifier: Modifier,
     onTap: () -> Unit,
+    /** The same apps' profiles, so paused work apps show dimmed; too small for a badge of their own. */
+    profiles: List<AppProfile?> = emptyList(),
 ) {
     val bare = LauncherStyle.bareAppIcons
     BoxWithConstraints(
@@ -66,7 +69,7 @@ fun FolderTile(
                             for (col in 0 until 2) {
                                 val i = row * 2 + col
                                 Box(Modifier.size(mini), contentAlignment = Alignment.Center) {
-                                    folder.apps.getOrNull(i)?.let { AppGlyph(it.label, icons.getOrNull(i), mini) }
+                                    folder.apps.getOrNull(i)?.let { ProfileMarks(profiles.getOrNull(i), badged = true, mini) { AppGlyph(it.label, icons.getOrNull(i), mini) } }
                                 }
                             }
                         }
