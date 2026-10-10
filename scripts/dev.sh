@@ -103,8 +103,8 @@ doctor() {
   echo "toolchain"
   ok=0; [ -n "$JDK25" ] && ok=1
   check $ok "JDK 25 (Gradle daemon)${JDK25:+: $JDK25}" "scripts/dev.sh setup (with mise), or set JDK25_HOME; Gradle can also download it itself"
-  ok=0; [ -n "$JDK17" ] && ok=1 || missing=1
-  check $ok "JDK 17 (owl's toolchain)${JDK17:+: $JDK17}" "scripts/dev.sh setup (with mise), or set JDK17_HOME"
+  ok=0; [ -n "$JDK17" ] && ok=1
+  check $ok "JDK 17 (owl's toolchain)${JDK17:+: $JDK17}" "scripts/dev.sh setup (with mise), or set JDK17_HOME; Gradle can also download it itself"
   ok=0; [ -n "$SDK" ] && ok=1 || missing=1
   check $ok "Android SDK${SDK:+: $SDK}" "install Android Studio or the command-line tools, then set ANDROID_HOME"
   ok=0; [ -n "$SDK" ] && [ -x "$SDK/platform-tools/adb" ] && ok=1
@@ -127,7 +127,7 @@ doctor() {
   [ "$(uname)" = Linux ] && check $ok "/dev/kvm (hardware acceleration)" "add yourself to the kvm group"
   echo "devices"
   if command -v adb >/dev/null; then adb devices | sed 1d | grep . | sed 's/^/  /' || echo "  none"; fi
-  [ $missing = 0 ] || { say "missing pieces: the unit tests need both JDKs and the SDK"; return 1; }
+  [ $missing = 0 ] || { say "missing pieces: the unit tests need the SDK"; return 1; }
 }
 
 setup() {

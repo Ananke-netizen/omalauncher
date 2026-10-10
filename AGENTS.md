@@ -5,14 +5,14 @@ Android home screen with Omarchy's look, plus an optional Arch Linux ARM system
 under proot for which it is the Wayland compositor. Read these first, as needed:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the compositor, rendering, GPU, and how updates reach existing installs
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): the dev environment, the emulator, what can be tested where, upstream syncs
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): the dev environment in full, the emulator, what can be tested where, syncing with upstream
 - [app/src/main/assets/widgets/README.md](app/src/main/assets/widgets/README.md): the OWL widget language
 
 ## Commands
 
-Use `scripts/dev.sh`: it finds the two JDKs the build needs (25 for Gradle, 17
-for the `owl` module's toolchain) and the Android SDK, which a bare `./gradlew`
-may not.
+Use `scripts/dev.sh`: it finds the Android SDK and the two JDKs the build needs
+(25 for Gradle, 17 for the `owl` module's toolchain). A bare `./gradlew` works
+too once the SDK is set up, but downloads any JDK it can't find.
 
 ```sh
 scripts/dev.sh doctor                     # what's missing; scripts/dev.sh setup installs it
@@ -36,12 +36,12 @@ scripts/dev.sh logcat -d                  # the app's log
 scripts/dev.sh emulator stop              # when done
 ```
 
-The emulator is x86_64 and runs the arm64 app through ARM translation. The
-launcher, themes, widgets without commands, Android apps and the first-run
-flow work there. **Nothing under proot does**: Linux setup past the download,
-terminals, Linux windows, pacman, coding agents, the GPU. Those need a real
-arm64 phone (`ANDROID_SERIAL=<serial> scripts/dev.sh run`). Say which of the
-two you checked a change on, or that you couldn't.
+The emulator is x86_64 and runs the arm64 app through ARM translation, which
+covers the launcher but **nothing under proot**: Linux, terminals, Linux
+windows, pacman, agents and the GPU need a real arm64 phone
+(`ANDROID_SERIAL=<serial> scripts/dev.sh run`); the full table is in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#what-can-be-tested-where). Say which
+of the two you checked a change on, or that you couldn't.
 
 `scripts/dev.sh reset` clears the app's data. It only runs against emulators;
 never clear data or uninstall on someone's phone without asking.
@@ -87,8 +87,8 @@ phones after an update, not the build.
   test for new logic and for every bug fixed; pull pure logic out of
   Android-bound code to make it testable.
 - This is a fork of [SimonSchubert/omalauncher](https://github.com/SimonSchubert/omalauncher).
-  Keep changes small and in separate files where that's natural, so upstream
-  syncs (`scripts/sync-upstream.sh`) stay easy. General fixes are worth offering upstream.
+  Keep changes small and in separate files where that's natural, so syncing
+  with upstream stays easy. General fixes are worth offering upstream.
 
 ## Delivering
 

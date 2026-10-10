@@ -7,17 +7,19 @@ working on it. Agents: [AGENTS.md](../AGENTS.md) has the short version.
 
 | | Version | Why |
 |---|---|---|
-| JDK | 25 | Gradle's daemon (`gradle/gradle-daemon-jvm.properties`) |
-| JDK | 17 | the `owl` module's toolchain (`jvmToolchain(17)`) |
+| JDK | 25 | Gradle's daemon (`gradle/gradle-daemon-jvm.properties`); Gradle downloads it if missing |
+| JDK | 17 | the `owl` module's toolchain (`jvmToolchain(17)`); Gradle downloads it if missing |
 | Android SDK | platform 37 | `compileSdk`; the build installs it, NDK 28.2 and CMake 3.22.1 itself once the SDK licenses are accepted |
 | proot | Termux's, pinned | `scripts/fetch-proot.sh`; only for the APK, not the unit tests |
 | bsdtar | any | on Linux, for fetch-proot (GNU tar can't read `.deb`); Arch: `libarchive` |
 | emulator | system image API 36 | optional; `/dev/kvm` on Linux |
 
-Gradle doesn't find JDKs installed by mise by itself, so `scripts/dev.sh`
-passes them as `org.gradle.java.installations.paths`. It looks in
-`$JDK25_HOME`/`$JDK17_HOME`, `$JAVA_HOME`, mise, `/usr/lib/jvm` and macOS's
-JavaVirtualMachines.
+Gradle finds installed JDKs in the usual places (`JAVA_HOME`, the OS's,
+SDKMAN, asdf) and downloads one it can't find, through the Foojay toolchain
+resolver in `settings.gradle.kts`. It doesn't look where mise installs them, so
+`scripts/dev.sh` passes those as `org.gradle.java.installations.paths`, which
+saves the download. It looks in `$JDK25_HOME`/`$JDK17_HOME`, `$JAVA_HOME`, mise,
+`/usr/lib/jvm` and macOS's JavaVirtualMachines.
 
 ## Getting started
 
@@ -108,32 +110,39 @@ install and the widgets: use a spare phone, or back up the widgets
 
 ## Keeping up with upstream
 
-This repository is a fork of
-[SimonSchubert/omalauncher](https://github.com/SimonSchubert/omalauncher).
-Upstream published its history as a single squashed commit, so its history
-may be rewritten again, and a plain `git merge` would then have nothing in
-common to merge from. Instead:
+This repository is a GitHub fork of
+[SimonSchubert/omalauncher](https://github.com/SimonSchubert/omalauncher) and
+shares its history, so upstream's changes come in the standard way, by merging
+upstream's `main` into ours (GitHub's
+[Syncing a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/syncing-a-fork)):
+
+- On GitHub: **Sync fork › Update branch** on the repository's page. When that
+  conflicts, GitHub offers a pull request instead. Never pick **Discard
+  commits**: it throws away this fork's own changes. `gh repo sync` doesn't fit
+  either: it only fast-forwards, so it fails once the fork has commits of its
+  own, and its `--force` discards them too.
+- On the command line, to resolve conflicts or test before it lands: merge on a
+  branch and open a pull request.
 
 ```sh
-scripts/sync-upstream.sh --check   # upstream's commits (or diff) since the last sync
-scripts/sync-upstream.sh           # a branch upstream-sync/<sha> off origin/main with them
-scripts/dev.sh test                # then push the branch and open a pull request
+git remote add upstream https://github.com/SimonSchubert/omalauncher.git   # once
+git fetch upstream
+git switch -c upstream-sync origin/main
+git merge upstream/main            # resolve conflicts, then git add and git commit
+scripts/dev.sh test
 ```
 
-`.upstream` records the upstream commit we're synced to. The script applies
-upstream's diff since then with a three-way merge, writes the new commit into
-`.upstream`, and lists upstream's commits in the commit message. That works
-whether or not upstream rewrote its history, and whether the pull request is
-merged or squashed. On conflicts it stops with the files marked; resolve them,
-`git add` and commit.
+Merge that pull request with a merge commit, not a squash, so the next sync
+knows what's already in.
 
 ## Troubleshooting
 
 - **`Unknown AVD name`**: `avdmanager` puts AVDs under `$XDG_CONFIG_HOME/.android/avd`
   when that's set, and the emulator looks in `~/.android/avd`. `scripts/dev.sh`
   sets `ANDROID_AVD_HOME` for both; do the same when starting the emulator yourself.
-- **Gradle can't find a Java 17 toolchain**: go through `scripts/dev.sh gradle`, or
-  set `org.gradle.java.installations.paths` in `~/.gradle/gradle.properties`.
+- **Gradle can't find or download a Java 17 toolchain** (offline): go through
+  `scripts/dev.sh gradle`, or set `org.gradle.java.installations.paths` in
+  `~/.gradle/gradle.properties`.
 - **`This does not look like a tar archive` from fetch-proot**: install bsdtar (libarchive).
 - **fetch-proot 404s**: Termux only keeps current versions. Update the pins and
   SHA256s in `scripts/fetch-proot.sh` and the source links in `ui/LicensesScreen.kt` together.
