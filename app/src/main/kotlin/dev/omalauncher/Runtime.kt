@@ -383,10 +383,13 @@ class Runtime(
         shortcut: Shortcut,
         mono: Boolean,
     ): ImageBitmap? {
-        shortcut.component?.let { return if (mono) androidApps.masks[it] else androidApps.icons[it] }
+        shortcut.app?.let { return if (mono) androidApps.masks[it] else androidApps.icons[it] }
         val id = shortcut.linux?.id ?: return null
         return if (mono) linuxMasks[id] else linuxIcons[id]
     }
+
+    /** The profile a pinned app is in (work), for its badge and paused look; null for personal apps, or while the profile isn't listed. */
+    fun shortcutProfile(shortcut: Shortcut): AppProfile? = shortcut.serial?.let { androidApps.profiles[it] }
 
     /** Wayland app_id -> name for windows we started, so their Android tasks get a proper label. */
     private val launchedNames = ConcurrentHashMap<String, String>()
@@ -420,10 +423,7 @@ class Runtime(
     /** Opens a pinned app from the home screen. A Linux one runs its current desktop entry, which an update may have changed. */
     fun open(shortcut: Shortcut) {
         shortcut.linux?.let { pinned -> launch(linuxApps.firstOrNull { it.id == pinned.id } ?: pinned) }
-        shortcut.component?.let { component ->
-            runCatching { context.startActivity(AndroidApp(shortcut.label, component).intent) }
-                .onFailure { Log.w(TAG, "cannot open $component", it) }
-        }
+        shortcut.component?.let { androidApps.open(it, shortcut.serial) }
     }
 
     fun launch(app: LinuxApp) {

@@ -3,7 +3,9 @@ package dev.omalauncher.widgets
 import android.content.ComponentName
 import android.content.Context
 import androidx.compose.runtime.mutableStateListOf
+import dev.omalauncher.AppId
 import dev.omalauncher.linux.LinuxApp
+import dev.omalauncher.profileKey
 import dev.omalauncher.upgrade.Versioned
 import dev.omalauncher.upgrade.mapObjects
 import org.json.JSONArray
@@ -38,7 +40,12 @@ data class Shortcut(
     val component: ComponentName? = null,
     val linux: LinuxApp? = null,
     val folder: String? = null,
+    /** The serial of the profile [component] is in (work); null for personal apps, and for everything pinned before profiles. */
+    val serial: Long? = null,
 ) : HomeItem {
+    /** The Android app it opens, if it's one. */
+    val app get() = component?.let { AppId(it, serial) }
+
     override val size get() = 1 to 1
     override val minSize get() = 1 to 1
     override val resizable get() = false
@@ -77,7 +84,7 @@ class Shortcuts(
     init {
         // Version 0 (before versioning) is the same array, unwrapped.
         (Versioned.read(prefs.getString(ITEMS, null), VERSION) { _, data -> data } as? JSONArray)?.let { array ->
-            items += array.mapObjects(::parse)
+            items += array.mapObjects(::parseShortcut)
         }
         (Versioned.read(prefs.getString(FOLDERS, null), VERSION) as? JSONArray)?.let { array ->
             folderEntries += array.mapObjects { FolderEntry(it.getString("key"), it.optInt("page", 1)) }
@@ -153,33 +160,13 @@ class Shortcuts(
         }
     }
 
-    private fun parse(o: JSONObject): Shortcut {
-        val linux =
-            o.optJSONObject("linux")?.let {
-                LinuxApp(
-                    name = it.getString("name"),
-                    exec = it.getString("exec"),
-                    terminal = it.optBoolean("terminal"),
-                    id = it.getString("id"),
-                    wmClass = it.optString("wmClass").ifEmpty { null },
-                    icon = it.optString("icon").ifEmpty { null },
-                )
-            }
-        return Shortcut(
-            key = o.getString("key"),
-            page = o.optInt("page", 1),
-            label = o.getString("label"),
-            component = o.optString("component").ifEmpty { null }?.let(ComponentName::unflattenFromString),
-            linux = linux,
-            folder = o.optString("folder").ifEmpty { null },
-        )
-    }
-
+    /** Pins an Android app; a work copy ([serial]) gets a key of its own, next to the personal one's. */
     fun addAndroid(
         label: String,
         component: ComponentName,
         page: Int,
-    ) = add(Shortcut("app:" + component.flattenToShortString(), page, label, component = component))
+        serial: Long? = null,
+    ) = add(Shortcut(profileKey("app:" + component.flattenToShortString(), serial), page, label, component = component, serial = serial))
 
     fun addLinux(
         app: LinuxApp,
@@ -225,29 +212,7 @@ class Shortcuts(
 
     private fun save() {
         val array = JSONArray()
-        for (s in items) {
-            val o =
-                JSONObject()
-                    .put("key", s.key)
-                    .put("page", s.page)
-                    .put("label", s.label)
-                    .putOpt("folder", s.folder)
-            s.component?.let { o.put("component", it.flattenToString()) }
-            // A snapshot of the desktop entry, for when it's gone; while it exists, the launcher runs the current one.
-            s.linux?.let {
-                o.put(
-                    "linux",
-                    JSONObject()
-                        .put("name", it.name)
-                        .put("exec", it.exec)
-                        .put("terminal", it.terminal)
-                        .put("id", it.id)
-                        .putOpt("wmClass", it.wmClass)
-                        .putOpt("icon", it.icon),
-                )
-            }
-            array.put(o)
-        }
+        for (s in items) array.put(shortcutJson(s))
         val folders = JSONArray()
         for (f in folderEntries) folders.put(JSONObject().put("key", f.key).put("page", f.page))
         prefs
@@ -260,6 +225,62 @@ class Shortcuts(
     private companion object {
         const val ITEMS = "items"
         const val FOLDERS = "folders"
+
+        /**
+         * Still 1 with the optional "user": readers ignore fields they don't know, so this
+         * and older launchers read each other's. A launcher before profiles reads a pinned
+         * work app as the personal one.
+         */
         const val VERSION = 1
     }
+}
+
+/** A pinned app as saved. A missing "user" is a personal app, as everything saved before profiles is. */
+internal fun parseShortcut(o: JSONObject): Shortcut {
+    val linux =
+        o.optJSONObject("linux")?.let {
+            LinuxApp(
+                name = it.getString("name"),
+                exec = it.getString("exec"),
+                terminal = it.optBoolean("terminal"),
+                id = it.getString("id"),
+                wmClass = it.optString("wmClass").ifEmpty { null },
+                icon = it.optString("icon").ifEmpty { null },
+            )
+        }
+    return Shortcut(
+        key = o.getString("key"),
+        page = o.optInt("page", 1),
+        label = o.getString("label"),
+        component = o.optString("component").ifEmpty { null }?.let(ComponentName::unflattenFromString),
+        linux = linux,
+        folder = o.optString("folder").ifEmpty { null },
+        serial = if (o.isNull("user")) null else o.getLong("user"),
+    )
+}
+
+/** What [parseShortcut] reads back. Personal apps are saved without "user", exactly as before profiles. */
+internal fun shortcutJson(s: Shortcut): JSONObject {
+    val o =
+        JSONObject()
+            .put("key", s.key)
+            .put("page", s.page)
+            .put("label", s.label)
+            .putOpt("folder", s.folder)
+    s.component?.let { o.put("component", it.flattenToString()) }
+    s.serial?.let { o.put("user", it) }
+    // A snapshot of the desktop entry, for when it's gone; while it exists, the launcher runs the current one.
+    s.linux?.let {
+        o.put(
+            "linux",
+            JSONObject()
+                .put("name", it.name)
+                .put("exec", it.exec)
+                .put("terminal", it.terminal)
+                .put("id", it.id)
+                .putOpt("wmClass", it.wmClass)
+                .putOpt("icon", it.icon),
+        )
+    }
+    return o
 }

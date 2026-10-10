@@ -63,6 +63,8 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.graphics.ColorFilter
 import dev.omalauncher.AndroidApp
+import dev.omalauncher.AppProfile
+import dev.omalauncher.profileKey
 import androidx.compose.runtime.collectAsState
 import dev.omalauncher.Runtime
 import dev.omalauncher.linux.LinuxState
@@ -76,6 +78,9 @@ internal sealed interface AppHit {
     val key: String
     val label: String
 
+    /** The profile it's in (work); null for personal and Linux apps. */
+    val profile: AppProfile? get() = null
+
     data class Linux(
         val app: LinuxApp,
     ) : AppHit {
@@ -86,8 +91,10 @@ internal sealed interface AppHit {
     data class Android(
         val app: AndroidApp,
     ) : AppHit {
-        override val key get() = "a:" + app.component.flattenToShortString()
+        // A work copy's own key, so its usage and recent entry are its own; personal keys are as before profiles.
+        override val key get() = profileKey("a:" + app.component.flattenToShortString(), app.profile?.serial)
         override val label get() = app.label
+        override val profile get() = app.profile
     }
 }
 
@@ -112,15 +119,21 @@ internal fun searchApps(
     return BarSearch(ranked.map { it.first }, ranked.firstOrNull()?.let { isStrongMatch(it.second, query) } == true)
 }
 
-/** What the app cells do: open, pin to home, and the Android app's info and uninstall. */
+/** What the app cells do: open, pin to home, the Android app's info and uninstall, and pausing work apps. */
 internal class AppHandlers(
     val launch: (AppHit) -> Unit,
     val pin: (AppHit) -> Unit,
     val info: (AndroidApp) -> Unit,
     val uninstall: (AndroidApp) -> Unit,
+    /** Whether [pause] may be offered: only the default home app may pause work apps. */
+    val canPause: () -> Boolean,
+    val pause: (AppProfile, Boolean) -> Unit,
 )
 
-/** The long-press menu of an app cell: pin to home, and for Android apps their info and uninstall. */
+/**
+ * The long-press menu of an app cell: pin to home, and for Android apps their info and uninstall.
+ * A work app also pauses or turns on all work apps, as the system's "Work apps" switch does.
+ */
 private fun AppHit.actions(handlers: AppHandlers): List<Pair<String, () -> Unit>> =
     when (this) {
         is AppHit.Linux -> listOf("add to home" to { handlers.pin(this) })
@@ -129,14 +142,20 @@ private fun AppHit.actions(handlers: AppHandlers): List<Pair<String, () -> Unit>
                 "add to home" to { handlers.pin(this) },
                 "app info" to { handlers.info(app) },
                 if (app.system) null else "uninstall" to { handlers.uninstall(app) },
+                app.profile?.takeIf { it.isWork && handlers.canPause() }?.let { p ->
+                    (if (p.paused) "turn on work apps" else "pause work apps") to { handlers.pause(p, !p.paused) }
+                },
             )
     }
+
+/** What the long-press menu says it acts on: "Chrome · work" for a profile's copy; personal apps have no title. */
+private val AppHit.menuTitle get() = (this as? AppHit.Android)?.app?.takeIf { it.profile != null }?.fullLabel
 
 /** The app's icon and its silhouette (each null until loaded or if it has none), and a glyph for built-in apps (Files). */
 private fun AppHit.icons(runtime: Runtime): Triple<ImageBitmap?, ImageBitmap?, ImageVector?> =
     when (this) {
         is AppHit.Linux -> Triple(runtime.linuxIcons[app.id], runtime.linuxMasks[app.id], if (app.exec == FILES_COMMAND) Icons.Folder else null)
-        is AppHit.Android -> Triple(runtime.androidApps.icons[app.component], runtime.androidApps.masks[app.component], null)
+        is AppHit.Android -> Triple(runtime.androidApps.icons[app.id], runtime.androidApps.masks[app.id], null)
     }
 
 @Composable
@@ -147,7 +166,17 @@ private fun HitCell(
     selected: Boolean = false,
 ) {
     val (icon, mask, glyph) = hit.icons(runtime)
-    AppCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, glyph = glyph, selected = selected)
+    AppCell(
+        hit.label,
+        icon,
+        mask,
+        onClick = { handlers.launch(hit) },
+        actions = { hit.actions(handlers) },
+        glyph = glyph,
+        selected = selected,
+        profile = hit.profile,
+        menuTitle = hit.menuTitle,
+    )
 }
 
 /** Height of the recent apps strip; home keeps this much room for it above the bar, even while it's empty. */
@@ -184,7 +213,7 @@ internal fun RecentStrip(
         val cells: LazyListScope.() -> Unit = {
             items(apps, key = { it.key }) { hit ->
                 val (icon, mask, glyph) = hit.icons(runtime)
-                StripCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, glyph = glyph)
+                StripCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, glyph = glyph, profile = hit.profile, menuTitle = hit.menuTitle)
             }
         }
         if (vertical) {
@@ -205,12 +234,16 @@ private fun StripCell(
     /** Built when the menu opens: a fresh list of lambdas would keep the cell from skipping recomposition. */
     actions: () -> List<Pair<String, () -> Unit>>,
     glyph: ImageVector? = null,
+    /** A work app's: badged and dimmed while paused; see [ProfileMarks]. */
+    profile: AppProfile? = null,
+    menuTitle: String? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
     val mono = LauncherStyle.monochromeIcons
     val bare = LauncherStyle.bareAppIcons
     val size = 40.dp
+    val described = describe(label, profile)
     Box(
         Modifier
             .size(48.dp)
@@ -225,21 +258,23 @@ private fun StripCell(
         contentAlignment = Alignment.Center,
     ) {
         val bmp = if (mono) mask else icon
-        when {
-            glyph != null -> Image(glyph, label, Modifier.size(size * 0.7f), colorFilter = ColorFilter.tint(Palette.accent))
-            // Bare silhouettes and initials sit on a badge, as pinned apps do, so they read on any wallpaper.
-            bare && (mono || bmp == null) ->
-                Box(Modifier.size(size).clip(LauncherStyle.shape(size / 2)).background(Palette.surface), contentAlignment = Alignment.Center) {
-                    if (bmp != null) {
-                        Image(bmp, label, Modifier.size(size * 0.75f), colorFilter = ColorFilter.tint(Palette.accent))
-                    } else {
-                        BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = 14.sp))
+        ProfileMarks(profile, badged = !mono && bmp != null, size) {
+            when {
+                glyph != null -> Image(glyph, label, Modifier.size(size * 0.7f), colorFilter = ColorFilter.tint(Palette.accent))
+                // Bare silhouettes and initials sit on a badge, as pinned apps do, so they read on any wallpaper.
+                bare && (mono || bmp == null) ->
+                    Box(Modifier.size(size).clip(LauncherStyle.shape(size / 2)).background(Palette.surface), contentAlignment = Alignment.Center) {
+                        if (bmp != null) {
+                            Image(bmp, described, Modifier.size(size * 0.75f), colorFilter = ColorFilter.tint(Palette.accent))
+                        } else {
+                            BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = 14.sp))
+                        }
                     }
-                }
-            bmp != null -> Image(bmp, label, Modifier.size(size * if (mono) 0.85f else 1f), colorFilter = if (mono) ColorFilter.tint(Palette.accent) else null)
-            else -> BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = 16.sp))
+                bmp != null -> Image(bmp, described, Modifier.size(size * if (mono) 0.85f else 1f), colorFilter = if (mono) ColorFilter.tint(Palette.accent) else null)
+                else -> BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = 16.sp))
+            }
         }
-        if (menuOpen) AppActions(actions(), onDismiss = { menuOpen = false })
+        if (menuOpen) AppActions(actions(), onDismiss = { menuOpen = false }, title = menuTitle)
     }
 }
 
@@ -481,6 +516,9 @@ private fun AppCell(
     glyph: ImageVector? = null,
     /** What Enter in the bar would open: outlined in the accent color. */
     selected: Boolean = false,
+    /** A work app's: badged and dimmed while paused; see [ProfileMarks]. */
+    profile: AppProfile? = null,
+    menuTitle: String? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
@@ -501,22 +539,25 @@ private fun AppCell(
         val mono = LauncherStyle.monochromeIcons
         // Badges are circles when rounded, squares with Omarchy's sharp edges.
         val badge = LauncherStyle.shape(26.dp)
-        if (glyph != null) {
-            Box(
-                Modifier.size(52.dp).clip(badge).background(if (mono) Palette.surface else Palette.accent),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(glyph, label, Modifier.size(26.dp), colorFilter = ColorFilter.tint(if (mono) Palette.accent else Palette.background))
-            }
-        } else if (mono && mask != null) {
-            Box(Modifier.size(52.dp).clip(badge).background(Palette.surface), contentAlignment = Alignment.Center) {
-                Image(mask, label, Modifier.size(36.dp), colorFilter = ColorFilter.tint(Palette.accent))
-            }
-        } else if (!mono && icon != null) {
-            Image(icon, label, Modifier.size(52.dp))
-        } else {
-            Box(Modifier.size(52.dp).clip(badge).background(Palette.surface), contentAlignment = Alignment.Center) {
-                BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = 18.sp))
+        val described = describe(label, profile)
+        ProfileMarks(profile, badged = !mono && icon != null, 52.dp) {
+            if (glyph != null) {
+                Box(
+                    Modifier.size(52.dp).clip(badge).background(if (mono) Palette.surface else Palette.accent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(glyph, label, Modifier.size(26.dp), colorFilter = ColorFilter.tint(if (mono) Palette.accent else Palette.background))
+                }
+            } else if (mono && mask != null) {
+                Box(Modifier.size(52.dp).clip(badge).background(Palette.surface), contentAlignment = Alignment.Center) {
+                    Image(mask, described, Modifier.size(36.dp), colorFilter = ColorFilter.tint(Palette.accent))
+                }
+            } else if (!mono && icon != null) {
+                Image(icon, described, Modifier.size(52.dp))
+            } else {
+                Box(Modifier.size(52.dp).clip(badge).background(Palette.surface), contentAlignment = Alignment.Center) {
+                    BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = 18.sp))
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -529,7 +570,7 @@ private fun AppCell(
             overflow = TextOverflow.Ellipsis,
         )
         if (menuOpen) {
-            AppActions(actions(), onDismiss = { menuOpen = false })
+            AppActions(actions(), onDismiss = { menuOpen = false }, title = menuTitle)
         }
     }
 }
@@ -539,6 +580,7 @@ private fun AppCell(
 private fun AppActions(
     actions: List<Pair<String, () -> Unit>>,
     onDismiss: () -> Unit,
+    title: String? = null,
 ) {
     val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
     val position =
@@ -558,6 +600,6 @@ private fun AppActions(
             }
         }
     Popup(popupPositionProvider = position, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
-        MenuItems(actions, onDismiss, minWidth = 160.dp, itemPadding = 12.dp, fontSize = Mono.fontSize * 1.05f)
+        MenuItems(actions, onDismiss, minWidth = 160.dp, itemPadding = 12.dp, fontSize = Mono.fontSize * 1.05f, title = title)
     }
 }
