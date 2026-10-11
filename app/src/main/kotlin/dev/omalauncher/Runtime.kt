@@ -521,5 +521,19 @@ class Runtime(
     companion object {
         private const val TAG = "runtime"
         private const val SETUP_DONE = "setup_done"
+        private const val CHIP_ALL = "chip_all_agents"
+    }
+
+    /**
+     * The bar's agent chip, by default, lists only Hermes and the picked agent —
+     * rarely-used agents stay installable from the agents screen but out of the chip.
+     * The settings toggle turns off the filter.
+     */
+    var chipAll by mutableStateOf(prefs.getBoolean(CHIP_ALL, false))
+        private set
+
+    fun showAllAgentsInChip(all: Boolean) {
+        chipAll = all
+        prefs.edit().putBoolean(CHIP_ALL, all).apply()
     }
 }

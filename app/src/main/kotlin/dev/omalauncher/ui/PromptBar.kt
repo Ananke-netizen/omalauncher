@@ -489,7 +489,12 @@ private fun AgentPicker(
                         .frame(2.dp, Palette.accent, Palette.background)
                         .padding(4.dp),
                 ) {
-                    for (a in store.installed) {
+                    // Decluttered by default: Hermes and the picked agent only; the rest stay
+                    // installable from the agents screen (settings can show them all here).
+                    val listed =
+                        if (runtime.chipAll) store.installed
+                        else store.installed.filter { it.bin == "hermes" || it.bin == agent?.bin }
+                    for (a in listed) {
                         val current = a.bin == agent?.bin
                         Row(
                             Modifier

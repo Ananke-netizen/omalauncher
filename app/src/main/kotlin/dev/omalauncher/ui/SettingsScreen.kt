@@ -63,6 +63,12 @@ fun SettingsScreen(
                 },
                 Triple("packages", if (installed) "install Linux apps and tools with pacman and the AUR" else "needs linux", if (installed) onPackages else onLinux),
                 Triple("widget store", "add widgets to the home screen", onStore),
+                Triple(
+                    "agent chip",
+                    if (runtime.chipAll) "all installed agents in the bar's chip · tap to show only Hermes and the picked one"
+                    else "only Hermes and the picked agent in the bar's chip · tap to show all",
+                    { runtime.showAllAgentsInChip(!runtime.chipAll) },
+                ),
                 Triple("feed", feedStatus(runtime.feed.settings), onFeed),
                 Triple("android settings", "the phone's system settings") {
                     context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
