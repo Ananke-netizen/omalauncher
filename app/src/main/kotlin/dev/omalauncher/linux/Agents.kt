@@ -63,7 +63,8 @@ val HERMES_WRAPPER =
         echo "  Check by hand: ssh ${'$'}host" >&2
         exit 1
     fi
-    exec ssh -t "${'$'}host" "export PATH=${'$'}HOME/.local/bin:${'$'}PATH; hermes chat $(printf '%q ' "${'$'}@")"
+    # Single quotes: the PATH must expand on the server, not in the guest (where HOME is /root).
+    exec ssh -t "${'$'}host" 'export PATH=${'$'}HOME/.local/bin:${'$'}PATH; hermes chat '"$(printf '%q ' "${'$'}@")"
     """.trimIndent() + "\n"
 
 /** Where the guest sees the launcher's own agent wrappers; bound from outside the rootfs. */

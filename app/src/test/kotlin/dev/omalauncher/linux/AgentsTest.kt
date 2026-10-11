@@ -45,4 +45,17 @@ class AgentsTest {
         assertTrue(HERMES_WRAPPER.contains("PATH=\$HOME/.local/bin"))
         assertTrue(HERMES_WRAPPER.contains("HERMES_SSH_HOST"))
     }
+
+    /**
+     * The remote command must reach the Pi's shell unexpanded: the guest's own shell runs with
+     * HOME=/root, so a double-quoted "export PATH=$HOME/..." would set /root/.local/bin on the
+     * server and the Pi would answer "command not found: hermes". Single quotes keep it ours.
+     */
+    @Test fun remotePathExpandsOnTheServerNotInTheGuest() {
+        val exec = HERMES_WRAPPER.lines().first { it.startsWith("exec ssh") }
+        val remote = Regex("'([^']*)'").find(exec)!!.groupValues[1]
+        assertTrue(remote.contains("export PATH=\$HOME/.local/bin"))
+        assertTrue(remote.contains("hermes chat"))
+        assertFalse(exec.contains("\"export PATH"))
+    }
 }
