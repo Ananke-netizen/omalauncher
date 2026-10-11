@@ -58,6 +58,39 @@ private val MIRRORS =
 /** Firmware and kernel modules are useless under proot; pacman never unpacks them. */
 private const val NO_EXTRACT = "NoExtract = usr/lib/firmware/* usr/lib/modules/*"
 
+/** The home server, by MagicDNS name (docs/HERMES.md): the guest resolves it through Tailscale's DNS. */
+const val HERMES_SSH_HOST = "pi.tail123202.ts.net"
+const val HERMES_SSH_USER = "erebus"
+
+/** Tailscale's DNS: answers MagicDNS names, forwards the rest. The guest can't resolve them otherwise. */
+const val HERMES_TAILSCALE_DNS = "100.100.100.100"
+
+/**
+ * The guest script that rebuilds the hermes ssh plumbing after a Linux reinstall:
+ * keypair if absent, the host alias, and host keys for BOTH the MagicDNS name and
+ * its current tailnet IP (ssh connects by name; an IP-only entry fails verification).
+ * It ends by printing the pubkey: adding it to the server's authorized_keys is the
+ * one step that can't happen from the phone.
+ */
+internal fun hermesSshScript(
+    host: String,
+    user: String,
+): String =
+    """
+    set -e
+    mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    [ -f ~/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -N '' -C omalauncher-phone -f ~/.ssh/id_ed25519
+    printf 'Host raspberrypi pi\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_ed25519\n' '$host' '$user' > ~/.ssh/config
+    chmod 600 ~/.ssh/config
+    ip=${'$'}(getent ahostsv4 $host 2>/dev/null | head -n1 | cut -d' ' -f1) || true
+    if [ -n "${'$'}ip" ]; then ssh-keyscan -T 10 $host "${'$'}ip"; else ssh-keyscan -T 10 $host; fi >> ~/.ssh/known_hosts 2>/dev/null
+    sort -u ~/.ssh/known_hosts -o ~/.ssh/known_hosts
+    chmod 600 ~/.ssh/known_hosts
+    echo 'hermes: paste this line into the Pi at ~/.ssh/authorized_keys (once):'
+    cat ~/.ssh/id_ed25519.pub
+    """.trimIndent()
+
+
 /** What the bootstrap installs; the packages screen doesn't offer to remove these. */
 val CORE_PACKAGES = PACKAGES.toSet()
 
@@ -175,6 +208,8 @@ class Bootstrap(
             Step("keymap-1", Stage.Packages, "Compiling keymap", network = false, isDone = { proot.keymap.exists() }) { compileKeymap() },
             Step("cliamp-$CLIAMP_VERSION", Stage.Packages, "Installing cliamp", network = true) { installCliamp() },
             // Omarchy's themes were a step here ("omarchy-<ref>") until Linux became optional; ThemeStore fetches them now.
+            // The hermes ssh plumbing lives in the rootfs, so a Linux reinstall wipes it; this id brings it back.
+            Step("hermes-ssh-1", Stage.Packages, "Provisioning ssh for Hermes", network = true, optional = true) { provisionHermesSsh() },
         )
 
     private fun Step.done() = isDone?.invoke() ?: (id in journal)
@@ -516,6 +551,24 @@ class Bootstrap(
         val bytes = URL(CLIAMP_URL).openStream().use { it.readBytes() }
         writeAtomically(File(proot.rootfs, "usr/local/bin/cliamp"), bytes, executable = true)
     }
+
+    /**
+     * Rebuilds the hermes ssh plumbing a Linux reinstall wiped (docs/HERMES.md):
+     * Tailscale DNS so the MagicDNS name resolves, a keypair if absent, the host
+     * alias, and host keys for both the name and the tailnet IP (ssh connects by
+     * name; an IP-only entry fails verification). The one thing the phone can't
+     * do alone is add the pubkey to the server, so the script prints it for a
+     * one-time paste into the Pi's ~/.ssh/authorized_keys.
+     */
+    private fun provisionHermesSsh() {
+        // Tailscale's DNS answers MagicDNS names and forwards everything else; the public
+        // fallback keeps pacman working when the phone's VPN is off.
+        File(proot.rootfs, "etc/resolv.conf").writeText("nameserver $HERMES_TAILSCALE_DNS\nnameserver 8.8.8.8\n")
+        guest(hermesSshScript())
+    }
+
+    /** The guest script for [provisionHermesSsh]. */
+    internal fun hermesSshScript(): String = hermesSshScript(HERMES_SSH_HOST, HERMES_SSH_USER)
 
     private fun guest(script: String) {
         log.add("$ $script")

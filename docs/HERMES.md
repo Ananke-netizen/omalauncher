@@ -72,11 +72,31 @@ rewritten when the Hermes agent is reinstalled from the agents screen (Linux >
 agents > Hermes > install). After an app update that changes HERMES_WRAPPER,
 reinstall it once.
 
+## Bootstrap: what survives a Linux reinstall
+
+The ssh plumbing lives inside the Arch rootfs, so removing and reinstalling
+Linux wipes it. The bootstrap now rebuilds it automatically as the step
+`hermes-ssh-1` (Bootstrap.kt, `provisionHermesSsh`):
+
+- `etc/resolv.conf` gets `nameserver 100.100.100.100` (Tailscale DNS; without
+  it the guest cannot resolve MagicDNS names), with a public fallback so
+  pacman still works when the phone's VPN is off.
+- A keypair is generated at `~/.ssh/id_ed25519` if absent (never overwritten).
+- `~/.ssh/config` maps `raspberrypi`/`pi` to the Pi's MagicDNS name, user
+  `erebus`.
+- `known_hosts` is scanned for BOTH the name and its current tailnet IP -
+  ssh connects by name, and an IP-only entry fails host key verification.
+- The step prints the pubkey with a "paste into the Pi's
+  ~/.ssh/authorized_keys" line. That paste is the one thing that cannot
+  happen from the phone; until it is done, the wrapper's BatchMode probe
+  fails with the same instruction.
+
+If the Pi's tailnet IP changes, delete `~/.ssh/known_hosts` in the guest and
+rerun the step (or `ssh-keyscan` by hand).
+
 ## Open work
 
-The ssh plumbing (key, config, known_hosts, resolv.conf) dying with the rootfs
-is known. The clean fix is a bootstrap step or bound launcher data for
-`~/.ssh` and resolv.conf, plus host-key pinning and Tailscale as an Android
-VPN rather than a guest binary. That is a design of its own; this wrapper is
-deliberately dumb so that story can replace it later without touching the
-agent list.
+Tailscale as an Android VPN (instead of guest DNS pointing at the tailnet)
+and host-key pinning beyond scan-on-bootstrap remain open design work; this
+wrapper is deliberately dumb so that story can replace it later without
+touching the agent list.
