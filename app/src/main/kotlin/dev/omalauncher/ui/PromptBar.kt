@@ -78,6 +78,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import dev.omalauncher.Runtime
 import dev.omalauncher.linux.LinuxState
+import dev.omalauncher.linux.askHeadless
 import dev.omalauncher.linux.agentInvocation
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -130,7 +131,7 @@ internal fun PromptBar(
         state.linuxOpen = true
     }
 
-    fun send(prompt: String) {
+    fun send(prompt: String, headless: Boolean = false) {
         val p = prompt.trim()
         if (p.isEmpty()) return
         if (!linux) return offerLinux()
@@ -141,7 +142,13 @@ internal fun PromptBar(
             state.agentsOpen = true
             return
         }
-        runtime.terminal("${agentInvocation(target.bin, p)}; exec bash", target.name, target)
+        if (askHeadless(target, headless)) {
+            // Hold-to-talk on a remote agent: fire the wrapper without a window; its answer
+            // lands in the Pantheon inbox, so a foot window would only flash and close.
+            runtime.askHeadless(agentInvocation(target.bin, p))
+        } else {
+            runtime.terminal("${agentInvocation(target.bin, p)}; exec bash", target.name, target)
+        }
         state.query = ""
         focusManager.clearFocus()
         keyboard?.hide()
@@ -171,7 +178,8 @@ internal fun PromptBar(
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         speech.start(hold) { heard ->
             val full = listOf(typed, heard).filter { it.isNotBlank() }.joinToString(" ") { it.trim() }
-            if (sendWhenDone && heard.isNotEmpty()) send(full) else state.query = full
+            // A hold sends: straight to the agent, skipping the bar (headless for remote agents).
+            if (sendWhenDone && heard.isNotEmpty()) send(full, headless = true) else state.query = full
         }
     }
 

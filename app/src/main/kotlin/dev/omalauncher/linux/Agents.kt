@@ -86,6 +86,13 @@ val HERMES_WRAPPER =
 const val GUEST_WRAPPER_DIR = "/root/.local/share/omalauncher/bin"
 
 /**
+ * Whether a hold-to-talk ask runs without a terminal window. Remote agents answer
+ * out-of-band (Hermes' reply lands in the Pantheon inbox), so a foot window would
+ * only flash and close; local agents need their window to work in.
+ */
+fun askHeadless(agent: Agent, hold: Boolean): Boolean = agent.remote && hold
+
+/**
  * Starts [agentBin] with a first prompt; OpenCode takes it as --prompt, the others as an argument.
  * [readOnly], for reading something untrusted: Claude Code starts in plan mode, where it can read but not
  * run commands or change files whatever the user's settings say. The others have no flag for that we can

@@ -69,4 +69,13 @@ class AgentsTest {
         // agentInvocation still passes -q first; the wrapper swallows it.
         assertTrue(HERMES_WRAPPER.contains("\"-q\" ] && shift"))
     }
+
+    /** Hold-to-talk on a remote agent skips the terminal window; local agents keep theirs. */
+    @Test fun holdOnARemoteAgentIsHeadless() {
+        val hermes = AGENTS.first { it.bin == "hermes" }
+        val claude = AGENTS.first { it.bin == "claude" }
+        assertTrue(askHeadless(hermes, hold = true))
+        assertFalse(askHeadless(hermes, hold = false)) // a tap still dictates into the field, then Enter opens the window
+        assertFalse(askHeadless(claude, hold = true)) // a local agent works inside its window
+    }
 }

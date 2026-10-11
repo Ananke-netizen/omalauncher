@@ -23,6 +23,7 @@ import dev.omalauncher.linux.AudioBridge
 import dev.omalauncher.linux.Bootstrap
 import dev.omalauncher.linux.FILES_COMMAND
 import dev.omalauncher.linux.Gpu
+import dev.omalauncher.linux.GuestShell
 import dev.omalauncher.linux.LinuxApp
 import dev.omalauncher.linux.OpenBridge
 import dev.omalauncher.linux.Pacman
@@ -422,6 +423,23 @@ class Runtime(
         if (agent != null) launchedAgents[appId] = agent
         val args = command?.let { " -e bash -c " + shellQuote(it) }.orEmpty()
         launch("foot --app-id=$appId$args")
+    }
+
+    /**
+     * Runs [command] in the guest without a window — for asks whose answer arrives
+     * out of band (the hermes wrapper fires the server script detached and exits).
+     * A toast confirms the hand-off; a failure says so instead of a silent no-op.
+     */
+    fun askHeadless(command: String) {
+        if (!linux) {
+            linuxWanted = true
+            return
+        }
+        scope.launch {
+            val result = runCatching { GuestShell(proot).run(command, 30, retry = false) }
+            val line = result.getOrNull()?.let { if (it.code == 0) it.out.lines().firstOrNull().orEmpty() else "couldn't reach Hermes" } ?: "couldn't reach Hermes"
+            android.widget.Toast.makeText(context, line.ifBlank { "sent to Hermes" }, android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
 
     /** Opens a pinned app from the home screen. A Linux one runs its current desktop entry, which an update may have changed. */
