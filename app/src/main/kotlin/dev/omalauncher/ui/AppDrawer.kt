@@ -50,7 +50,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Velocity
-import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -206,8 +205,8 @@ internal fun RecentStrip(
     LaunchedEffect(runtime.usage.settled) { listState.scrollToItem(0) }
     Box(
         modifier
-            .then(if (vertical) Modifier.fillMaxHeight().width(RecentStripHeight) else Modifier.padding(horizontal = 6.dp).fillMaxWidth().height(RecentStripHeight))
-            .then(if (bare) Modifier else Modifier.frame(2.dp, Palette.border, Palette.background.copy(alpha = 0.88f))),
+            .then(if (vertical) Modifier.fillMaxHeight().width(RecentStripHeight) else Modifier.padding(horizontal = HomeGap).fillMaxWidth().height(RecentStripHeight))
+            .then(if (bare) Modifier else Modifier.tile()),
         contentAlignment = if (vertical) Alignment.TopCenter else Alignment.CenterStart,
     ) {
         val cells: LazyListScope.() -> Unit = {
@@ -267,11 +266,11 @@ private fun StripCell(
                         if (bmp != null) {
                             Image(bmp, described, Modifier.size(size * 0.75f), colorFilter = ColorFilter.tint(Palette.accent))
                         } else {
-                            BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = 14.sp))
+                            BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = TextSize.Body))
                         }
                     }
                 bmp != null -> Image(bmp, described, Modifier.size(size * if (mono) 0.85f else 1f), colorFilter = if (mono) ColorFilter.tint(Palette.accent) else null)
-                else -> BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = 16.sp))
+                else -> BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = TextSize.Large))
             }
         }
         if (menuOpen) AppActions(actions(), onDismiss = { menuOpen = false }, title = menuTitle)
@@ -397,7 +396,7 @@ internal fun AppPanel(
                             if (apps.isEmpty()) return
                             val rows = apps.chunked(columns)
                             for (r in rows.indices.reversed()) row("$title:$r", rows[r])
-                            item(key = "h:$title") { Section(title) }
+                            item(key = "h:$title") { SectionLabel(title, Modifier.padding(start = 8.dp)) }
                         }
 
                         if (query.isNotBlank()) {
@@ -470,7 +469,7 @@ internal fun SearchField(
     placeholder: String,
     modifier: Modifier = Modifier,
 ) {
-    val style = Mono.copy(fontSize = Mono.fontSize * 1.1f)
+    val style = Mono.copy(fontSize = TextSize.Item)
     BasicTextField(
         value = query,
         onValueChange = onChange,
@@ -492,11 +491,6 @@ internal fun SearchField(
             }
         },
     )
-}
-
-@Composable
-private fun Section(title: String) {
-    BasicText(title, Modifier.padding(top = 12.dp, bottom = 4.dp, start = 8.dp), style = Mono.copy(color = Palette.muted))
 }
 
 /**
@@ -556,14 +550,14 @@ private fun AppCell(
                 Image(icon, described, Modifier.size(52.dp))
             } else {
                 Box(Modifier.size(52.dp).clip(badge).background(Palette.surface), contentAlignment = Alignment.Center) {
-                    BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = 18.sp))
+                    BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = TextSize.Title))
                 }
             }
         }
         Spacer(Modifier.height(6.dp))
         BasicText(
             label,
-            style = Mono.copy(fontSize = 11.sp, textAlign = TextAlign.Center),
+            style = Mono.copy(fontSize = TextSize.Small, textAlign = TextAlign.Center),
             // Always two lines tall, so a row keeps its height whichever apps fill it while typing.
             maxLines = 2,
             minLines = 2,
@@ -600,6 +594,6 @@ private fun AppActions(
             }
         }
     Popup(popupPositionProvider = position, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
-        MenuItems(actions, onDismiss, minWidth = 160.dp, itemPadding = 12.dp, fontSize = Mono.fontSize * 1.05f, title = title)
+        MenuItems(actions, onDismiss, minWidth = 160.dp, itemPadding = 12.dp, fontSize = TextSize.Item, title = title)
     }
 }

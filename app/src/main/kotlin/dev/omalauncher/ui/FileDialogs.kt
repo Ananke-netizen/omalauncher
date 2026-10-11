@@ -36,7 +36,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -63,6 +62,7 @@ internal fun TextDialog(
     title: String,
     initial: String,
     confirm: String,
+    hint: String? = null,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -70,12 +70,13 @@ internal fun TextDialog(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     DialogFrame(onDismiss) {
-        BasicText(title, style = Mono.copy(fontSize = 18.sp))
+        BasicText(title, style = Mono.copy(fontSize = TextSize.Title))
+        hint?.let { BasicText(it, style = Mono.copy(color = Palette.muted)) }
         BasicTextField(
             value = text,
             onValueChange = { text = it },
             singleLine = true,
-            textStyle = Mono.copy(fontSize = 16.sp),
+            textStyle = Mono.copy(fontSize = TextSize.Large),
             cursorBrush = SolidColor(Palette.accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) onConfirm(text.trim()) }),
@@ -100,14 +101,16 @@ internal fun ConfirmDialog(
     message: String,
     confirm: String,
     onDismiss: () -> Unit,
+    /** Red by default: most confirmations are for something that can't be undone. */
+    confirmColor: Color = Palette.red,
     onConfirm: () -> Unit,
 ) {
     DialogFrame(onDismiss) {
-        BasicText(title, style = Mono.copy(fontSize = 18.sp))
+        BasicText(title, style = Mono.copy(fontSize = TextSize.Title))
         BasicText(message, style = Mono.copy(color = Palette.muted))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton("cancel", Palette.muted, onDismiss)
-            TextButton(confirm, Palette.red, onConfirm)
+            TextButton(confirm, confirmColor, onConfirm)
         }
     }
 }
