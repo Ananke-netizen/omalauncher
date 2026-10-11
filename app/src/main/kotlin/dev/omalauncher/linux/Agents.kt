@@ -13,21 +13,24 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 
-/** A coding agent CLI, installed the way Omarchy's omarchy-default-agent does it: via mise. */
+/** A coding agent CLI, installed the way Omarchy's omarchy-default-agent does it: via mise — or, for [remote] agents, a wrapper that reaches a machine outside the guest. */
 data class Agent(
     val bin: String,
     val name: String,
     val description: String,
-    /** mise package spec. */
+    /** mise package spec; empty for [remote] agents, which mise never sees. */
     val pkg: String,
+    /** Runs on another machine (our home server) instead of inside the guest. */
+    val remote: Boolean = false,
 ) {
     /** Its activity alias in the manifest (cursor-agent -> CursorAgentWindow), so Recents names its window after it. */
     val windowAlias get() = bin.split('-').joinToString("") { it.replaceFirstChar(Char::uppercase) } + "Window"
 }
 
-/** Omarchy's agent list (omarchy-default-agent), limited to ones mise can install on arm64. */
+/** Omarchy's agent list (omarchy-default-agent), limited to ones mise can install on arm64. Hermes is ours: first installed wins the prompt bar, so she leads. */
 val AGENTS =
     listOf(
+        Agent("hermes", "Hermes", "This house's assistant, on the home server", "", remote = true),
         Agent("claude", "Claude Code", "Anthropic's coding agent", "claude"),
         Agent("opencode", "OpenCode", "Open source agent, any model provider", "opencode"),
         Agent("codex", "Codex", "OpenAI's coding agent", "codex"),
@@ -38,6 +41,33 @@ val AGENTS =
         Agent("agy", "Antigravity", "Google's Gemini coding agent", "antigravity-cli"),
         Agent("pi", "Pi", "Minimal, extensible coding agent", "pi"),
     )
+
+/**
+ * The hermes wrapper installed into the guest's bound bin (see [AgentStore.wrapperDir]). Hermes
+ * is not a mise package: she runs on the home server, and this reaches her over ssh. Provisioning
+ * (key, host, Tailscale) is docs/HERMES.md; the wrapper says so plainly when ssh can't connect.
+ */
+val HERMES_WRAPPER =
+    """
+    #!/bin/bash
+    # Hermes runs on the home server, not in here; this wrapper reaches her over ssh.
+    # Set-up (phone key in ~/.ssh/authorized_keys, Tailscale up): docs/HERMES.md in Omalauncher.
+    host=${'$'}{HERMES_SSH_HOST:-raspberrypi}
+    if ! command -v ssh >/dev/null 2>&1; then
+        echo "hermes: needs openssh in Arch Linux - install it with: pacman -Syu openssh" >&2
+        exit 127
+    fi
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=6 "${'$'}host" true 2>/dev/null; then
+        echo "hermes: can't reach '${'$'}host' over ssh without a password." >&2
+        echo "  Is Tailscale up, and is this phone's key in ${'$'}host:~/.ssh/authorized_keys? (docs/HERMES.md)" >&2
+        echo "  Check by hand: ssh ${'$'}host" >&2
+        exit 1
+    fi
+    exec ssh -t "${'$'}host" "export PATH=${'$'}HOME/.local/bin:${'$'}PATH; hermes chat $(printf '%q ' "${'$'}@")"
+    """.trimIndent() + "\n"
+
+/** Where the guest sees the launcher's own agent wrappers; bound from outside the rootfs. */
+const val GUEST_WRAPPER_DIR = "/root/.local/share/omalauncher/bin"
 
 /**
  * Starts [agentBin] with a first prompt; OpenCode takes it as --prompt, the others as an argument.
@@ -54,6 +84,8 @@ fun agentInvocation(
     return when {
         agentBin == "opencode" -> "$agentBin --prompt $quoted"
         agentBin == "claude" && readOnly -> "$agentBin --permission-mode plan $quoted"
+        // Hermes runs on the home server behind the wrapper (see AgentStore); hermes chat takes the prompt with -q.
+        agentBin == "hermes" -> "$agentBin -q $quoted"
         else -> "$agentBin $quoted"
     }
 }
@@ -76,10 +108,15 @@ class AgentStore(
     private val mise get() = File(proot.home, ".local/bin/mise")
     private val shims get() = File(proot.home, ".local/share/mise/shims")
 
+    /** The launcher's wrappers for [Agent.remote] agents, on the host side of the bind (see LauncherData.binDir). */
+    private val wrapperDir get() = File(proot.filesDir, "bin")
+
     val states = mutableStateMapOf<String, JobState>()
 
     /** Shims are symlinks to a guest path (/root/.local/bin/mise), so don't follow them from the host. */
-    fun isInstalled(agent: Agent) = Files.exists(File(shims, agent.bin).toPath(), LinkOption.NOFOLLOW_LINKS)
+    fun isInstalled(agent: Agent) =
+        if (agent.remote) File(wrapperDir, agent.bin).isFile
+        else Files.exists(File(shims, agent.bin).toPath(), LinkOption.NOFOLLOW_LINKS)
 
     /** The agent picked in the prompt bar, kept in the guest home where scripts can read it too. */
     private val preferredFile get() = File(proot.launcherConfig, "agent")
@@ -113,8 +150,21 @@ class AgentStore(
     suspend fun install(agent: Agent) =
         run(agent, "installing") { installScript(agent) }.also { ok -> if (ok) onInstalled(agent) }
 
-    /** Installs [agent] with mise, bootstrapping mise itself if needed. */
+    /** Installs [agent]: a remote agent's wrapper into the bound bin (no mise), the rest via mise. */
     fun installScript(agent: Agent) =
+        if (agent.remote) remoteInstallScript(agent) else miseInstallScript(agent)
+
+    /** Writes the wrapper into the directory proot binds from outside the rootfs, so it survives Linux removal. */
+    private fun remoteInstallScript(agent: Agent) =
+        when (agent.bin) {
+            "hermes" ->
+                "mkdir -p $GUEST_WRAPPER_DIR && cat > $GUEST_WRAPPER_DIR/hermes <<'OMALAUNCHER_WRAPPER'\n" +
+                    HERMES_WRAPPER + "OMALAUNCHER_WRAPPER\nchmod +x $GUEST_WRAPPER_DIR/hermes"
+            else -> error("no wrapper known for ${agent.bin}")
+        }
+
+    /** Installs [agent] with mise, bootstrapping mise itself if needed. */
+    fun miseInstallScript(agent: Agent) =
         buildString {
             if (!mise.exists()) append("curl -fsSL https://mise.run | sh && ")
             if (agent.pkg.startsWith("npm:")) append("mise use -g node@lts && ")
@@ -130,7 +180,10 @@ class AgentStore(
     }
 
     suspend fun remove(agent: Agent) =
-        run(agent, "removing") { "mise unuse -g ${shellQuote(agent.pkg)} && mise prune -y" }
+        run(agent, "removing") {
+            if (agent.remote) "rm -f $GUEST_WRAPPER_DIR/${agent.bin}"
+            else "mise unuse -g ${shellQuote(agent.pkg)} && mise prune -y"
+        }
             .also {
                 refresh()
                 onChanged()

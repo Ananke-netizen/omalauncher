@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Hermes (our house assistant): a winged messenger's staff, drawn for Omalauncher.
+       Not the Nous or Omarchy marks; our own drawing, our own colors. -->
+  <rect width="256" height="256" rx="56" fill="#1B1B1F"/>
+  <g shape-rendering="crispEdges">
+    <!-- the staff -->
+    <path fill="#C9B48A" d="M120 44H136V212H120Z"/>
+    <!-- the two wings, mirrored -->
+    <path fill="#F09082" d="M44 60H104V84H60V100H44Z"/>
+    <path fill="#F09082" d="M152 60H212V100H196V84H152Z"/>
+    <!-- the ribbon below the wings -->
+    <path fill="#4D9ABF" d="M92 116H164V140H92Z"/>
+  </g>
+</svg>

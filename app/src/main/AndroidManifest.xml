@@ -85,6 +85,13 @@
 
         <!-- And each coding agent (Agent.windowAlias), with its logo: Recents shows the activity's icon too. -->
         <activity-alias
+            android:name=".HermesWindow"
+            android:exported="false"
+            android:icon="@drawable/agent_hermes"
+            android:label="Hermes"
+            android:targetActivity=".LinuxWindowActivity" />
+
+        <activity-alias
             android:name=".ClaudeWindow"
             android:exported="false"
             android:icon="@drawable/agent_claude"

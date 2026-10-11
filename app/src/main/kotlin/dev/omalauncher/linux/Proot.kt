@@ -44,6 +44,7 @@ class Proot(
         listOf(
             "$GUEST_HOME/.local/share/omarchy" to LauncherData.omarchyDir(context),
             "$GUEST_HOME/.config/omalauncher/widgets" to LauncherData.widgetsDir(context),
+            GUEST_WRAPPER_DIR to LauncherData.binDir(context),
         )
 
     /** Host directories bound over guest paths by [command]. */
@@ -116,7 +117,7 @@ class Proot(
                 "TZ=${java.util.TimeZone.getDefault().id}",
                 "TERM=xterm-256color",
                 // mise-installed tools (coding agents, node) live in the last two.
-                "PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/root/.local/bin:/root/.local/share/mise/shims",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/root/.local/bin:/root/.local/share/mise/shims:$GUEST_WRAPPER_DIR",
                 // As (fake) root, GNU tar restores directory modes with fchmodat(AT_SYMLINK_NOFOLLOW),
                 // which fails with ENOENT under proot on newer kernels and fails the extraction (mise.run).
                 "TAR_OPTIONS=--no-same-permissions",

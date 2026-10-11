@@ -22,6 +22,7 @@ agent in the launcher, which is not affiliated with or endorsed by any of them.
 | `agent-opencode` | opencode | opencode | @lobehub/icons (MIT) |
 | `agent-pi` | Pi | pi.dev | drawn for Omalauncher, a π in the colors of Pi's mark |
 | `agent-crush` | Crush | Charm | redrawn from Charm's logo |
+| `agent-hermes` | Hermes | our house assistant | drawn for Omalauncher (a winged staff); not the Nous or Omarchy marks |
 
 ## Fonts
 

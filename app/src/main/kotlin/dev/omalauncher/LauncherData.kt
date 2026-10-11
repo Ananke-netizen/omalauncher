@@ -28,6 +28,9 @@ object LauncherData {
     /** Widget files. The guest sees ~/.config/omalauncher/widgets. */
     fun widgetsDir(context: Context) = File(context.filesDir, "widgets")
 
+    /** The launcher's agent wrappers (hermes). The guest sees ~/.local/share/omalauncher/bin. */
+    fun binDir(context: Context) = File(context.filesDir, "bin")
+
     /** Manifest of the launcher-side [dev.omalauncher.upgrade.Provisioner]; the guest's is managed.json. */
     const val LAUNCHER_MANIFEST = "launcher-managed.json"
     const val GUEST_MANIFEST = "managed.json"

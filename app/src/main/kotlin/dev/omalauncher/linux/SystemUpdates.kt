@@ -127,7 +127,8 @@ class SystemUpdates(
         return root.keys().asSequence().mapNotNull { key ->
             val o = root.optJSONObject(key) ?: return@mapNotNull null
             val latest = o.optString("latest").ifEmpty { return@mapNotNull null }
-            val name = AGENTS.firstOrNull { it.pkg == key || it.pkg == o.optString("name") }?.name ?: key
+            // Remote agents (empty pkg) never come from mise; an empty name must not match them.
+            val name = AGENTS.firstOrNull { it.pkg.isNotEmpty() && (it.pkg == key || it.pkg == o.optString("name")) }?.name ?: key
             ToolUpdate(name, o.optString("current").ifEmpty { "?" }, latest)
         }.toList()
     }
