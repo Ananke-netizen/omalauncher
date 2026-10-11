@@ -569,13 +569,17 @@ internal fun HomeGrid(
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onLongPressEmpty()
                             } else if (released && (last - start).getDistance() <= viewConfiguration.touchSlop) {
-                                // A plain tap on empty space: two in a row lock the screen.
+                                // A plain tap on empty space: two in a row lock the screen — but only
+                                // on the wallpaper strip below the tiles, never between widgets.
+                                val onWallpaper = inLockZone(last.y, gap.toFloat(), g.cellH, used)
                                 val prev = lastTap
-                                if (prev != null && isDoubleTap(prev.first, down.uptimeMillis, last.x - prev.second.x, last.y - prev.second.y)) {
+                                if (onWallpaper && prev != null && isDoubleTap(prev.first, down.uptimeMillis, last.x - prev.second.x, last.y - prev.second.y)) {
                                     lastTap = null
                                     onDoubleTapEmpty()
-                                } else {
+                                } else if (onWallpaper) {
                                     lastTap = down.uptimeMillis to last
+                                } else {
+                                    lastTap = null
                                 }
                             } else if (!released) {
                                 while (true) {

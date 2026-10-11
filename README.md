@@ -24,8 +24,9 @@ window opens as its own Android task, with its own card in Recents.
   Copilot, opencode and others, which open in a terminal
 - **Feed**: swipe right from the first home page for Hacker News' top 50, tech
   accounts on X, and tech and news sites, in the theme's colors
-- **Home gestures**: swipe up on empty home opens the bar, double-tap locks the
-  screen (needs a one-time device-admin approval)
+- **Home gestures**: swipe up on empty home opens the bar, double-tap the
+  wallpaper below the tiles locks the screen (needs a one-time device-admin
+  approval); double-tapping between widgets never locks
 - No account, no ads, no tracking
 
 Needs an arm64 phone with Android 10 or newer. Without Linux, the launcher still

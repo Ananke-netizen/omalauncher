@@ -53,3 +53,15 @@ fun isDoubleTap(
     timeoutMs: Long = 300L,
     slopPx: Float = 100f,
 ): Boolean = secondTimeMs - firstTimeMs in 0..timeoutMs && dx * dx + dy * dy <= slopPx * slopPx
+
+/**
+ * Whether a tap at [yPx] is on the wallpaper strip below the tiles: past the last row
+ * any tile reaches. Empty space between widgets is deliberately not a lock zone —
+ * double-tapping there is a mis-tap, not intent. Pure, so the zone is testable.
+ */
+fun inLockZone(
+    yPx: Float,
+    gapPx: Float,
+    cellHPx: Float,
+    usedRows: Int,
+): Boolean = yPx > gapPx + usedRows * cellHPx
