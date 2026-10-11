@@ -199,6 +199,20 @@
             </intent-filter>
         </service>
 
+        <!-- Swipe down on home opens the shade (ui/ShadeService.kt); the user enables it in accessibility settings. -->
+        <service
+            android:name=".ui.ShadeService"
+            android:exported="false"
+            android:label="@string/shade_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/shade_service" />
+        </service>
+
         <service
             android:name=".LinuxService"
             android:exported="false"

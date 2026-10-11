@@ -2,4 +2,6 @@
 <resources>
     <string name="wallpaper_label">Omarchy</string>
     <string name="wallpaper_description">The current Omarchy theme background. System colors follow the theme.</string>
+    <string name="shade_service_label">Notification swipe</string>
+    <string name="shade_service_description">Lets a swipe down on the home screen open the notification shade. Nothing else is read.</string>
 </resources>

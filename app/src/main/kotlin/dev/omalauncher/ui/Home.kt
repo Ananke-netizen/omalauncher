@@ -45,6 +45,16 @@ import androidx.compose.runtime.collectAsState
 import dev.omalauncher.Runtime
 import dev.omalauncher.widgets.editWidgetCommand
 import dev.omalauncher.widgets.fixDependenciesCommand
+import android.content.Intent
+import android.provider.Settings
+import android.widget.Toast
+
+/** Swipe down on home: the shade via [ShadeService]; without the grant, say so and open the setting. */
+private fun openShade(context: android.content.Context) {
+    if (ShadeService.open(context)) return
+    Toast.makeText(context, "swipe down: enable Omalauncher in settings › accessibility", Toast.LENGTH_SHORT).show()
+    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
 
 /** Home pages of JSON widgets on a snap grid, bordered and gapped like Omarchy windows. */
 @Composable
@@ -281,9 +291,12 @@ fun HomeScreen(
             turned = turned,
             per = per,
             onLongPressEmpty = { openMenu(null) },
-            // Swipe up on empty home: the bar, like a tap on it. (Down arrives in the next commit.)
+            // Swipe up on empty home: the bar, like a tap on it. Swipe down: the shade, once granted.
             onSwipe = { swipe ->
-                if (swipe == HomeSwipe.Up) state.promptRequest = PromptRequest.Type
+                when (swipe) {
+                    HomeSwipe.Up -> state.promptRequest = PromptRequest.Type
+                    HomeSwipe.Down -> openShade(view.context)
+                }
             },
             onNoRoom = { item -> showPage = engine.moveToFreePage(item) },
             onMove = { item, page ->
