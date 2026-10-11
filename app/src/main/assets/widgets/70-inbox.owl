@@ -1,0 +1,22 @@
+widget "inbox" {
+  page: 1
+  order: 9
+  size: 2x2
+  minSize: 2x2
+  meta { description: "Unread Pantheon inbox notes from the home server, over Tailscale. The count only — no message text. Tap to open Pantheon."; version: "1.0"; license: "MIT"; category: "house" }
+
+  // The bridge's count route answers without a token (it returns a number and nothing else)
+  // and only listens on the tailnet. MagicDNS resolves pi only while Tailscale is up.
+  source c = http("http://pi.tail123202.ts.net:8097/api/inbox/count") every 60s json status
+  let n = c.ok ? c.out.unread : null
+  onTap: androidApp("com.axum.pocket")
+
+  Column {
+    gap: 2
+    align: center
+    justify: center
+    fill: true
+    Text { text: n == null ? "—" : "${round(n)}"; style: huge; color: n > 0 ? yellow : muted }
+    Text { text: n == null ? "inbox offline" : n == 0 ? "inbox clear" : "unread notes"; style: small; color: muted }
+  }
+}
