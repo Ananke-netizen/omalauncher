@@ -545,7 +545,7 @@ internal fun HomeGrid(
                         val hit = placed.lastOrNull { (_, c) -> g.rect(c).has(at) }
                         if (hit == null) {
                             // Empty space: a still long press opens the menu (as before); a deliberate
-                            // vertical swipe is the launcher's (search up, shade down). We watch on Initial
+                            // vertical swipe is the launcher's (search up). We watch on Initial
                             // without consuming, so a horizontal drag still turns the page and a scrolling
                             // widget keeps its own drags; a swipe only fires when nobody else took the touch.
                             var last = start
