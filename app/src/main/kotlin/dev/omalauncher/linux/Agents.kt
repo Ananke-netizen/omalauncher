@@ -71,15 +71,15 @@ val HERMES_WRAPPER =
     # shell runs with HOME=/root, so the PATH must not expand here).
     [ "${'$'}{1:-}" = "-q" ] && shift   # agentInvocation's -q flag; the whole line is the query now
     printf '%s\n' "${'$'}*" | ssh "${'$'}host" 'export PATH=${'$'}HOME/.local/bin:${'$'}PATH
-ask="${'$'}HOME/scripts/omalauncher-ask.sh"
-if [ ! -x "${'$'}ask" ]; then
-    echo "hermes: missing ${'$'}ask on the server (docs/HERMES.md)" >&2
-    exit 1
-fi
-qf="${'$'}(mktemp /tmp/omalauncher-query.XXXXXX)"
-cat > "${'$'}qf"
-setsid "${'$'}ask" "${'$'}qf" >/dev/null 2>&1 &
-true' && echo "sent to Hermes — answer lands in Pantheon"
+    ask="${'$'}HOME/scripts/omalauncher-ask.sh"
+    if [ ! -x "${'$'}ask" ]; then
+        echo "hermes: missing ${'$'}ask on the server (docs/HERMES.md)" >&2
+        exit 1
+    fi
+    qf="${'$'}(mktemp /tmp/omalauncher-query.XXXXXX)"
+    cat > "${'$'}qf"
+    setsid "${'$'}ask" "${'$'}qf" >/dev/null 2>&1 &
+    true' && echo "sent to Hermes — answer lands in Pantheon"
     """.trimIndent() + "\n"
 
 /** Where the guest sees the launcher's own agent wrappers; bound from outside the rootfs. */
