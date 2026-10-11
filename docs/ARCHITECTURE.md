@@ -34,6 +34,8 @@ touches it: `files/omarchy` is `~/.local/share/omarchy` and `files/widgets` is
 - `ui/`: the Compose home screen, the bar and its app list, settings and Files
 - `widgets/`: the widget engine; the language itself is in the `owl` module
 - `theme/`: Omarchy themes, applied to the launcher and the guest
+- `feed/`: the feed left of the first home page: its sources, reading RSS,
+  Atom, Hacker News and FxTwitter, settings and the cache; `ui/FeedPanel.kt` draws it
 - `upgrade/`: how installs follow app updates (see below)
 
 ## Rendering

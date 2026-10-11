@@ -22,6 +22,8 @@ window opens as its own Android task, with its own card in Recents.
   terminal widgets, a file manager, and opt-in GPU acceleration on Mali GPUs
 - **Coding agents**: the bar at the bottom sends a prompt to Claude Code, Codex,
   Copilot, opencode and others, which open in a terminal
+- **Feed**: swipe right from the first home page for Hacker News' top 50, tech
+  accounts on X, and tech and news sites, in the theme's colors
 - No account, no ads, no tracking
 
 Needs an arm64 phone with Android 10 or newer. Without Linux, the launcher still
@@ -38,10 +40,20 @@ installed one; the choice is saved in `~/.config/omalauncher/agent`. Hold the mi
 into the field. Speech is recognized by Android (on the device when the phone
 supports it), so only text reaches Linux.
 
+The feed: swipe right on the first home page (or press Super+F) and a feed
+slides in from the left, like Pixel's Discover: Hacker News, recent posts from
+tech accounts on X, and headlines from tech and news sites, one tab each and all
+of them together. Tap a story to open it, its `[123]` for the discussion; swipe
+it back or press Back to close it. Long-press empty home space to turn it on or
+off; settings › feed picks the sources, the X accounts, muted words and how
+often it refreshes. X has no free API for reading, so its posts come through
+FxTwitter's open API (api.fxtwitter.com), which now and then misses an account.
+
 Touch input in Linux windows: tap is a left click, long press is a right
 click, drag scrolls; apps with touch support (foot, GTK) get real touch.
 Hardware keyboard shortcuts: Super+Enter (terminal), Super+Space or
-Super+A (the bar), Super+1..9 (home pages) on the home screen; Super+Enter
+Super+A (the bar), Super+1..9 (home pages), Super+F (the feed; inside it r,
+s, q, 1..5, j/k) on the home screen; Super+Enter
 and Super+W (close) in Linux windows.
 
 ## Building

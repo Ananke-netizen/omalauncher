@@ -94,6 +94,13 @@ fun HomeMenu(
             state.homeMenuOpen = false
             if (linux) state.packagesOpen = true else state.linuxOpen = true
         }
+        // Toggles in place, so the menu shows what it did.
+        val feed = runtime.feed.settings.enabled
+        MenuItem(if (feed) "[x] feed · swipe right" else "[ ] feed") { runtime.feed.update { it.copy(enabled = !feed) } }
+        MenuItem("settings") {
+            state.homeMenuOpen = false
+            state.settingsOpen = true
+        }
         Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) { ThemeStrip(runtime.themes, gutter = 20.dp, onPick = ::pickTheme) }
     }
 }
