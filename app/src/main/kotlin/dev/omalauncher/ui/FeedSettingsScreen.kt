@@ -45,7 +45,7 @@ fun FeedSettingsScreen(
 ) {
     val s = store.settings
     val update = store::update
-    OverlayPanel("feed", onDismiss) {
+    OverlayPanel("feed", onDismiss, contentWidth = ReadingWidth) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             item {
                 Choice("feed", listOf("on", "off"), if (s.enabled) 0 else 1) { i -> update { it.copy(enabled = i == 0) } }
