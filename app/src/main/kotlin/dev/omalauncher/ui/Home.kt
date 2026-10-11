@@ -281,6 +281,10 @@ fun HomeScreen(
             turned = turned,
             per = per,
             onLongPressEmpty = { openMenu(null) },
+            // Swipe up on empty home: the bar, like a tap on it. (Down arrives in the next commit.)
+            onSwipe = { swipe ->
+                if (swipe == HomeSwipe.Up) state.promptRequest = PromptRequest.Type
+            },
             onNoRoom = { item -> showPage = engine.moveToFreePage(item) },
             onMove = { item, page ->
                 engine.moveToPage(item, page)

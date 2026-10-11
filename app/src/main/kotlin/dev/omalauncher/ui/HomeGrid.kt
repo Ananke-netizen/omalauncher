@@ -253,6 +253,8 @@ internal fun HomeGrid(
     render: @Composable (HomeItem, Modifier, Boolean) -> Unit,
     actions: @Composable (HomeItem) -> Unit,
     onLongPressEmpty: () -> Unit,
+    /** A deliberate vertical swipe on empty home space (not over a tile, not below the bar). */
+    onSwipe: (HomeSwipe) -> Unit = {},
     onNoRoom: (HomeItem) -> Unit,
     onMove: (HomeItem, Int) -> Unit,
     onGroup: (Shortcut, HomeItem) -> Unit,
@@ -537,12 +539,46 @@ internal fun HomeGrid(
                         }
 
                         val hit = placed.lastOrNull { (_, c) -> g.rect(c).has(at) }
-                        if (!awaitLongPress(down.id, start)) return@awaitEachGesture
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         if (hit == null) {
-                            onLongPressEmpty()
+                            // Empty space: a still long press opens the menu (as before); a deliberate
+                            // vertical swipe is the launcher's (search up, shade down). We watch on Initial
+                            // without consuming, so a horizontal drag still turns the page and a scrolling
+                            // widget keeps its own drags; a swipe only fires when nobody else took the touch.
+                            var last = start
+                            var released = false
+                            var consumedBySomeoneElse = false
+                            val held =
+                                withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                    while (true) {
+                                        val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                                        if (c.isConsumed) consumedBySomeoneElse = true
+                                        if (!c.pressed) {
+                                            released = true
+                                            break
+                                        }
+                                        last = c.position
+                                        // Moved before the long press: it's a drag, not a menu press.
+                                        if ((last - start).getDistance() > viewConfiguration.touchSlop) break
+                                    }
+                                } == null
+                            if (held) {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onLongPressEmpty()
+                            } else if (!released) {
+                                while (true) {
+                                    val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                                    if (c.isConsumed) consumedBySomeoneElse = true
+                                    if (!c.pressed) break
+                                    last = c.position
+                                }
+                                if (!consumedBySomeoneElse) {
+                                    classifyHomeSwipe(last.x - start.x, last.y - start.y, 120f)?.let(onSwipe)
+                                }
+                            }
                             return@awaitEachGesture
                         }
+                        if (!awaitLongPress(down.id, start)) return@awaitEachGesture
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         // Lifted: select it, and let the same finger drag it without letting go.
                         onSelect(hit.first.key)
                         arrange.holding = true
