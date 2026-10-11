@@ -255,6 +255,8 @@ internal fun HomeGrid(
     onLongPressEmpty: () -> Unit,
     /** A deliberate vertical swipe on empty home space (not over a tile, not below the bar). */
     onSwipe: (HomeSwipe) -> Unit = {},
+    /** Two taps in a row on empty home space. */
+    onDoubleTapEmpty: () -> Unit = {},
     onNoRoom: (HomeItem) -> Unit,
     onMove: (HomeItem, Int) -> Unit,
     onGroup: (Shortcut, HomeItem) -> Unit,
@@ -292,6 +294,8 @@ internal fun HomeGrid(
             layout.geometry = Triple(grid.cellW, grid.cellH, gap)
             layout.turned = turned
         }
+        // The first tap of a possible double-tap on empty space (time and place).
+        var lastTap by remember { mutableStateOf<Pair<Long, Offset>?>(null) }
         val grab = with(density) { 20.dp.roundToPx() }
         val sideGrab = with(density) { 36.dp.roundToPx() }
         val edge = with(density) { 28.dp.roundToPx() }
@@ -564,6 +568,15 @@ internal fun HomeGrid(
                             if (held) {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onLongPressEmpty()
+                            } else if (released && (last - start).getDistance() <= viewConfiguration.touchSlop) {
+                                // A plain tap on empty space: two in a row lock the screen.
+                                val prev = lastTap
+                                if (prev != null && isDoubleTap(prev.first, down.uptimeMillis, last.x - prev.second.x, last.y - prev.second.y)) {
+                                    lastTap = null
+                                    onDoubleTapEmpty()
+                                } else {
+                                    lastTap = down.uptimeMillis to last
+                                }
                             } else if (!released) {
                                 while (true) {
                                     val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break

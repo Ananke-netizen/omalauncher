@@ -298,6 +298,7 @@ fun HomeScreen(
                     HomeSwipe.Down -> openShade(view.context)
                 }
             },
+            onDoubleTapEmpty = { HomeLock.lock(view.context) },
             onNoRoom = { item -> showPage = engine.moveToFreePage(item) },
             onMove = { item, page ->
                 engine.moveToPage(item, page)

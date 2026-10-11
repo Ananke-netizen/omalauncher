@@ -199,6 +199,19 @@
             </intent-filter>
         </service>
 
+        <!-- Double-tap on home locks the screen (ui/HomeLock.kt); the user activates the admin once. -->
+        <receiver
+            android:name=".ui.LockAdminReceiver"
+            android:exported="false"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
         <!-- Swipe down on home opens the shade (ui/ShadeService.kt); the user enables it in accessibility settings. -->
         <service
             android:name=".ui.ShadeService"
