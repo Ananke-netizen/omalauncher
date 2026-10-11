@@ -55,6 +55,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -312,6 +313,25 @@ internal fun HomeGrid(
             shown: List<Int>,
         ) = if (key == null) -1 else shown.indexOfFirst { page -> itemsOn(page).any { it.key == key } }
 
+        /** The open [folder]'s panel: out of its tile on the page at [side], and kept on that page. */
+        fun folderGeometry(
+            folder: Folder,
+            side: Int,
+            g: Grid,
+            density: Density,
+        ) = FolderGeometry(
+            IntRect(side * g.width, 0, (side + 1) * g.width, g.height),
+            layout.cell(folder.key)?.let { g.screen(g.rect(g.fit(it, folder)), side) },
+            g.cellW,
+            g.cellH,
+            g.gap,
+            folder.apps.size,
+            density,
+        )
+
+        // The open folder, then the one closing until it has folded back into its tile.
+        val reveal = rememberFolderReveal(arrange.folder)
+
         Box(
             Modifier
                 .fillMaxSize()
@@ -436,13 +456,14 @@ internal fun HomeGrid(
                         val placed = placedOn(page, g)
 
                         // An open folder takes every touch: a tap on an app opens it (the tile gets the tap),
-                        // a long-press lifts it out, a tap outside closes the folder. Its panel is centered on
-                        // the whole screen, even with two pages showing.
-                        val folderPage = shown.getOrNull(sideOf(arrange.folder, shown))
+                        // a long-press lifts it out, a tap outside closes the folder. Its panel opens out of
+                        // its tile, on the folder's own page even with two pages showing.
+                        val folderSide = sideOf(arrange.folder, shown)
+                        val folderPage = shown.getOrNull(folderSide)
                         val open = folderPage?.let { p -> itemsOn(p).firstOrNull { it.key == arrange.folder } as? Folder }
                         if (open == null) arrange.folder = null
                         if (open != null && folderPage != null) {
-                            val fg = FolderGeometry(size.width, g.height, g.cellW, g.cellH, g.gap, open.apps.size, this)
+                            val fg = folderGeometry(open, folderSide, g, this)
                             val hit = open.apps.indices.firstOrNull { fg.app(it).has(start) }
                             if (hit == null) {
                                 down.consume()
@@ -546,14 +567,24 @@ internal fun HomeGrid(
                 }
             }
 
-            // The open folder, over the page it's on.
-            val openFolder = arrange.folder?.let { key -> pagesAt(pager.currentPage, pages, grid).firstNotNullOfOrNull { p -> itemsOn(p).firstOrNull { it.key == key } as? Folder } }
+            // The open folder, over the page it's on; or one closing, folding back into its tile.
+            val folderKey = arrange.folder ?: reveal.key
+            val shownPages = pagesAt(pager.currentPage, pages, grid)
+            val folderSide = sideOf(folderKey, shownPages)
+            val openFolder = shownPages.getOrNull(folderSide)?.let { p -> itemsOn(p).firstOrNull { it.key == folderKey } as? Folder }
             if (openFolder != null) {
-                val fg = FolderGeometry(width * per, grid.height, grid.cellW, grid.cellH, gap, openFolder.apps.size, density)
-                FolderPanel(openFolder, fg, render)
+                FolderPanel(
+                    openFolder,
+                    folderGeometry(openFolder, folderSide, grid, density),
+                    progress = { reveal.progressOf(folderKey) },
+                    closing = arrange.folder == null,
+                    carried = arrange.carry?.item?.key,
+                    render = render,
+                )
             }
 
-            // The carried tile floats above the pager, so it stays put while pages turn.
+            // The carried tile floats above the pager, so it stays put while pages turn, and above a folder it was
+            // just lifted out of, which folds away under it.
             arrange.carry?.let { carry ->
                 val r = grid.rect(carry.cell)
                 androidx.compose.runtime.key(carry.item.key) {
@@ -566,7 +597,7 @@ internal fun HomeGrid(
                                 IntOffset(at.x.roundToInt(), at.y.roundToInt())
                             }
                             .size(with(density) { r.width.toDp() }, with(density) { r.height.toDp() })
-                            .zIndex(1f)
+                            .zIndex(5f)
                             .graphicsLayer {
                                 scaleX = 0.96f
                                 scaleY = 0.96f
