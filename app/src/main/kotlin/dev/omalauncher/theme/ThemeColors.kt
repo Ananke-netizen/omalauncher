@@ -66,6 +66,44 @@ object ThemeColors {
         return c
     }
 
+    private val SECTION = Regex("""^\s*\[([^\]]*)]\s*$""")
+    private val HEX_VALUE = Regex("""^(?:["'](?:0[xX]|#)?([0-9a-fA-F]{6})["'](?:\s*#.*)?|(?:0[xX])?([0-9a-fA-F]{6})(?:\s*#.*)?)$""")
+
+    /**
+     * The palette of a theme older than colors.toml, from its alacritty.toml,
+     * as omarchy-theme-colors-from-alacritty reads it. Null without all eight
+     * normal colors.
+     */
+    fun fromAlacritty(text: String): Map<String, String>? {
+        val direct = HashMap<String, String>()
+        val dotted = HashMap<String, String>()
+        var section = ""
+        for (line in text.lineSequence()) {
+            if (line.trimStart().startsWith("[")) {
+                section = SECTION.find(line)?.groupValues?.get(1) ?: ""
+                continue
+            }
+            if (section.isEmpty()) continue
+            val eq = line.indexOf('=').takeIf { it > 0 } ?: continue
+            val key = line.substring(0, eq).trim()
+            if (key.isEmpty() || key.startsWith("#")) continue
+            val m = HEX_VALUE.find(line.substring(eq + 1).trim()) ?: continue
+            val hex = "#" + (m.groupValues[1].ifEmpty { m.groupValues[2] }).lowercase()
+            // `normal.black = …` under [colors] is colors.normal.black, below the section form.
+            if (section == "colors" && '.' in key) dotted.putIfAbsent("$section.$key", hex) else direct.putIfAbsent("$section.$key", hex)
+        }
+        val all = dotted + direct
+        val names = listOf("black", "red", "green", "yellow", "blue", "magenta", "cyan", "white")
+        val normal = names.map { all["colors.normal.$it"] ?: return null }
+        val bright = names.mapIndexed { i, n -> all["colors.bright.$n"] ?: normal[i] }
+        val background = all["colors.primary.background"] ?: normal[0]
+        val foreground = all["colors.primary.foreground"] ?: normal[7]
+        val out = linkedMapOf("accent" to normal[4], "selection" to (all["colors.selection.background"] ?: foreground), "background" to background, "foreground" to foreground)
+        val colors = listOf(background) + normal.subList(1, 7) + foreground + bright
+        colors.forEachIndexed { i, c -> out["color$i"] = c }
+        return out
+    }
+
     fun mix(
         a: String,
         b: String,

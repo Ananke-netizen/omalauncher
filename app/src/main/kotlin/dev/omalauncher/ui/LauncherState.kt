@@ -19,7 +19,10 @@ import kotlinx.coroutines.Dispatchers
 /** App panel position (above the bar): 0 = closed, 1 = open. Follows the finger while dragging. */
 class LauncherState {
     val drawer = Animatable(0f)
-    var themesOpen by mutableStateOf(false)
+    var styleOpen by mutableStateOf(false)
+
+    /** The community themes, opened straight from the home menu's theme strip. */
+    var themeBrowserOpen by mutableStateOf(false)
     var agentsOpen by mutableStateOf(false)
     var storeOpen by mutableStateOf(false)
     var settingsOpen by mutableStateOf(false)
@@ -45,12 +48,13 @@ class LauncherState {
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
         get() =
-            drawer.value > 0.99f || settingsOpen || themesOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null ||
+            drawer.value > 0.99f || settingsOpen || styleOpen || themeBrowserOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null ||
                 sharing != null || feed.progress.value > 0.99f || feedSettingsOpen
 
     /** Closes every overlay screen (settings and what it opens). */
     fun closeScreens() {
-        themesOpen = false
+        styleOpen = false
+        themeBrowserOpen = false
         agentsOpen = false
         storeOpen = false
         packagesOpen = false

@@ -248,7 +248,7 @@ fun FeedPanel(
                     onDragStopped = { velocity -> reveal.settle(side * velocity) },
                 ).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
                 // The home grid's gap, so the wallpaper frames it like a tiled window.
-                .padding(6.dp)
+                .padding(HomeGap)
                 // Opaque: home's widgets showing through made the text hard to read.
                 .frame(2.dp, Palette.accent, Palette.background, radius = 16.dp),
         ) {
@@ -413,7 +413,7 @@ private fun Header(
             else -> ""
         }
     Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        BasicText("~/feed", style = Mono.copy(color = Palette.accent, fontSize = Mono.fontSize * 1.25f))
+        BasicText("~/feed", style = Mono.copy(color = Palette.accent, fontSize = TextSize.Title))
         Spacer(Modifier.weight(1f))
         BasicText(status, style = Mono.copy(color = if (store.loading) Palette.accent else Palette.muted))
     }
@@ -462,7 +462,7 @@ private fun SectionRule(head: Head) {
         Box(Modifier.width(10.dp).height(1.dp).background(Palette.border))
         BasicText(" ${head.section.label} ", style = Mono.copy(color = sectionColor(head.section)))
         Box(Modifier.weight(1f).height(1.dp).background(Palette.border))
-        if (head.info.isNotEmpty()) BasicText(" ${head.info}", style = Mono.copy(color = Palette.muted, fontSize = Mono.fontSize * 0.9f))
+        if (head.info.isNotEmpty()) BasicText(" ${head.info}", style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
     }
 }
 
@@ -479,7 +479,7 @@ private fun StoryRow(
     val item = story.item
     val seen = settings.read == ReadStyle.Dim && item.url in read
     val title = Mono.copy(color = if (seen) Palette.muted else Palette.foreground)
-    val meta = Mono.copy(color = Palette.muted, fontSize = Mono.fontSize * 0.9f)
+    val meta = Mono.copy(color = Palette.muted, fontSize = TextSize.Small)
     val ago = shortAgo(item.time, now)
     Row(
         Modifier
@@ -562,7 +562,7 @@ private fun NoteRow(note: Note) {
     BasicText(
         note.text,
         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
-        style = Mono.copy(color = if (note.error) Palette.red else Palette.muted, fontSize = Mono.fontSize * 0.9f),
+        style = Mono.copy(color = if (note.error) Palette.red else Palette.muted, fontSize = TextSize.Small),
     )
 }
 
