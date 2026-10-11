@@ -63,8 +63,23 @@ val HERMES_WRAPPER =
         echo "  Check by hand: ssh ${'$'}host" >&2
         exit 1
     fi
-    # Single quotes: the PATH must expand on the server, not in the guest (where HOME is /root).
-    exec ssh -t "${'$'}host" 'export PATH=${'$'}HOME/.local/bin:${'$'}PATH; hermes chat '"$(printf '%q ' "${'$'}@")"
+    # The smarts live on the server (~/scripts/omalauncher-ask.sh): it delivers the query to
+    # Hermes' Bot Chat and pushes her answer to the Pantheon inbox. We fire it detached and
+    # exit now — the window closes fast and the answer arrives on the phone. The detached
+    # script owns the query file (the delivery deletes it when consumed); we never rm it here.
+    # Single quotes: everything inside reaches the server's shell unexpanded (the guest's own
+    # shell runs with HOME=/root, so the PATH must not expand here).
+    [ "${'$'}{1:-}" = "-q" ] && shift   # agentInvocation's -q flag; the whole line is the query now
+    printf '%s\n' "${'$'}*" | ssh "${'$'}host" 'export PATH=${'$'}HOME/.local/bin:${'$'}PATH
+ask="${'$'}HOME/scripts/omalauncher-ask.sh"
+if [ ! -x "${'$'}ask" ]; then
+    echo "hermes: missing ${'$'}ask on the server (docs/HERMES.md)" >&2
+    exit 1
+fi
+qf="${'$'}(mktemp /tmp/omalauncher-query.XXXXXX)"
+cat > "${'$'}qf"
+setsid "${'$'}ask" "${'$'}qf" >/dev/null 2>&1 &
+true' && echo "sent to Hermes — answer lands in Pantheon"
     """.trimIndent() + "\n"
 
 /** Where the guest sees the launcher's own agent wrappers; bound from outside the rootfs. */

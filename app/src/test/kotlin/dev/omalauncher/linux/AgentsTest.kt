@@ -40,7 +40,7 @@ class AgentsTest {
     @Test fun hermesWrapperFailsWithInstructions() {
         assertTrue(HERMES_WRAPPER.contains("BatchMode=yes"))
         assertTrue(HERMES_WRAPPER.contains("authorized_keys"))
-        assertTrue(HERMES_WRAPPER.contains("hermes chat"))
+        assertTrue(HERMES_WRAPPER.contains("omalauncher-ask.sh"))
         // ssh runs a non-login shell on the server: hermes lives in ~/.local/bin there.
         assertTrue(HERMES_WRAPPER.contains("PATH=\$HOME/.local/bin"))
         assertTrue(HERMES_WRAPPER.contains("HERMES_SSH_HOST"))
@@ -49,13 +49,24 @@ class AgentsTest {
     /**
      * The remote command must reach the Pi's shell unexpanded: the guest's own shell runs with
      * HOME=/root, so a double-quoted "export PATH=$HOME/..." would set /root/.local/bin on the
-     * server and the Pi would answer "command not found: hermes". Single quotes keep it ours.
+     * server and the Pi would answer "command not found". Single quotes keep it ours.
      */
     @Test fun remotePathExpandsOnTheServerNotInTheGuest() {
-        val exec = HERMES_WRAPPER.lines().first { it.startsWith("exec ssh") }
-        val remote = Regex("'([^']*)'").find(exec)!!.groupValues[1]
+        val remote = HERMES_WRAPPER.substringAfter("| ssh \"\$host\" '").substringBeforeLast("' &&")
         assertTrue(remote.contains("export PATH=\$HOME/.local/bin"))
-        assertTrue(remote.contains("hermes chat"))
-        assertFalse(exec.contains("\"export PATH"))
+        assertTrue(remote.contains("ask=\"\$HOME/scripts/omalauncher-ask.sh\""))
+        assertFalse(HERMES_WRAPPER.contains("\"export PATH"))
+    }
+
+    /**
+     * The ask is async by design: the query goes to the Pi-side script detached (setsid), the
+     * wrapper prints one line and exits — the launcher window must not wait for Hermes' answer.
+     */
+    @Test fun hermesAskIsFireAndForget() {
+        val remote = HERMES_WRAPPER.substringAfter("| ssh \"\$host\" '").substringBeforeLast("' &&")
+        assertTrue("the ask must run detached", remote.contains("setsid \"\$ask\""))
+        assertTrue(HERMES_WRAPPER.contains("sent to Hermes"))
+        // agentInvocation still passes -q first; the wrapper swallows it.
+        assertTrue(HERMES_WRAPPER.contains("\"-q\" ] && shift"))
     }
 }

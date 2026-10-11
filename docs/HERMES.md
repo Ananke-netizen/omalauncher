@@ -52,6 +52,26 @@ to bound launcher data (open work, see below).
 - `arch/etc/resolv.conf` with `nameserver 100.100.100.100`, otherwise the
   guest cannot resolve MagicDNS names at all.
 
+## The ask path (async)
+
+A bar query does not open a one-off `hermes chat` session. The wrapper pipes the
+query to `~/scripts/omalauncher-ask.sh` on the Pi, fired detached (setsid), and
+prints "sent to Hermes - answer lands in Pantheon" and exits, so the terminal
+window closes immediately. On the Pi the script delivers the query into Hermes'
+canonical Bot Chat via `bot_mode_dm.py --run-delivery` (author `bot:pixel` /
+"Omalauncher"; it queues when she is busy), then pushes her reply to the
+Pantheon inbox through `~/scripts/inbox-push` (bridge token read from
+`~/.hermes-pocket`, never printed). The phone gets the answer as an inbox note
+titled "Omalauncher: <first words of query>".
+
+The script lives on the Pi, not in the wrapper, so its logic can change without
+touching the app. If it is missing the wrapper says so plainly.
+
+Note for existing installs: the wrapper in the guest's bound bin is only
+rewritten when the Hermes agent is reinstalled from the agents screen (Linux >
+agents > Hermes > install). After an app update that changes HERMES_WRAPPER,
+reinstall it once.
+
 ## Open work
 
 The ssh plumbing (key, config, known_hosts, resolv.conf) dying with the rootfs
