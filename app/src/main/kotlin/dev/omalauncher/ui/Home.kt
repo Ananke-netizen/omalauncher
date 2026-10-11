@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
@@ -207,7 +208,8 @@ fun HomeScreen(
             itemsOn = engine::itemsOn,
             layout = engine.layout,
             arrange = arrange,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            // Dragging past the first page pulls in the feed.
+            modifier = Modifier.weight(1f).fillMaxWidth().nestedScroll(rememberFeedScroll(state.feed, runtime.feed.settings.enabled)),
             selected = state.editing,
             onSelect = { state.editing = it },
             actions = { item ->

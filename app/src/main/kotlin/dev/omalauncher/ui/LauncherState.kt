@@ -38,9 +38,15 @@ class LauncherState {
     /** The menu from long-pressing empty home space. */
     var homeMenuOpen by mutableStateOf(false)
 
+    /** The feed left of the first home page, and its settings. */
+    val feed = FeedReveal()
+    var feedSettingsOpen by mutableStateOf(false)
+
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
-        get() = drawer.value > 0.99f || settingsOpen || themesOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null || sharing != null
+        get() =
+            drawer.value > 0.99f || settingsOpen || themesOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null ||
+                sharing != null || feed.progress.value > 0.99f || feedSettingsOpen
 
     /** Closes every overlay screen (settings and what it opens). */
     fun closeScreens() {
@@ -54,6 +60,8 @@ class LauncherState {
         homeMenuOpen = false
         shared = null
         sharing = null
+        feedSettingsOpen = false
+        if (feed.isOpen) feed.close()
     }
 
     /** Key of the home tile in edit mode (handles and action bar shown), if any. */

@@ -88,8 +88,10 @@ private fun DesktopScreen(
             state.storeOpen -> state.storeOpen = false
             state.themesOpen -> state.themesOpen = false
             state.packagesOpen -> state.packagesOpen = false
+            state.feedSettingsOpen -> state.feedSettingsOpen = false
             state.settingsOpen -> state.settingsOpen = false
             runtime.widgets.openScreen != null -> runtime.widgets.openScreen = null
+            state.feed.isOpen -> state.feed.close()
             else -> state.close()
         }
     }
@@ -218,6 +220,8 @@ private fun DesktopScreen(
         }
     }
 
+    // The feed draws over the bar, and the screens it opens over it.
+    FeedPanel(runtime, state)
     // Full-screen panels draw over the bar.
     ThemesOverlay(runtime, state)
 }
@@ -240,8 +244,10 @@ private fun ThemesOverlay(
             onStore = { state.storeOpen = true },
             onLinux = { state.linuxOpen = true },
             onLicenses = { state.licensesOpen = true },
+            onFeed = { state.feedSettingsOpen = true },
         )
     }
+    if (state.feedSettingsOpen) FeedSettingsScreen(runtime.feed, onDismiss = { state.feedSettingsOpen = false })
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
     if (state.themesOpen) ThemePicker(runtime.themes, onDismiss = { state.themesOpen = false })
     if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })

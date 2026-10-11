@@ -38,6 +38,7 @@ fun SettingsScreen(
     onStore: () -> Unit,
     onLinux: () -> Unit,
     onLicenses: () -> Unit,
+    onFeed: () -> Unit,
 ) {
     val context = LocalContext.current
     val linux by runtime.bootstrap.state.collectAsState()
@@ -62,6 +63,7 @@ fun SettingsScreen(
                 },
                 Triple("packages", if (installed) "install Linux apps and tools with pacman and the AUR" else "needs linux", if (installed) onPackages else onLinux),
                 Triple("widget store", "add widgets to the home screen", onStore),
+                Triple("feed", feedStatus(runtime.feed.settings), onFeed),
                 Triple("android settings", "the phone's system settings") {
                     context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 },
