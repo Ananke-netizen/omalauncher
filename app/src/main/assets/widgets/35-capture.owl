@@ -1,0 +1,31 @@
+widget "capture" {
+  page: 2
+  order: 6
+  size: 6x2
+  minSize: 3x2
+  meta { description: "A thought, straight into the vault's inbox on the home server: today's Captures note, the same one Dash writes to."; version: "1.0"; license: "MIT"; category: "productivity"; owl: 5 }
+  requires { pacman: ["openssh"] }
+
+  source now = clock every 1s
+  state saved = ""
+  state savedUntil = 0
+  state out = null
+  at savedUntil { saved = ""; savedUntil = 0 }
+
+  Column {
+    gap: 6
+    fill: true
+    Text { text: "capture"; style: label; color: accent }
+    // The text goes to the shell single-quoted ('\'' for any quote in it), then to the Pi on stdin.
+    Input {
+      placeholder: "a thought for the vault"
+      clear: true
+      onSubmit: {
+        out = run(trim(value) == "" ? "true" : "house capture '" + replace(trim(value), "'", "'\\''") + "'")
+        savedUntil = trim(value) == "" ? savedUntil : now + 4
+        saved = trim(value) == "" ? saved : trim(value)
+      }
+    }
+    Text { text: saved == "" ? "" : "✓ saved to the inbox · ${saved}"; style: small; color: green; maxLines: 1 }
+  }
+}

@@ -139,10 +139,28 @@ object FeedCatalog {
             site("cbs", "cbs news", "cbs", Section.News, "https://www.cbsnews.com/latest/rss/main"),
             site("fox", "fox news", "fox", Section.News, "https://moxie.foxnews.com/google-publisher/latest.xml"),
             site("bbctech", "bbc · technology", "bbct", Section.News, "https://feeds.bbci.co.uk/news/technology/rss.xml"),
-        )
+        ) + gleanSites()
+
+    /**
+     * Glean, the home server's own news reader, over Tailscale. Android resolves the tailnet's MagicDNS
+     * name (the bare host name doesn't resolve on the phone), so it's used rather than an address.
+     */
+    const val GLEAN = "http://pi.tail123202.ts.net:8086"
+
+    // A function, not a val: [news] above is built first, while vals declared below are still null.
+    private fun gleanSites() =
+        listOf(site("glean", "glean · latest", "gln", Section.News, "$GLEAN/feed.xml")) +
+            listOf(
+                "world" to "world", "politics" to "politics", "economy" to "economy", "science-tech" to "science & tech",
+                "justice-rights" to "justice & rights", "environment" to "environment", "society-culture" to "society & culture",
+                "opinion" to "opinion",
+            ).map { (slug, name) -> site("glean-$slug", "glean · $name", "gln", Section.News, "$GLEAN/feed/$slug.xml") }
 
     val defaultTech = setOf("ars", "verge", "lwn", "phoronix", "lobsters", "register", "techcrunch", "9to5google")
-    val defaultNews = setOf("bbc", "npr", "guardian", "aljazeera")
+    val defaultNews = setOf("bbc", "npr", "guardian", "aljazeera", "glean")
+
+    /** News sites made default after settings were first saved: a saved list that predates one gets it once. */
+    val addedNews = setOf("glean")
 
     /** Tech accounts on X to start from; the list is the user's to edit. */
     val defaultX = listOf("omarchy", "dhh", "karpathy", "simonw", "ThePrimeagen", "AnthropicAI", "OpenAI", "github", "AndroidDev", "linuxfoundation")

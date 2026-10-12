@@ -1,0 +1,109 @@
+widget "todo" {
+  page: 2
+  order: 3
+  size: 3x4
+  minSize: 3x3
+  meta { description: "Open to-dos from the home server's Radicale: tick one off (with a few seconds to undo), overdue in red, today's in the accent. Tap for all and to add one."; version: "1.0"; license: "MIT"; category: "productivity"; owl: 5 }
+  requires { pacman: ["openssh", "tar"] }
+
+  // The same command as every house widget: it runs once for all of them.
+  source sync = cmd("house sync") every 2m timeout 40s status
+  source h = file("~/.cache/house.json") json
+  source now = clock every 1s
+
+  // Ticked here but not yet gone from house.json: hidden right away.
+  state ticked = []
+  state undo = null
+  state undoUntil = 0
+  state result = null
+  at undoUntil { undo = null; undoUntil = 0 }
+
+  let open = (h.todos ?? []).filter(t => !contains(ticked, t.uid))
+  let c = h.todo_counts ?? {}
+
+  onTap: screen()
+
+  component Item(t) {
+    Row {
+      gap: 8
+      align: center
+      // The uid goes to the shell single-quoted ('\'' for any quote in it); house checks it again.
+      Text {
+        text: "☐"
+        color: t.overdue ? red : t.today ? accent : muted
+        width: 22
+        onTap: { ticked = ticked + [t.uid]; undo = t; undoUntil = now + 6; result = run("house done '" + replace(str(t.uid), "'", "'\\''") + "'") }
+      }
+      Text { text: t.title; style: small; color: t.overdue ? red : t.today ? accent : foreground; maxLines: 1; weight: 1 }
+      if t.due != null { Text { text: t.today ? "today" : lower(fmtTime(t.due, "MMM d")); style: small; color: t.overdue ? red : muted; width: 50; align: end; maxLines: 1 } }
+    }
+  }
+
+  component Undo() {
+    if undo != null && undoUntil > now {
+      Row {
+        gap: 8
+        align: center
+        Text { text: "✓ ${undo.title}"; style: small; color: muted; maxLines: 1; weight: 1 }
+        Button {
+          text: "undo ${undoUntil - now}"
+          color: accent
+          onTap: { ticked = ticked.filter(u => u != undo.uid); result = run("house undo '" + replace(str(undo.uid), "'", "'\\''") + "'"); undo = null; undoUntil = 0 }
+        }
+      }
+    }
+  }
+
+  Column {
+    gap: 4
+    fill: true
+    Row {
+      align: center
+      Text { text: "to-do"; style: label; color: accent; weight: 1 }
+      Text {
+        text: h.generated == null ? "…" : "${c.open ?? 0} open" + ((c.overdue ?? 0) > 0 ? " · ${c.overdue} late" : "") + ((c.today ?? 0) > 0 ? " · ${c.today} today" : "")
+        style: label
+        color: (c.overdue ?? 0) > 0 ? red : muted
+        width: 120
+        align: end
+        maxLines: 1
+      }
+    }
+    if h.generated == null {
+      Text { text: sync.ok == false ? "can't reach the house" : "…"; style: small; color: muted }
+    } else if len(open) == 0 {
+      Text { text: "all done"; style: small; color: muted }
+    }
+    Column {
+      gap: 6
+      weight: 1
+      clip: true
+      for t in open.take(max(1, (rows ?? 4) * 2 - 2)) key t.uid { Item { t: t } }
+    }
+    Undo { }
+  }
+
+  screen {
+    title: "to-do"
+    Column {
+      gap: 10
+      // "call the court 2026-10-14" is due that day; anything else has no date.
+      Input {
+        placeholder: "add a to-do (end with YYYY-MM-DD for a due date)"
+        clear: true
+        onSubmit: {
+          // Interpolated, not joined with +, which trims the space before the date.
+          result = run(trim(value) == "" ? "true" : match(trim(value), "^(.*\\S)\\s+(\\d{4}-\\d{2}-\\d{2})$") == null ? "house add '${replace(trim(value), "'", "'\\''")}'" : "house add '${replace(match(trim(value), "^(.*\\S)\\s+(\\d{4}-\\d{2}-\\d{2})$")[0], "'", "'\\''")}' ${match(trim(value), "^(.*\\S)\\s+(\\d{4}-\\d{2}-\\d{2})$")[1]}")
+        }
+      }
+      Undo { }
+      Column {
+        scroll: true
+        gap: 8
+        weight: 1
+        for t in open key t.uid { Item { t: t } }
+      }
+      Text { text: "as of ${fmtTime(h.generated, "HH:mm")}"; style: small; color: muted }
+    }
+  }
+}

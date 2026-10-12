@@ -150,4 +150,39 @@ class FeedSettingsTest {
         assertTrue(FeedCatalog.defaultNews.all { id -> FeedCatalog.news.any { it.id == id } })
         assertTrue(FeedCatalog.defaultX.all { FeedCatalog.handle(it) == it })
     }
+
+    @Test
+    fun gleanIsANewsSourceOnTheHomeServer() {
+        val glean = FeedCatalog.news.filter { it.id == "glean" || it.id.startsWith("glean-") }
+        assertEquals(9, glean.size)
+        assertTrue(glean.all { it.url.startsWith("http://pi.tail123202.ts.net:8086/feed") && it.url.endsWith(".xml") && it.section == Section.News })
+        assertEquals("${FeedCatalog.GLEAN}/feed.xml", glean.first { it.id == "glean" }.url)
+        assertTrue("glean" in FeedSettings().news && glean.count { it.id in FeedSettings().news } == 1)
+    }
+
+    @Test
+    fun aNewDefaultSiteIsSwitchedOnOnceForSavedSettings() {
+        // Saved before Glean existed: it's turned on once, the user's own choices kept.
+        val old = FeedSettings.fromJson(JSONObject("""{"news":["npr"]}"""))
+        assertEquals(setOf("npr", "glean"), old.news)
+        // Saved since and turned off: it stays off.
+        val off = FeedSettings.fromJson(JSONObject(old.copy(news = setOf("npr")).toJson().toString()))
+        assertEquals(setOf("npr"), off.news)
+    }
+
+    @Test
+    fun gleansRssParses() {
+        val xml =
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Glean — Latest</title>
+            <item><title>Damming the Xingu</title><link>https://news.example/xingu/</link><guid isPermaLink="false">f9af7bf6fa39</guid>
+            <pubDate>Mon, 12 Oct 2026 00:23:04 +0000</pubDate><description>As the plant marks 10 years…</description>
+            <source url="https://news.example/xingu/">Mongabay</source></item></channel></rss>
+            """.trimIndent()
+        val item = FeedParse.rss(xml.toByteArray(), "glean").single()
+        assertEquals("Damming the Xingu", item.title)
+        assertEquals("https://news.example/xingu/", item.url)
+        assertEquals(1_791_764_584L, item.time)
+    }
 }

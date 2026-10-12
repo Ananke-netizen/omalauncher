@@ -1,0 +1,105 @@
+widget "calendar" {
+  page: 2
+  order: 2
+  size: 3x4
+  minSize: 3x3
+  meta { description: "The home server's Radicale calendar: this month with event days marked, the next three events, and court dates counted down. Tap for 14 days."; version: "1.0"; license: "MIT"; category: "time"; owl: 5 }
+  requires { pacman: ["openssh", "tar"] }
+
+  // Every house widget runs this same command: identical commands run once, so it's one ssh every 2 minutes.
+  source sync = cmd("house sync") every 2m timeout 40s status
+  source h = file("~/.cache/house.json") json
+  source now = clock every 1m
+
+  let events = (h.events ?? []).filter(e => (e.end ?? e.start) > now)
+  let today = fmtTime(now, "yyyy-MM-dd")
+  // Local noon today, so stepping whole days never crosses midnight with daylight saving.
+  let noon = now - num(fmtTime(now, "H")) * 3600 - num(fmtTime(now, "m")) * 60 + 43200
+  let first = noon - (num(fmtTime(now, "d")) - 1) * 86400
+  // Monday-first: the epoch began on a Thursday. (fmtTime's "u" is the year in java.time, not the weekday.)
+  let lead = (floor(first / 86400) + 3) % 7
+  let month = fmtTime(now, "MM")
+  let days = range(31).map(i => first + i * 86400).filter(t => fmtTime(t, "MM") == month)
+  let marked = unique((h.events ?? []).map(e => e.day))
+  let court = unique((h.events ?? []).filter(e => e.court).map(e => e.day))
+
+  onTap: screen()
+
+  component When(e) {
+    Text {
+      text: e.allday ? lower(fmtTime(e.start, "EEE d")) : lower(fmtTime(e.start, "EEE d · HH:mm"))
+      style: small
+      color: muted
+      width: 86
+      maxLines: 1
+    }
+  }
+
+  Column {
+    gap: 4
+    fill: true
+    Row {
+      align: center
+      Text { text: lower(fmtTime(now, "MMMM")); style: label; color: accent; weight: 1 }
+      Text { text: h.generated == null ? "…" : "${len(events)} ahead"; style: label; color: muted; width: 70; align: end }
+    }
+    Canvas {
+      height: 108
+      fill: width
+      let cw = width / 7
+      let rh = 108 / 7
+      for d, i in ["m", "t", "w", "t", "f", "s", "s"] { text(d, cw * i + cw / 2, rh / 2, size: 9, align: center, color: muted) }
+      for t, i in days {
+        let cell = i + lead
+        let x = cw * (cell % 7) + cw / 2
+        let y = rh * (floor(cell / 7) + 1) + rh / 2
+        let day = fmtTime(t, "yyyy-MM-dd")
+        if day == today { circle(x, y, min(cw, rh) / 2 - 0.5, fill: accent) }
+        text(fmtTime(t, "d"), x, y - 1, size: 10, align: center, color: day == today ? background : foreground, bold: day == today)
+        if contains(marked, day) { circle(x, y + rh / 2 - 2, 1.6, fill: contains(court, day) ? red : (day == today ? background : accent)) }
+      }
+    }
+    Spacer { height: 1; fill: width; background: alpha(muted, 0.25) }
+    if h.generated == null {
+      Text { text: sync.ok == false ? "can't reach the house" : "…"; style: small; color: muted }
+    } else if len(events) == 0 {
+      Text { text: "nothing in the next 14 days"; style: small; color: muted }
+    } else {
+      for e in events.take(3) key "${e.start}${e.title}" {
+        Row {
+          gap: 6
+          align: center
+          When { e: e }
+          Text { text: e.title; style: small; color: e.court ? red : foreground; maxLines: 1; weight: 1 }
+          if e.court { Text { text: ceil((num(e.start) - now) / 86400) <= 0 ? "today" : "${ceil((num(e.start) - now) / 86400)}d"; style: small; bold: true; color: red; width: 40; align: end } }
+        }
+      }
+    }
+  }
+
+  screen {
+    title: "next 14 days"
+    Column {
+      scroll: true
+      gap: 10
+      if len(events) == 0 { Text { text: "nothing in the next 14 days"; style: body; color: muted } }
+      for day in unique(events.map(e => e.day)) key day {
+        Column {
+          gap: 4
+          let first = events.find(e => e.day == day)
+          Text { text: day == today ? "today" : lower(fmtTime(first.start, "EEEE d MMMM")); style: label; color: day == today ? accent : muted }
+          for e in events.filter(e => e.day == day) key "${e.start}${e.title}" {
+            Row {
+              gap: 10
+              align: center
+              Text { text: e.allday ? "all day" : "${fmtTime(e.start, "HH:mm")}–${fmtTime(e.end, "HH:mm")}"; style: small; color: muted; width: 92; maxLines: 1 }
+              Text { text: e.title; style: body; color: e.court ? red : foreground; weight: 1 }
+              if e.court { Text { text: ceil((num(e.start) - now) / 86400) <= 0 ? "today" : "in ${ceil((num(e.start) - now) / 86400)}d"; style: small; bold: true; color: red; width: 56; align: end } }
+            }
+          }
+        }
+      }
+      Text { text: "as of ${fmtTime(h.generated, "HH:mm")}"; style: small; color: muted }
+    }
+  }
+}

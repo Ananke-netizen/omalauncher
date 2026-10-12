@@ -1,0 +1,64 @@
+widget "timer" {
+  page: 3
+  order: 2
+  size: 3x3
+  minSize: 3x2
+  meta { description: "A stopwatch for billable time or a deposition, kept across restarts, with today's total per kind. Tap the kind to switch; tap for the last two weeks."; version: "1.0"; license: "MIT"; category: "time"; owl: 5 }
+
+  source now = clock every 1s
+  // Times are absolute Unix seconds, so a restart or a reboot doesn't lose a running timer.
+  state startedAt = 0 persist
+  state kind = "billable" persist
+  // One entry per stop: {day "yyyy-MM-dd", kind, secs}; two weeks kept.
+  state log = [] persist
+
+  let today = fmtTime(now, "yyyy-MM-dd")
+  let running = startedAt > 0
+  let current = running ? now - startedAt : 0
+  let doneToday = sum(log.filter(e => e.day == today && e.kind == kind).map(e => e.secs))
+  let total = doneToday + current
+  let hh = floor(total / 3600)
+  let mm = floor(total % 3600 / 60)
+  let ss = floor(total % 60)
+
+  onTap: screen()
+
+  Column {
+    gap: 6
+    fill: true
+    align: center
+    Button { text: kind; color: kind == "billable" ? accent : magenta; onTap: { kind = running ? kind : kind == "billable" ? "deposition" : "billable" } }
+    Text { text: "${pad(hh, 2, "0")}:${pad(mm, 2, "0")}:${pad(ss, 2, "0")}"; fontSize: 30; font: mono; color: running ? foreground : muted; align: center }
+    Text { text: "today · ${fixed(total / 3600, 1)} h"; style: small; color: muted; align: center }
+    if running {
+      Button {
+        text: "stop"
+        color: red
+        onTap: {
+          log = (log + [{day: fmtTime(startedAt, "yyyy-MM-dd"), kind: kind, secs: now - startedAt}]).filter(e => e.day >= fmtTime(now - 14 * 86400, "yyyy-MM-dd"))
+          startedAt = 0
+        }
+      }
+    } else {
+      Button { text: "start"; color: green; onTap: { startedAt = now } }
+    }
+  }
+
+  screen {
+    title: "time"
+    Column {
+      scroll: true
+      gap: 8
+      for d in unique(log.map(e => e.day)).sort().reverse() key d {
+        Row {
+          gap: 10
+          Text { text: d == today ? "today" : d; style: body; width: 110 }
+          Text { text: "billable ${fixed(sum(log.filter(e => e.day == d && e.kind == "billable").map(e => e.secs)) / 3600, 2)} h"; style: body; color: accent; weight: 1 }
+          Text { text: "depo ${fixed(sum(log.filter(e => e.day == d && e.kind == "deposition").map(e => e.secs)) / 3600, 2)} h"; style: body; color: magenta; weight: 1 }
+        }
+      }
+      if len(log) == 0 { Text { text: "nothing timed yet"; style: body; color: muted } }
+      Button { text: "clear today's ${kind}"; color: muted; onTap: { log = running ? log : log.filter(e => !(e.day == today && e.kind == kind)) } }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+widget "debate clock" {
+  page: 3
+  order: 3
+  size: 3x3
+  minSize: 3x3
+  meta { description: "A debate speech clock: 60, 120 or 240 seconds on a ring that turns yellow at 30 and red at 10. Tap the ring to start or pause."; version: "1.0"; license: "MIT"; category: "time"; owl: 5 }
+
+  source now = clock every 1s
+  state length = 120 persist
+  state endsAt = 0
+  state paused = 0          // seconds left while paused; 0 when not paused
+  at endsAt { notify("debate clock", "time"); endsAt = 0; paused = 0 }
+
+  let left = endsAt > 0 ? max(0, endsAt - now) : paused > 0 ? paused : length
+  let tint = left <= 10 ? red : left <= 30 ? yellow : green
+
+  Column {
+    gap: 6
+    fill: true
+    align: center
+    Box {
+      align: center
+      weight: 1
+      fill: width
+      // Running: keep what's left and stop. Stopped: run on from what's left.
+      onTap: { paused = endsAt > 0 ? max(1, endsAt - now) : paused; endsAt = endsAt > 0 ? 0 : now + left; paused = endsAt > 0 ? 0 : paused }
+      Ring { value: left; max: length; color: tint; thickness: 8; size: 104; animate value: tween(900ms, "linear") }
+      Column {
+        gap: 0
+        align: center
+        Text { text: "${floor(left / 60)}:${pad(left % 60, 2, "0")}"; fontSize: 26; font: mono; color: endsAt > 0 ? tint : foreground; align: center }
+        Text { text: endsAt > 0 ? "running" : paused > 0 ? "paused" : "tap to start"; style: small; color: muted; align: center }
+      }
+    }
+    Row {
+      gap: 4
+      for s in [60, 120, 240] {
+        Button { text: "${s}"; color: length == s ? accent : muted; weight: 1; onTap: { length = s; endsAt = 0; paused = 0 } }
+      }
+    }
+  }
+}

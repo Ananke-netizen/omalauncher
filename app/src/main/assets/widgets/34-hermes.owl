@@ -1,0 +1,47 @@
+widget "hermes" {
+  page: 1
+  order: 9
+  size: 6x2
+  minSize: 3x2
+  meta { description: "Hermes's unread notes and her latest answer, from the home server. The side chats show as counts only. Tap for Pantheon."; version: "1.0"; license: "MIT"; category: "productivity"; owl: 5 }
+  requires { pacman: ["openssh", "tar"] }
+
+  source sync = cmd("house sync") every 2m timeout 40s status
+  source h = file("~/.cache/house.json") json
+
+  let inbox = h.inbox ?? {}
+  let side = inbox.side ?? {}
+  let n = inbox.unread
+  let body = trim(inbox.last.text ?? "")
+
+  onTap: androidApp("com.axum.pocket")
+
+  Row {
+    gap: 10
+    fill: true
+    Column {
+      gap: 0
+      width: 64
+      align: center
+      justify: center
+      Text { text: n == null ? "—" : "${round(n)}"; style: huge; color: (n ?? 0) > 0 ? yellow : muted; align: center }
+      Text { text: inbox.ok == false ? "offline" : n == 0 ? "clear" : "unread"; style: small; color: muted; align: center }
+    }
+    Column {
+      gap: 3
+      weight: 1
+      Row {
+        Text { text: "hermes"; style: label; color: accent; weight: 1 }
+        Text { text: inbox.last == null ? "" : fmtTime(inbox.last.ts, "HH:mm"); style: label; color: muted; width: 48; align: end }
+      }
+      Text {
+        text: h.generated == null ? (sync.ok == false ? "can't reach the house" : "…") : inbox.ok == false ? "the Pantheon bridge is down" : body == "" ? "nothing yet" : body
+        style: small
+        maxLines: (rows ?? 2) * 2
+        weight: 1
+      }
+      // Counts only, by design: the side chats' text never leaves the house.
+      Text { text: "legal ${side.legal ?? 0} · class ${side.class ?? 0} · build ${side.build ?? 0}"; style: small; color: muted; maxLines: 1 }
+    }
+  }
+}

@@ -1,0 +1,55 @@
+widget "brain" {
+  page: 2
+  order: 5
+  size: 3x2
+  minSize: 3x2
+  meta { description: "Which brain answers: halogen on evo, GLM on evo, or Opus in the cloud. Switching moves every chat, so each button asks for a second tap."; version: "1.0"; license: "MIT"; category: "system"; owl: 5 }
+  requires { pacman: ["openssh", "tar"] }
+
+  source sync = cmd("house sync") every 2m timeout 40s status
+  source h = file("~/.cache/house.json") json
+  source now = clock every 1s
+
+  // A switch takes two taps: the first arms it for 5 seconds, the second runs it.
+  state armed = ""
+  state armedUntil = 0
+  state sent = ""
+  state out = null
+  at armedUntil { armed = ""; armedUntil = 0 }
+
+  let model = lower(h.chat_model ?? "")
+  let lane = h.generated == null ? "…" : contains(model, "opus") || contains(model, "claude") ? "opus" : contains(model, "glm") ? "glm" : "halogen"
+
+  component Lane(name) {
+    if lane == name {
+      Button { text: name; color: accent; weight: 1 }
+    } else if armed == name {
+      // name is one of three fixed words, never user text. Built by interpolation: + trims a string's trailing space.
+      Button { text: "sure? ${armedUntil - now}"; color: red; weight: 1; onTap: { out = run("house brain ${name}"); sent = name; armed = ""; armedUntil = 0 } }
+    } else {
+      Button { text: name; color: muted; weight: 1; onTap: { armed = name; armedUntil = now + 5 } }
+    }
+  }
+
+  Column {
+    gap: 6
+    fill: true
+    Row {
+      align: center
+      Text { text: "brain"; style: label; color: muted; width: 50 }
+      Text { text: lane; style: title; color: accent; weight: 1; maxLines: 1 }
+    }
+    Row {
+      gap: 4
+      Lane { name: "halogen" }
+      Lane { name: "glm" }
+      Lane { name: "opus" }
+    }
+    Text {
+      text: sent == "" ? (h.chat_model ?? "") : lane == sent ? "on ${sent}" : "switching to ${sent}… (a Pantheon note says when)"
+      style: small
+      color: muted
+      maxLines: 2
+    }
+  }
+}

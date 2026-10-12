@@ -1,0 +1,35 @@
+widget "house" {
+  page: 2
+  order: 4
+  size: 3x2
+  minSize: 3x2
+  meta { description: "The home server at a glance: what evo runs and how fast, the Pi's health with what's failing, Proton days left, and how fresh it is. Tap for Pantheon."; version: "1.0"; license: "MIT"; category: "system"; owl: 5 }
+  requires { pacman: ["openssh", "tar"] }
+
+  source sync = cmd("house sync") every 2m timeout 40s status
+  source h = file("~/.cache/house.json") json
+  source now = clock every 30s
+
+  let he = h.health ?? {}
+  let evo = he.evo ?? {}
+  let tint = he.overall == "ok" ? green : he.overall == "warn" ? yellow : he.overall == "crit" ? red : muted
+  let age = h.generated == null ? null : now - num(h.generated)
+
+  onTap: androidApp("com.axum.pocket")
+
+  Column {
+    gap: 3
+    fill: true
+    Row {
+      gap: 6
+      align: center
+      Text { text: "●"; color: tint; width: 14 }
+      Text { text: "pi ${he.overall ?? "…"}"; style: label; color: tint; weight: 1; maxLines: 1 }
+      Text { text: age == null ? "" : age < 300 ? "${floor(age / 60)}m" : "stale ${fmtDuration(age)}"; style: label; color: (age ?? 0) > 600 ? yellow : muted; width: 80; align: end; maxLines: 1 }
+    }
+    Text { text: "evo ${evo.mode ?? "…"}${evo.ready == false ? " (loading)" : ""}${evo.tps_24h == null ? "" : " · ${round(evo.tps_24h)} tok/s"}"; style: small; maxLines: 1 }
+    Text { text: "${h.chat_model ?? "…"} · proton ${h.proton_days ?? "…"}d"; style: small; color: (h.proton_days ?? 99) < 21 ? yellow : muted; maxLines: 1 }
+    Text { text: len(he.failing ?? []) == 0 ? "" : join(he.failing, " · "); style: small; color: red; maxLines: 2; weight: 1 }
+    if h.generated == null && sync.ok == false { Text { text: "can't reach the house"; style: small; color: muted } }
+  }
+}

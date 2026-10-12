@@ -105,6 +105,7 @@ data class FeedSettings(
             .put("xReposts", xReposts)
             .put("tech", JSONArray(tech.toList()))
             .put("news", JSONArray(news.toList()))
+            .put("newsOffered", JSONArray(FeedCatalog.addedNews.toList()))
             .put("mute", JSONArray(mute))
             .put("refresh", refreshMinutes)
             .put("read", read.id)
@@ -134,7 +135,8 @@ data class FeedSettings(
                 xReplies = o.optBoolean("xReplies", d.xReplies),
                 xReposts = o.optBoolean("xReposts", d.xReposts),
                 tech = strings("tech")?.toSet() ?: d.tech,
-                news = strings("news")?.toSet() ?: d.news,
+                // A default added since this was saved is switched on once; turned off later, it stays off.
+                news = strings("news")?.toSet()?.let { it + (FeedCatalog.addedNews - strings("newsOffered").orEmpty().toSet()) } ?: d.news,
                 mute = strings("mute") ?: d.mute,
                 refreshMinutes = o.optInt("refresh", d.refreshMinutes).coerceAtLeast(0),
                 read = ReadStyle.entries.firstOrNull { it.id == o.optString("read") } ?: d.read,

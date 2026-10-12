@@ -727,7 +727,7 @@ class WidgetEngine(
     /** Agents look for AGENTS.md / CLAUDE.md in the guest home; these point them at the widget docs. */
     fun guestManaged(): List<Managed> =
         listOf("AGENTS.md", "CLAUDE.md").map { Managed.text(File(proot.home, it), Policy.Seeded) { AGENT_POINTER } } +
-            listOf("owl-check", "owl-send").map { bin ->
+            listOf("owl-check", "owl-send", "house").map { bin ->
                 Managed(File(proot.rootfs, "usr/local/bin/$bin"), Policy.Owned, executable = true) { context.assets.open("$bin.sh").use { it.readBytes() } }
             }
 

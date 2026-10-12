@@ -1,0 +1,41 @@
+widget "brief" {
+  page: 3
+  order: 1
+  size: 6x3
+  minSize: 3x2
+  meta { description: "Hermes's morning brief from the home server: the first lines on the tile, all of it on tap."; version: "1.0"; license: "MIT"; category: "productivity"; owl: 5 }
+  requires { pacman: ["openssh", "tar"] }
+
+  source sync = cmd("house sync") every 2m timeout 40s status
+  source h = file("~/.cache/house.json") json
+
+  let text = trim(h.brief.text ?? "")
+  let body = lines(text).filter(l => trim(l) != "")
+
+  onTap: screen()
+
+  Column {
+    gap: 3
+    fill: true
+    Row {
+      Text { text: "today"; style: label; color: accent; weight: 1 }
+      Text { text: h.brief == null ? "" : lower(fmtTime(h.brief.ts, "EEE HH:mm")); style: label; color: muted; width: 90; align: end }
+    }
+    if text == "" {
+      Text { text: h.generated == null ? (sync.ok == false ? "can't reach the house" : "…") : "no brief yet"; style: small; color: muted }
+    }
+    for l, i in body.take(max(2, (rows ?? 3) * 2 - 1)) {
+      Text { text: l; style: small; color: i == 0 ? foreground : muted; maxLines: 1 }
+    }
+  }
+
+  screen {
+    title: "today"
+    Column {
+      scroll: true
+      gap: 6
+      for l in body { Text { text: l; style: body } }
+      Text { text: h.brief == null ? "" : "written ${lower(fmtTime(h.brief.ts, "EEEE HH:mm"))}"; style: small; color: muted }
+    }
+  }
+}
