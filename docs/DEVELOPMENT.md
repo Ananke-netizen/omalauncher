@@ -135,6 +135,46 @@ scripts/dev.sh test
 Merge that pull request with a merge commit, not a squash, so the next sync
 knows what's already in.
 
+When upstream releases, the merge conflicts on `versionCode` and `versionName`
+in `app/build.gradle.kts`: keep this fork's scheme (below) on upstream's new
+version.
+
+## Releasing this fork
+
+Upstream's `.github/workflows/release.yml` builds this fork's releases too: a
+`v*` tag gets a signed APK, its `SHA256SUMS` and a build provenance
+attestation on a GitHub release. Play is upstream's alone (docs/RELEASING.md).
+
+- **Versions**: upstream's version with `-mhs.N`, so they never collide with
+  upstream's own tags: `versionName = "0.5.0-mhs.1"`, tag `v0.5.0-mhs.1`. The
+  `versionCode` is upstream's ×1000 + N (`10001`), so each release updates the
+  last, and the first on a new upstream version (`11001`) every one before it.
+- **Notes**: the release's description is
+  `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
+- **Signing**: this fork's own key, from the repository's secrets
+  `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`; the
+  workflow stops without them rather than sign with a debug key. Its owner
+  keeps the keystore and its password backed up: without them no release can
+  update an installed one.
+
+To release, bump both in `app/build.gradle.kts`, add the notes, merge, then tag
+`main`:
+
+```sh
+git tag -a v0.5.0-mhs.1 -m "0.5.0-mhs.1" origin/main
+git push origin v0.5.0-mhs.1
+```
+
+To check a downloaded APK: `sha256sum -c SHA256SUMS`, and
+`gh attestation verify omalauncher-0.5.0-mhs.1.apk -R Mhsbrian/omalauncher`.
+
+Installs signed with another key, a debug build or Play's, can't update to a
+release: uninstalling first deletes the Linux install and the widgets.
+Release builds don't verify upstream's widget share links
+(`simonschubert.github.io`), whose `assetlinks.json` lists upstream's key, so
+those open in the browser unless they're turned on in App info › Open by
+default.
+
 ## Troubleshooting
 
 - **`Unknown AVD name`**: `avdmanager` puts AVDs under `$XDG_CONFIG_HOME/.android/avd`
