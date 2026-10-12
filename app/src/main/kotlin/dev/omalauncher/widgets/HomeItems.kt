@@ -190,7 +190,7 @@ class Shortcuts(
             page = o.optInt("page", 1),
             label = o.getString("label"),
             component = o.optString("component").ifEmpty { null }?.let(ComponentName::unflattenFromString),
-            profile = if (o.has("profile")) o.getLong("profile") else null,
+            profile = savedProfile(o),
             linux = linux,
             folder = o.optString("folder").ifEmpty { null },
         )
