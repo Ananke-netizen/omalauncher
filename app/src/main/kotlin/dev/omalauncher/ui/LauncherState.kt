@@ -28,6 +28,7 @@ class LauncherState {
     var settingsOpen by mutableStateOf(false)
     var packagesOpen by mutableStateOf(false)
     var licensesOpen by mutableStateOf(false)
+    var gesturesOpen by mutableStateOf(false)
 
     /** The Linux sheet: install, progress, remove. Opened by anything that needs Linux. */
     var linuxOpen by mutableStateOf(false)
@@ -51,7 +52,7 @@ class LauncherState {
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
         get() =
-            drawer.value > 0.99f || settingsOpen || styleOpen || themeBrowserOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null ||
+            drawer.value > 0.99f || settingsOpen || styleOpen || themeBrowserOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || gesturesOpen || shared != null ||
                 sharing != null || feed.progress.value > 0.99f || feedSettingsOpen || backupOpen
 
     /** Closes every overlay screen (settings and what it opens). */
@@ -63,6 +64,7 @@ class LauncherState {
         packagesOpen = false
         linuxOpen = false
         licensesOpen = false
+        gesturesOpen = false
         settingsOpen = false
         homeMenuOpen = false
         shared = null

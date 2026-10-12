@@ -12,6 +12,9 @@ Dates are when the build was uploaded to Play.
 - With a work profile, the drawer splits into personal and work tabs; swipe sideways to switch.
 - The work tab pauses work apps and turns them back on.
 - Widget screens can raise the keyboard as they open, with `Input { focus: true }`.
+- Swipe up on home to open the app drawer, like stock Android; settings → gestures
+  can turn it off.
+- The app list starts at the top, Linux apps first; closing the drawer clears the search.
 
 ## 0.5.0 (versionCode 10) – 2026-10-11
 

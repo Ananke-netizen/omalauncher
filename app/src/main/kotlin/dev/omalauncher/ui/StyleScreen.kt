@@ -30,6 +30,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -95,7 +96,7 @@ fun StyleScreen(
             StyleOption("home apps", listOf("boxed", "icon only"), if (LauncherStyle.bareAppIcons) 1 else 0) { store.setBareAppIcons(it == 1) }
             StyleOption("recent apps", listOf("shown", "hidden"), if (LauncherStyle.recentApps) 0 else 1) { store.setRecentApps(it == 0) }
             StyleOption("corners", Corners.entries.map { it.label }, LauncherStyle.corners.ordinal) { store.setCorners(Corners.entries[it]) }
-            if (linux == LinuxState.Installed) TerminalSection(runtime.terminalFont)
+            if (linux == LinuxState.Installed) TerminalSection(runtime.terminalFont, runtime.terminals)
         }
         if (installOpen) {
             TextDialog(
@@ -232,7 +233,10 @@ private fun BackgroundSection(
 
 /** The terminals' font and the size they open at, on top of Android's font size; see [TerminalFont]. */
 @Composable
-private fun TerminalSection(font: TerminalFont) {
+private fun TerminalSection(
+    font: TerminalFont,
+    tiles: TerminalTiles,
+) {
     LaunchedEffect(Unit) { font.refreshFamilies() }
     Heading("terminal")
     FontOption(font.families, font.family, font::select)
@@ -250,7 +254,39 @@ private fun TerminalSection(font: TerminalFont) {
         Modifier.padding(start = 104.dp, top = 2.dp),
         style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
     )
+    TerminalPreview(font, tiles)
 }
+
+/**
+ * A real foot in the chosen [TerminalFont], as terminals will draw it. foot
+ * keeps the family it started with, so a change starts another.
+ */
+@Composable
+private fun TerminalPreview(
+    font: TerminalFont,
+    tiles: TerminalTiles,
+) {
+    val term = remember(font.family, font.size) { tiles.create(PREVIEW, font.size) }
+    DisposableEffect(term) { onDispose { term.close() } }
+    TerminalView(
+        term,
+        Modifier
+            .padding(top = 12.dp)
+            .fillMaxWidth()
+            .height(160.dp)
+            // Inset within the frame so its corners don't cut into foot's pixels.
+            .frame(2.dp, Palette.border, Palette.background, radius = 12.dp)
+            .padding(4.dp),
+        interactive = false,
+    )
+}
+
+/** What the preview prints, without a cursor, then waits for it to be closed. */
+private val PREVIEW =
+    """
+    printf '\033[?25l\033[32m~\033[0m \033[34m❯\033[0m ls\n\033[1;34mDocuments\033[0m  \033[1;34mProjects\033[0m  notes.md  \033[32mrun.sh\033[0m\n\033[32m~\033[0m \033[34m❯\033[0m cat greet.py\n\033[35mdef\033[0m \033[34mgreet\033[0m(name):  \033[90m# 0O 1lI {} [] <=\033[0m\n    \033[35mreturn\033[0m \033[32mf"hi {name}"\033[0m\n'
+    exec sleep infinity
+    """.trimIndent()
 
 /** A section's title, set apart from the muted labels of the options under it by the accent color, as the weather screen sets its sections apart; [actions] go at the far end. */
 @Composable

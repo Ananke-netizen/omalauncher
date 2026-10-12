@@ -490,7 +490,8 @@ object Builtins {
                 when {
                     a is Num && b is Num -> Num(a.v + b.v)
                     a is Lst && b is Lst -> lst(a.items + b.items)
-                    a is Str || b is Str -> Str(a.text() + b.text())
+                    // Strings join as written ("- " + x keeps its space); only other values are formatted.
+                    a is Str || b is Str -> Str((if (a is Str) a.v else a.text()) + (if (b is Str) b.v else b.text()))
                     else -> {
                         val x = a.num()
                         val y = b.num()

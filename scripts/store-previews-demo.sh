@@ -2,19 +2,21 @@
 # Runs in the guest, for scripts/store-previews.sh: demo data for the store widgets that
 # otherwise only say how to set them up. `gh` answers like a signed-in account, Home
 # Assistant's states are files that curl reads, `curl` answers Cursor's dashboard, and
-# the Tesla tile reads its own fixture. With "off", puts everything back.
+# the Tesla tile reads its own fixture, and go-limit reads an OpenCode database. With "off",
+# puts everything back.
 set -u
 demo=/tmp/store-previews-demo
 ha=~/.config/omarchy-proot/home-assistant
 cursor=~/.config/cursor/auth.json
 tesla=~/.config/omarchy-tesla/fixture.json
+opencode=~/.local/share/opencode/opencode.db
 
 # Moves a real file aside before the demo writes its own; "off" puts it back.
 aside() { [ -f "$1" ] && [ ! -f "$1.before-demo" ] && mv "$1" "$1.before-demo"; mkdir -p "${1%/*}"; }
 
 if [ "${1:-}" = off ]; then
   rm -rf "$demo" /usr/local/bin/gh /usr/local/bin/curl
-  for f in "$ha" "$cursor" "$tesla"; do
+  for f in "$ha" "$cursor" "$tesla" "$opencode"; do
     [ -f "$f.before-demo" ] && mv "$f.before-demo" "$f" || rm -f "$f"
   done
   exit 0
@@ -70,3 +72,17 @@ cat > "$tesla" <<'JSON'
  "tyres":{"min":41,"max":42},"tyre_fl":42,"tyre_fr":42,"tyre_rl":41,"tyre_rr":41,"tyre_unit":"psi",
  "software":"2026.32.6","open":[],"vehicles":[{"vin":"5YJ3E1EA0PF000001","name":"Bluebird"}]}
 JSON
+
+# A day of OpenCode Go on GLM-5.3-Flash, like the go-limit author's picture: quiet until a few
+# hours ago, then bursts, about $1.50 in the 5-hour window.
+aside "$opencode"
+now=$(date +%s)
+sqlite3 "$opencode" "
+  create table message (id integer primary key, time_created integer, data text);
+  with recursive n(i) as (select 0 union all select i + 1 from n where i < 39)
+  insert into message (time_created, data)
+  select ($now - (i * 37 % 41) * 900 - 60) * 1000,
+    json_object('providerID', 'opencode-go', 'role', 'assistant', 'modelID', 'glm-5.3-flash',
+      'tokens', json_object('input', 150000 + i * 3000, 'output', 15000, 'reasoning', 4000,
+        'cache', json_object('read', 900000, 'write', 0)))
+  from n"
