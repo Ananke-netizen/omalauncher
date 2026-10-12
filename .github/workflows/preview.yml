@@ -35,9 +35,12 @@ jobs:
           name=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
+      # As release.yml: fetch-proot.sh builds proot with the NDK it pins, installed if the image lacks it.
       - name: Fetch proot
         run: |
           sudo apt-get update -q && sudo apt-get install -yq libarchive-tools
+          ndk=$(sed -n 's/^NDK_VERSION=//p' scripts/fetch-proot.sh)
+          [ -d "$ANDROID_HOME/ndk/$ndk" ] || yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" >/dev/null
           scripts/fetch-proot.sh
 
       # The same key as releases, so a preview installs over a release and the next release over it.
