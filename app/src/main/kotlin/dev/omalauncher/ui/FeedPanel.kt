@@ -247,10 +247,10 @@ fun FeedPanel(
                     state = rememberDraggableState { dx -> reveal.dragBy(side * dx / width) },
                     onDragStopped = { velocity -> reveal.settle(side * velocity) },
                 ).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
-                // The home grid's gap, so the wallpaper frames it like a tiled window.
-                .padding(HomeGap)
+                // Full-screen panels' gap and outline (style.toml's screens), so the wallpaper frames it like a tiled window.
+                .padding(PanelGap)
                 // Opaque: home's widgets showing through made the text hard to read.
-                .frame(2.dp, Palette.accent, Palette.background, radius = 16.dp),
+                .frame(LauncherStyle.panelBorderWidth, Palette.accent, Palette.background, radius = 16.dp),
         ) {
             FeedWindow(
                 store,
