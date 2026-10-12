@@ -22,7 +22,7 @@ class Compiler private constructor(
          * instead of failing on what they don't know. Bump it with every
          * addition a widget could depend on: nodes, properties, builtins.
          */
-        const val LEVEL = 5
+        const val LEVEL = 6
         private const val MAX_ASSET_BYTES = 2 shl 20
 
         fun compile(src: String): Program =
@@ -54,7 +54,7 @@ class Compiler private constructor(
                 "Terminal" to Kind(setOf("command", "fontSize"), Children.NONE),
                 // owl 4: input.
                 "Slider" to Kind(setOf("value", "min", "max", "step", "color", "track", "live"), Children.NONE),
-                "Input" to Kind(setOf("text", "placeholder", "color", "fontSize", "clear"), Children.NONE),
+                "Input" to Kind(setOf("text", "placeholder", "color", "fontSize", "clear", "focus"), Children.NONE),
             )
 
         val COMMON =
@@ -102,7 +102,9 @@ class Compiler private constructor(
             mapOf("Terminal" to 2, "sprite" to 3) +
                 listOf("Slider", "Input", "file", "android.notifications", "android.volume", "volume", "notification", "every", "at", "when", "on").associateWith { 4 } +
                 // owl 5: a full-screen view of the widget.
-                listOf("screen", "close", "screenWidth", "screenHeight", "optional", "linux", "android.system").associateWith { 5 }
+                listOf("screen", "close", "screenWidth", "screenHeight", "optional", "linux", "android.system").associateWith { 5 } +
+                // owl 6: properties, named Node.property.
+                mapOf("Input.focus" to 6)
 
         // No onLongPress: long-press belongs to the home screen, which lifts the tile to move it.
         /**
@@ -190,6 +192,9 @@ class Compiler private constructor(
     private var nodes = 0
     private var maxNodes = MAX_NODES
 
+    /** Whether nodes being compiled are the screen's (true) or the tile's (false); null in components, which can go in either. */
+    private var inScreen: Boolean? = null
+
     /** Where a handler calls screen() or close(), which need a screen { } block. */
     private var screenAction: Int? = null
 
@@ -254,6 +259,7 @@ class Compiler private constructor(
         val requires = requires(body.decls.filterIsInstance<Decl.Requires>().flatMap { it.fields })
         val screens = body.items.filter { it is Item.Node && it.type == "screen" }.map { it as Item.Node }
         if (screens.size > 1) fail("a widget has one screen { }", screens[1].pos)
+        inScreen = false
         val rootNodes = items(body.items - screens.toSet(), root, Children.UI)
         if (rootNodes.isEmpty()) fail("a widget needs at least one node, like Text { text: \"hi\" }", 0)
         val tileNodes = nodes
@@ -298,6 +304,7 @@ class Compiler private constructor(
         body.animations.firstOrNull()?.let { fail("animate belongs inside a node", it.pos) }
         nodes = 0
         maxNodes = MAX_SCREEN_NODES
+        inScreen = true
         val tree = items(body.items, root, Children.UI)
         if (tree.isEmpty()) fail("a screen needs at least one node", n.pos)
         return tree to body.props.firstOrNull()?.let { ex(it.value, root) }
@@ -534,6 +541,9 @@ class Compiler private constructor(
         for (p in body.props) {
             if (p.name !in kind.props && p.name !in COMMON) fail("${n.type} has no property '${p.name}' (${(kind.props + COMMON).joinToString()})", p.pos)
             if (p.name in props) fail("'${p.name}' is set twice", p.pos)
+            // On a tile it would raise the keyboard whenever its page shows; in a component the launcher ignores it there.
+            if (p.name == "focus" && inScreen == false) fail("focus only works in a screen { }", p.pos)
+            since("${n.type}.${p.name}", p.pos)
             props[p.name] = prop(p, scope)
         }
         val handlers =

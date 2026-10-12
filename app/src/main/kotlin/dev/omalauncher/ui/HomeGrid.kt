@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -780,19 +781,19 @@ private fun TiledPage(
             // Action bar above the tile, or below it when the tile is at the top.
             val barAbove = r.top > with(density) { 56.dp.roundToPx() }
             if (!arrange.holding) {
-                val at =
-                    with(density) {
-                        IntOffset(
-                            r.left.coerceAtMost(pageWidth - 220.dp.roundToPx()).coerceAtLeast(0),
-                            if (barAbove) r.top - 48.dp.roundToPx() else r.bottom + 8.dp.roundToPx(),
-                        )
-                    }
+                // Lined up with the tile's left edge, pulled in by however wide the bar turned out when that would
+                // run off the page: a lone "remove" for an app at the edge stays next to it.
+                val y = with(density) { if (barAbove) r.top - 48.dp.roundToPx() else r.bottom + 8.dp.roundToPx() }
+                fun at(width: Int) = IntOffset(r.left.coerceAtMost(pageWidth - width).coerceAtLeast(0), y)
                 DisposableEffect(Unit) { onDispose { arrange.bar = null } }
                 Box(
                     Modifier
                         .zIndex(3f)
-                        .offset { at }
-                        .onSizeChanged { arrange.bar = IntRect(at, it) },
+                        .layout { measurable, constraints ->
+                            val bar = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+                            layout(bar.width, bar.height) { bar.place(at(bar.width)) }
+                        }
+                        .onSizeChanged { arrange.bar = IntRect(at(it.width), it) },
                 ) { actions(sel) }
             }
         }

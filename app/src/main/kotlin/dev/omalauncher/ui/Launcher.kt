@@ -45,6 +45,7 @@ import dev.omalauncher.widgets.checkSecretsCommand
 import dev.omalauncher.widgets.publishWidgetCommand
 import dev.omalauncher.widgets.reviewSharedWidgetCommand
 import dev.omalauncher.widgets.render.LocalHomeCovered
+import dev.omalauncher.widgets.render.LocalInputFocus
 
 @Composable
 fun LauncherRoot(
@@ -171,7 +172,7 @@ private fun DesktopScreen(
                     orientation = Orientation.Vertical,
                     state = rememberDraggableState { dy -> state.dragBy(-dy / screenHeight) },
                     onDragStopped = { velocity -> state.settle(velocity) },
-                ),
+                ).swipeTabs(runtime, state),
         )
     }
     // The bar and the panel above it; the keyboard lifts both. Nothing here takes touches while the panel is closed,
@@ -233,7 +234,11 @@ private fun ThemesOverlay(
     state: LauncherState,
 ) {
     // A widget's screen first: what it opens (themes, agents) draws on top of it.
-    runtime.widgets.screenInstance()?.let { (spec, inst) -> WidgetScreenPanel(spec, inst, onDismiss = { runtime.widgets.openScreen = null }) }
+    runtime.widgets.screenInstance()?.let { (spec, inst) ->
+        CompositionLocalProvider(LocalInputFocus provides true) {
+            WidgetScreenPanel(spec, inst, onDismiss = { runtime.widgets.openScreen = null })
+        }
+    }
     // Settings first so the screens it opens draw on top of it.
     if (state.settingsOpen) {
         SettingsScreen(
