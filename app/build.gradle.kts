@@ -18,8 +18,8 @@ android {
         minSdk = 29
         targetSdk = 37
         // This fork's releases: upstream's version with -mhs.N, its code ×1000 + N (docs/DEVELOPMENT.md).
-        versionCode = 10002
-        versionName = "0.5.0-mhs.2"
+        versionCode = 10003
+        versionName = "0.5.0-mhs.3"
         ndk { abiFilters += "arm64-v8a" }
     }
 
