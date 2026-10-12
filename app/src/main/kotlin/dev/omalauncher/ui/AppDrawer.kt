@@ -458,10 +458,11 @@ internal fun AppPanel(
                         val listState = rememberLazyListState()
                         // New results start at the bar, where the best match is.
                         if (shown == null) LaunchedEffect(search) { listState.scrollToItem(0) }
-                        // Rows bottom-up: the first item sits right above the bar.
+                        // Search results bottom-up, so the best match sits right above the bar; the full list reads
+                        // top-down from its start, like stock drawers, so a drag down there closes the panel right away.
                         LazyColumn(
                             state = listState,
-                            reverseLayout = true,
+                            reverseLayout = shown == null,
                             modifier = Modifier.fillMaxWidth().nestedScroll(pullToClose),
                             contentPadding = PaddingValues(top = 8.dp, bottom = 4.dp),
                         ) {
@@ -476,16 +477,15 @@ internal fun AppPanel(
                                 }
                             }
 
-                            // Each section reads top-down above the one before it. One with actions shows its title even without apps.
+                            // One with actions shows its title even without apps.
                             fun section(
                                 title: String,
                                 hits: List<AppHit>,
                                 actions: List<Pair<String, () -> Unit>> = emptyList(),
                             ) {
                                 if (hits.isEmpty() && actions.isEmpty()) return
-                                val rows = hits.chunked(columns)
-                                for (r in rows.indices.reversed()) row("$title:$r", rows[r])
                                 item(key = "h:$title") { Section(title, actions) }
+                                hits.chunked(columns).forEachIndexed { r, cells -> row("$title:$r", cells) }
                             }
 
                             when (shown) {

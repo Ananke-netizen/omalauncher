@@ -1,0 +1,1 @@
+Swipe up on the home screen to open the app drawer; settings › gestures turns it off. Linux now sets up in a work profile, on a secondary user or in Private Space too, with proot built with a fix. The style screen previews the terminal's font, and the widget examples gain a what's new feed.

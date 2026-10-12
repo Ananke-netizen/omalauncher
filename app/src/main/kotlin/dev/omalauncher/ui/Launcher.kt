@@ -20,15 +20,9 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -85,6 +79,7 @@ private fun DesktopScreen(
             state.sharing != null -> state.sharing = null
             state.linuxOpen -> state.linuxOpen = false
             state.licensesOpen -> state.licensesOpen = false
+            state.gesturesOpen -> state.gesturesOpen = false
             state.agentsOpen -> state.agentsOpen = false
             state.storeOpen -> state.storeOpen = false
             state.themeBrowserOpen -> state.themeBrowserOpen = false
@@ -124,6 +119,8 @@ private fun DesktopScreen(
 
     // Only whether it shows is read here; the animation itself runs in the layer, without recomposing.
     val panelShown by remember(state) { derivedStateOf { state.drawer.value > 0.01f } }
+    // Closing it forgets the search, like stock drawers: the next swipe up shows every app, not the old results.
+    LaunchedEffect(panelShown) { if (!panelShown) state.query = "" }
     val search by remember(runtime, state) { derivedStateOf { searchApps(runtime, state.query) } }
     val highlighted = search.highlighted(state.picked)
 
@@ -157,7 +154,6 @@ private fun DesktopScreen(
             )
         }
 
-    val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     if (panelShown) {
         // Near-opaque like stock drawers: home widgets bleeding through made icons hard to read.
         Box(
@@ -166,11 +162,8 @@ private fun DesktopScreen(
                 .graphicsLayer { alpha = state.drawer.value.coerceAtMost(1f) }
                 .background(Palette.background.copy(alpha = 0.97f))
                 .clickable { state.close() }
-                .draggable(
-                    orientation = Orientation.Vertical,
-                    state = rememberDraggableState { dy -> state.dragBy(-dy / screenHeight) },
-                    onDragStopped = { velocity -> state.settle(velocity) },
-                ).swipeTabs(runtime, state),
+                .drawerSwipe(state)
+                .swipeTabs(runtime, state),
         )
     }
     // The bar and the panel above it; the keyboard lifts both. Nothing here takes touches while the panel is closed,
@@ -213,9 +206,10 @@ private fun DesktopScreen(
             // Hidden while a terminal tile types: it would sit on the keyboard, over the tile.
             if (runtime.terminals.active == null || runtime.terminals.keyboardLeaving) {
                 // Home only: the open app list has everything.
-                if (LauncherStyle.recentApps && !panelShown) RecentStrip(runtime, handlers)
+                // Swiping up from either does what it does on home, as from the dock on stock launchers.
+                if (LauncherStyle.recentApps && !panelShown) RecentStrip(runtime, handlers, Modifier.homeSwipe(runtime, state))
                 // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.
-                PromptBar(runtime, state, search = search, highlighted = highlighted, onLaunch = handlers.launch)
+                PromptBar(runtime, state, search = search, highlighted = highlighted, onLaunch = handlers.launch, modifier = Modifier.homeSwipe(runtime, state))
             }
         }
     }
@@ -248,6 +242,7 @@ private fun ThemesOverlay(
             onStore = { state.storeOpen = true },
             onLinux = { state.linuxOpen = true },
             onLicenses = { state.licensesOpen = true },
+            onGestures = { state.gesturesOpen = true },
             onFeed = { state.feedSettingsOpen = true },
             onBackup = { state.backupOpen = true },
         )
@@ -259,6 +254,7 @@ private fun ThemesOverlay(
     if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })
     if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
     if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
+    if (state.gesturesOpen) GesturesScreen(runtime, onDismiss = { state.gesturesOpen = false })
     if (state.linuxOpen) LinuxScreen(runtime, onDismiss = { state.linuxOpen = false })
     state.shared?.let { link ->
         SharedWidgetScreen(

@@ -164,6 +164,12 @@ class LangTest {
         assertEquals("[10, 20]", text("match(\"x=10 y=20\", \"x=(\\\\d+) y=(\\\\d+)\")"))
     }
 
+    @Test fun plusKeepsSpacesInStrings() {
+        assertEquals("- a", text("\"- \" + \"a\""))
+        assertEquals("x y", text("\"x\" + \" \" + \"y\""))
+        assertEquals("n: 2", text("\"n: \" + 2"))
+    }
+
     @Test fun letsSeeEarlierLetsAndSources() {
         assertEquals("21", text("b", "state a = 10\nlet b = a * 2 + 1"))
     }

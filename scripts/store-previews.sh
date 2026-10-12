@@ -5,7 +5,7 @@
 #
 # Needs a debug build on an emulator (adb root) with Linux installed, so widgets
 # that run commands show real data, and the packages they require (curl, jq,
-# python, github-cli). Widgets that need an account show demo data instead; see
+# python, sqlite, github-cli). Widgets that need an account show demo data instead; see
 # store-previews-demo.sh. The launcher renders each tile off screen
 # (WidgetEngine.previewThemes) and takes every theme's colors while it does.
 #

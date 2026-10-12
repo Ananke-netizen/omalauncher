@@ -38,6 +38,7 @@ import dev.omalauncher.linux.resolveLinuxIcon
 import dev.omalauncher.linux.run
 import dev.omalauncher.linux.shellQuote
 import dev.omalauncher.theme.ThemeStore
+import dev.omalauncher.ui.Gestures
 import dev.omalauncher.ui.KeyboardBridge
 import dev.omalauncher.ui.TerminalTiles
 import dev.omalauncher.ui.WindowManager
@@ -73,6 +74,7 @@ class Runtime(
     val keyboard = KeyboardBridge(wm)
     val terminals = TerminalTiles(this)
     val terminalFont = TerminalFont(context, proot)
+    val gestures = Gestures(context)
     val linuxApps = mutableStateListOf<LinuxApp>()
 
     /** Icons of [linuxApps] by desktop id; apps without a PNG icon have no entry. */
