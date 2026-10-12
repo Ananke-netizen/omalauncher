@@ -92,6 +92,9 @@ import kotlin.math.min
 /** Whether the home screen is hidden (drawer, full-screen panel); animated widgets stop ticking while it is. */
 val LocalHomeCovered = staticCompositionLocalOf<() -> Boolean> { { false } }
 
+/** Whether an Input's `focus` may take focus: only on a screen the user opened, never on a tile or in a preview. */
+val LocalInputFocus = staticCompositionLocalOf { false }
+
 /** The widget's content inside its tile: padding, optional background, and the node tree. */
 @Composable
 fun WidgetContent(

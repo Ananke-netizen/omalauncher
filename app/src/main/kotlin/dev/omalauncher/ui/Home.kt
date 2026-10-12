@@ -314,6 +314,7 @@ fun HomeScreen(
                                 runtime.open(item)
                             },
                             paused = runtime.androidApps.paused(item.profile),
+                            clone = runtime.androidApps.cloned(item.profile),
                         )
                     is Folder ->
                         FolderTile(

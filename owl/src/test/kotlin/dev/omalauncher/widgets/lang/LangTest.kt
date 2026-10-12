@@ -550,6 +550,15 @@ class LangTest {
         assertTrue(compileError("widget {\n meta { owl: 5 }\n $many }").contains("more than 500 nodes"))
     }
 
+    @Test fun inputFocus() {
+        val p = Compiler.compile("widget {\n meta { owl: 6 }\n state s = \"\"\n Text { text: 1 }\n screen { Input { focus: s == \"\" } } }")
+        assertTrue("focus" in (p.screen!!.single() as WNode.Element).props)
+        // A component can go in either; on a tile the launcher ignores focus.
+        Compiler.compile("widget {\n meta { owl: 6 }\n component Field() { Input { focus: true } }\n Field { }\n screen { Field { } } }")
+        assertTrue(compileError("widget {\n meta { owl: 5 }\n Text { text: 1 }\n screen { Input { focus: true } } }").contains("Input.focus needs owl 6"))
+        assertTrue(compileError("widget {\n meta { owl: 6 }\n Input { focus: true } }").contains("only works in a screen"))
+    }
+
     @Test fun optionalSources() {
         val p = Compiler.compile("widget {\n meta { owl: 5 }\n source x = cmd(\"uname\") optional\n Text { text: linux ? x : \"no linux\"; onTap: terminal(\"btop\") } }")
         assertTrue((p.globals[0] as Global.Source).optional)
