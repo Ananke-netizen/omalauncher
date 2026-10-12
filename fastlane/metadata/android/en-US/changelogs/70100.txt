@@ -1,0 +1,1 @@
+Upstream's 0.7: your style is now a file, style.toml, that you or a coding agent can edit from Linux; changes show within a second. New settings for gaps, borders and the system bars, which are bare by default. yay in a terminal no longer asks for a password. Backups carry style.toml, and a backup from before it restores your style too.

@@ -289,7 +289,7 @@ private fun Element(
         "Text" -> TextNode(p, mod)
         "Button" -> {
             val color = p.color("color") { Palette.accent }
-            val radius = p.float("radius", 8f * LauncherStyle.corners.scale)
+            val radius = p.float("radius", 8f * LauncherStyle.cornerScale)
             Box(
                 mod
                     .drawBehind {
@@ -533,7 +533,7 @@ private fun common(
         val borderColor = p.color("borderColor") { Palette.border }
         val border = p.float("border", 0f)
         // Bordered elements (buttons, frames) follow the launcher's corner style unless they set a radius.
-        val radius = p.float("radius", if (p.has("border")) 8f * LauncherStyle.corners.scale else 0f)
+        val radius = p.float("radius", if (p.has("border")) 8f * LauncherStyle.cornerScale else 0f)
         m =
             m.drawBehind {
                 val r = CornerRadius(radius().dp.toPx())
