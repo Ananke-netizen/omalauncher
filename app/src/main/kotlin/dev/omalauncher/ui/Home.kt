@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,6 +114,10 @@ fun HomeScreen(
     }
     // The background slides with the pages, like stock launchers. Our live wallpaper gets it through Android.
     val view = LocalView.current
+    DisposableEffect(engine, view) {
+        engine.view = view
+        onDispose { if (engine.view === view) engine.view = null }
+    }
     LaunchedEffect(pager, view) {
         val wallpapers = WallpaperManager.getInstance(view.context)
         snapshotFlow {
