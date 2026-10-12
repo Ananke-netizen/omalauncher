@@ -111,13 +111,4 @@ object Icons {
 
     /** Points up; rotate it for the other arrow keys. */
     val Chevron by lazy { icon("chevron", "M7.41,15.41L12,10.83l4.59,4.58L18,14l-6,-6 -6,6z") }
-
-    /** A briefcase: the mark of work apps. */
-    val Work by lazy {
-        icon(
-            "work",
-            "M20,6h-4V4c0,-1.11 -0.89,-2 -2,-2h-4c-1.11,0 -2,0.89 -2,2v2H4c-1.11,0 -1.99,0.89 -1.99,2L2,19c0,1.11 0.89,2 2,2h16" +
-                "c1.11,0 2,-0.89 2,-2V8c0,-1.11 -0.89,-2 -2,-2zM14,6h-4V4h4v2z",
-        )
-    }
 }

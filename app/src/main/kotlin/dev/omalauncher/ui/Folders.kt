@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -53,7 +54,6 @@ import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toRect
 import androidx.compose.ui.zIndex
-import dev.omalauncher.AppProfile
 import dev.omalauncher.widgets.Folder
 import dev.omalauncher.widgets.HomeItem
 import kotlin.math.abs
@@ -70,8 +70,6 @@ fun FolderTile(
     focused: Boolean,
     modifier: Modifier,
     onTap: () -> Unit,
-    /** The same apps' profiles, so paused work apps show dimmed; too small for a badge of their own. */
-    profiles: List<AppProfile?> = emptyList(),
 ) {
     val bare = LauncherStyle.bareAppIcons
     BoxWithConstraints(
@@ -93,7 +91,7 @@ fun FolderTile(
                             for (col in 0 until 2) {
                                 val i = row * 2 + col
                                 Box(Modifier.size(mini), contentAlignment = Alignment.Center) {
-                                    folder.apps.getOrNull(i)?.let { ProfileMarks(profiles.getOrNull(i), badged = true, mini) { AppGlyph(it.label, icons.getOrNull(i), mini) } }
+                                    folder.apps.getOrNull(i)?.let { AppGlyph(it.label, icons.getOrNull(i), mini) }
                                 }
                             }
                         }
@@ -258,7 +256,7 @@ internal fun FolderPanel(
     geometry: FolderGeometry,
     progress: () -> Float,
     closing: Boolean,
-    /** The app being dragged out of it, which the grid draws instead. */
+    /** The app a finger is carrying, which the grid draws instead: its place stays empty while the others sort around it. */
     carried: String?,
     render: @Composable (HomeItem, Modifier, Boolean) -> Unit,
 ) {
@@ -295,10 +293,12 @@ internal fun FolderPanel(
             val r = geometry.app(i)
             val wave = geometry.wave(i)
             key(app.key) {
+                // Apps making way for a dragged one slide to their new places.
+                val at = animateIntOffsetAsState(IntOffset(r.left, r.top))
                 render(
                     app,
                     Modifier
-                        .offset { IntOffset(r.left, r.top) }
+                        .offset { at.value }
                         .size(with(density) { r.width.toDp() }, with(density) { r.height.toDp() })
                         .inert(closing)
                         .graphicsLayer {

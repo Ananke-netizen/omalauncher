@@ -2,10 +2,9 @@ package dev.omalauncher.widgets
 
 import android.content.ComponentName
 import android.content.Context
+import dev.omalauncher.AndroidApp
 import androidx.compose.runtime.mutableStateListOf
-import dev.omalauncher.AppId
 import dev.omalauncher.linux.LinuxApp
-import dev.omalauncher.profileKey
 import dev.omalauncher.upgrade.Versioned
 import dev.omalauncher.upgrade.mapObjects
 import org.json.JSONArray
@@ -38,14 +37,11 @@ data class Shortcut(
     override val page: Int,
     val label: String,
     val component: ComponentName? = null,
+    /** [component]'s profile, as in [AndroidApp.profile]. */
+    val profile: Long? = null,
     val linux: LinuxApp? = null,
     val folder: String? = null,
-    /** The serial of the profile [component] is in (work); null for personal apps, and for everything pinned before profiles. */
-    val serial: Long? = null,
 ) : HomeItem {
-    /** The Android app it opens, if it's one. */
-    val app get() = component?.let { AppId(it, serial) }
-
     override val size get() = 1 to 1
     override val minSize get() = 1 to 1
     override val resizable get() = false
@@ -84,7 +80,7 @@ class Shortcuts(
     init {
         // Version 0 (before versioning) is the same array, unwrapped.
         (Versioned.read(prefs.getString(ITEMS, null), VERSION) { _, data -> data } as? JSONArray)?.let { array ->
-            items += array.mapObjects(::parseShortcut)
+            items += array.mapObjects(::parse)
         }
         (Versioned.read(prefs.getString(FOLDERS, null), VERSION) as? JSONArray)?.let { array ->
             folderEntries += array.mapObjects { FolderEntry(it.getString("key"), it.optInt("page", 1)) }
@@ -130,6 +126,23 @@ class Shortcuts(
         return folder
     }
 
+    /**
+     * Moves an app within its folder to just before [before], or after the folder's last app if that's null.
+     * A folder's order is its apps' order in [items].
+     */
+    fun moveBefore(
+        key: String,
+        before: String?,
+    ) {
+        val i = items.indexOfFirst { it.key == key }
+        val folder = items.getOrNull(i)?.folder ?: return
+        if (key == before) return
+        val app = items.removeAt(i)
+        val at = before?.let { b -> items.indexOfFirst { it.key == b && it.folder == folder } }?.takeIf { it >= 0 } ?: (items.indexOfLast { it.folder == folder } + 1)
+        items.add(at, app)
+        if (at != i) save()
+    }
+
     private fun setFolder(
         key: String,
         folder: String?,
@@ -160,13 +173,33 @@ class Shortcuts(
         }
     }
 
-    /** Pins an Android app; a work copy ([serial]) gets a key of its own, next to the personal one's. */
+    private fun parse(o: JSONObject): Shortcut {
+        val linux =
+            o.optJSONObject("linux")?.let {
+                LinuxApp(
+                    name = it.getString("name"),
+                    exec = it.getString("exec"),
+                    terminal = it.optBoolean("terminal"),
+                    id = it.getString("id"),
+                    wmClass = it.optString("wmClass").ifEmpty { null },
+                    icon = it.optString("icon").ifEmpty { null },
+                )
+            }
+        return Shortcut(
+            key = o.getString("key"),
+            page = o.optInt("page", 1),
+            label = o.getString("label"),
+            component = o.optString("component").ifEmpty { null }?.let(ComponentName::unflattenFromString),
+            profile = savedProfile(o),
+            linux = linux,
+            folder = o.optString("folder").ifEmpty { null },
+        )
+    }
+
     fun addAndroid(
-        label: String,
-        component: ComponentName,
+        app: AndroidApp,
         page: Int,
-        serial: Long? = null,
-    ) = add(Shortcut(profileKey("app:" + component.flattenToShortString(), serial), page, label, component = component, serial = serial))
+    ) = add(Shortcut("app:" + app.key, page, app.label, component = app.component, profile = app.profile))
 
     fun addLinux(
         app: LinuxApp,
@@ -212,7 +245,30 @@ class Shortcuts(
 
     private fun save() {
         val array = JSONArray()
-        for (s in items) array.put(shortcutJson(s))
+        for (s in items) {
+            val o =
+                JSONObject()
+                    .put("key", s.key)
+                    .put("page", s.page)
+                    .put("label", s.label)
+                    .putOpt("folder", s.folder)
+            s.component?.let { o.put("component", it.flattenToString()) }
+            s.profile?.let { o.put("profile", it) }
+            // A snapshot of the desktop entry, for when it's gone; while it exists, the launcher runs the current one.
+            s.linux?.let {
+                o.put(
+                    "linux",
+                    JSONObject()
+                        .put("name", it.name)
+                        .put("exec", it.exec)
+                        .put("terminal", it.terminal)
+                        .put("id", it.id)
+                        .putOpt("wmClass", it.wmClass)
+                        .putOpt("icon", it.icon),
+                )
+            }
+            array.put(o)
+        }
         val folders = JSONArray()
         for (f in folderEntries) folders.put(JSONObject().put("key", f.key).put("page", f.page))
         prefs
@@ -225,62 +281,6 @@ class Shortcuts(
     private companion object {
         const val ITEMS = "items"
         const val FOLDERS = "folders"
-
-        /**
-         * Still 1 with the optional "user": readers ignore fields they don't know, so this
-         * and older launchers read each other's. A launcher before profiles reads a pinned
-         * work app as the personal one.
-         */
         const val VERSION = 1
     }
-}
-
-/** A pinned app as saved. A missing "user" is a personal app, as everything saved before profiles is. */
-internal fun parseShortcut(o: JSONObject): Shortcut {
-    val linux =
-        o.optJSONObject("linux")?.let {
-            LinuxApp(
-                name = it.getString("name"),
-                exec = it.getString("exec"),
-                terminal = it.optBoolean("terminal"),
-                id = it.getString("id"),
-                wmClass = it.optString("wmClass").ifEmpty { null },
-                icon = it.optString("icon").ifEmpty { null },
-            )
-        }
-    return Shortcut(
-        key = o.getString("key"),
-        page = o.optInt("page", 1),
-        label = o.getString("label"),
-        component = o.optString("component").ifEmpty { null }?.let(ComponentName::unflattenFromString),
-        linux = linux,
-        folder = o.optString("folder").ifEmpty { null },
-        serial = if (o.isNull("user")) null else o.getLong("user"),
-    )
-}
-
-/** What [parseShortcut] reads back. Personal apps are saved without "user", exactly as before profiles. */
-internal fun shortcutJson(s: Shortcut): JSONObject {
-    val o =
-        JSONObject()
-            .put("key", s.key)
-            .put("page", s.page)
-            .put("label", s.label)
-            .putOpt("folder", s.folder)
-    s.component?.let { o.put("component", it.flattenToString()) }
-    s.serial?.let { o.put("user", it) }
-    // A snapshot of the desktop entry, for when it's gone; while it exists, the launcher runs the current one.
-    s.linux?.let {
-        o.put(
-            "linux",
-            JSONObject()
-                .put("name", it.name)
-                .put("exec", it.exec)
-                .put("terminal", it.terminal)
-                .put("id", it.id)
-                .putOpt("wmClass", it.wmClass)
-                .putOpt("icon", it.icon),
-        )
-    }
-    return o
 }
