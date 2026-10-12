@@ -440,7 +440,7 @@ private fun AskRow(
     val agent = runtime.agents.default
     val label =
         when {
-            !linux -> "ask an agent · install linux"
+            !linux && agent?.android != true -> "ask an agent · install linux"
             agent == null -> "ask an agent · install one"
             else -> "ask ${agent.bin}: " + query.trim().replace('\n', ' ')
         }

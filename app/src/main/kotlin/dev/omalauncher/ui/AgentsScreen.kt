@@ -74,6 +74,9 @@ private fun AgentRow(
             }
             when {
                 state is JobState.Working -> BasicText("${state.action}…", style = Mono.copy(color = Palette.accent))
+                // An Android app: installed and removed as an app, never through mise.
+                agent.android && installed -> BracketAction("open", Palette.green, onOpen)
+                agent.android -> BasicText("not on this phone", style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
                 installed -> {
                     BracketAction("open", Palette.green, onOpen)
                     BracketAction("remove", Palette.red, onRemove)

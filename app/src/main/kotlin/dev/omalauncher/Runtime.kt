@@ -26,6 +26,9 @@ import dev.omalauncher.linux.Gpu
 import dev.omalauncher.linux.GuestShell
 import dev.omalauncher.linux.LinuxApp
 import dev.omalauncher.linux.OpenBridge
+import dev.omalauncher.linux.PANTHEON_ASK_AUTHORITY
+import dev.omalauncher.linux.PANTHEON_TICKET_EXTRA
+import dev.omalauncher.linux.pantheonVerb
 import dev.omalauncher.linux.Pacman
 import dev.omalauncher.linux.Proot
 import dev.omalauncher.linux.LinuxState
@@ -86,7 +89,7 @@ class Runtime(
     val themes = ThemeStore(context, proot, isLinux = { linux }, onConfigChanged = ::syncGuest)
     private val audio = AudioBridge(proot)
     private val openBridge = OpenBridge(context, proot, onOpenFiles = ::openFiles)
-    val agents = AgentStore(proot, onChanged = ::syncGuest)
+    val agents = AgentStore(proot, onChanged = ::syncGuest, appInstalled = ::appInstalled)
     val pacman = Pacman(context, proot)
     val widgets = WidgetEngine(context, proot, this)
     val updates = SystemUpdates(proot, pacman, agents)
@@ -466,6 +469,54 @@ class Runtime(
             val result = runCatching { GuestShell(proot).run(command, 30, retry = false) }
             val line = result.getOrNull()?.let { if (it.code == 0) it.out.lines().firstOrNull().orEmpty() else "couldn't reach Hermes" } ?: "couldn't reach Hermes"
             android.widget.Toast.makeText(context, line.ifBlank { "sent to Hermes" }, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun appInstalled(pkg: String): Boolean =
+        runCatching { context.packageManager.getPackageInfo(pkg, 0); true }.getOrDefault(false)
+
+    /** Opens an Android app at its launcher activity (an [Agent.android] agent from the agents screen). */
+    fun openApp(pkg: String) {
+        val intent = context.packageManager.getLaunchIntentForPackage(pkg)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return
+        runCatching { context.startActivity(intent) }.onFailure { Log.w(TAG, "couldn't open $pkg", it) }
+    }
+
+    /**
+     * Hands a prompt to an Android agent (Pantheon) through its signature-checked provider; no
+     * Linux involved. Enter ([hold] false) gets a one-time ticket and opens Pantheon on Hermes's
+     * chat, where the reply streams; hold-to-talk asks without a window and toasts. When the app
+     * is missing or refuses us, [onFallback] runs instead (the hermes wrapper).
+     */
+    fun askAndroid(agent: Agent, prompt: String, hold: Boolean, onFallback: () -> Unit) {
+        scope.launch {
+            val reply = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.call(
+                        android.net.Uri.parse("content://$PANTHEON_ASK_AUTHORITY"), pantheonVerb(hold), prompt, null,
+                    )
+                }.onFailure { Log.w("agents", "${agent.name} refused the ask: ${it.message}") }.getOrNull()
+            }
+            if (reply == null || !reply.getBoolean("ok")) {
+                Log.w("agents", "${agent.name} didn't take the ask (${reply?.getString("error")}); falling back")
+                onFallback()
+                return@launch
+            }
+            if (hold) {
+                android.widget.Toast.makeText(context, "asked Hermes · the answer comes as a notification", android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val opened = runCatching {
+                context.startActivity(
+                    android.content.Intent()
+                        .setClassName(agent.app, "${agent.app}.MainActivity")
+                        .putExtra(PANTHEON_TICKET_EXTRA, reply.getString(PANTHEON_TICKET_EXTRA))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+            if (opened.isFailure) {
+                Log.w("agents", "couldn't open ${agent.name}", opened.exceptionOrNull())
+                onFallback()
+            }
         }
     }
 

@@ -22,7 +22,11 @@ data class Agent(
     val pkg: String,
     /** Runs on another machine (our home server) instead of inside the guest. */
     val remote: Boolean = false,
+    /** An Android app the bar hands the prompt to (kind `android`): no guest, no Linux needed. */
+    val app: String = "",
 ) {
+    val android get() = app.isNotEmpty()
+
     /** Its activity alias in the manifest (cursor-agent -> CursorAgentWindow), so Recents names its window after it. */
     val windowAlias get() = bin.split('-').joinToString("") { it.replaceFirstChar(Char::uppercase) } + "Window"
 }
@@ -30,6 +34,7 @@ data class Agent(
 /** Omarchy's agent list (omarchy-default-agent), limited to ones mise can install on arm64. Hermes is ours: first installed wins the prompt bar, so she leads. */
 val AGENTS =
     listOf(
+        Agent("pantheon", "Pantheon", "Hermes in the Pantheon app, no Linux needed", "", app = PANTHEON_PACKAGE),
         Agent("hermes", "Hermes", "This house's assistant, on the home server", "", remote = true),
         Agent("claude", "Claude Code", "Anthropic's coding agent", "claude"),
         Agent("opencode", "OpenCode", "Open source agent, any model provider", "opencode"),
@@ -92,6 +97,21 @@ const val GUEST_WRAPPER_DIR = "/root/.local/share/omalauncher/bin"
  */
 fun askHeadless(agent: Agent, hold: Boolean): Boolean = agent.remote && hold
 
+/** Pantheon, the Hermes app on this phone. Its ask provider admits only us, by signature. */
+const val PANTHEON_PACKAGE = "com.axum.pocket"
+const val PANTHEON_ASK_AUTHORITY = "com.axum.pocket.ask"
+const val PANTHEON_TICKET_EXTRA = "ask_ticket"
+
+/** The provider verb: Enter opens Pantheon with the reply streaming; hold-to-talk answers as a notification. */
+fun pantheonVerb(hold: Boolean): String = if (hold) "ask_silent" else "ask_open"
+
+/** Where a prompt goes when an Android agent can't take it: the hermes wrapper, if installed. */
+fun androidFallback(installed: List<Agent>): Agent? = installed.firstOrNull { it.bin == "hermes" }
+
+/** The agents the chip lists by default: Pantheon, Hermes and the picked one (settings can show them all). */
+fun chipAgents(installed: List<Agent>, picked: Agent?, all: Boolean): List<Agent> =
+    if (all) installed else installed.filter { it.android || it.bin == "hermes" || it.bin == picked?.bin }
+
 /**
  * Starts [agentBin] with a first prompt; OpenCode takes it as --prompt, the others as an argument.
  * [readOnly], for reading something untrusted: Claude Code starts in plan mode, where it can read but not
@@ -127,6 +147,8 @@ class AgentStore(
     private val proot: Proot,
     /** Called when the set of installed agents changed, so their desktop entries follow. */
     private val onChanged: () -> Unit,
+    /** Whether an Android package is on the phone, for [Agent.android] agents. */
+    private val appInstalled: (String) -> Boolean = { false },
 ) {
     private val mise get() = File(proot.home, ".local/bin/mise")
     private val shims get() = File(proot.home, ".local/share/mise/shims")
@@ -138,7 +160,8 @@ class AgentStore(
 
     /** Shims are symlinks to a guest path (/root/.local/bin/mise), so don't follow them from the host. */
     fun isInstalled(agent: Agent) =
-        if (agent.remote) File(wrapperDir, agent.bin).isFile
+        if (agent.android) appInstalled(agent.app)
+        else if (agent.remote) File(wrapperDir, agent.bin).isFile
         else Files.exists(File(shims, agent.bin).toPath(), LinkOption.NOFOLLOW_LINKS)
 
     /** The agent picked in the prompt bar, kept in the guest home where scripts can read it too. */
@@ -149,6 +172,23 @@ class AgentStore(
     fun load() {
         preferred = runCatching { preferredFile.readText().trim() }.getOrNull()
         refresh()
+        promotePantheon()
+    }
+
+    /**
+     * Pantheon becomes the bar's agent once, the first time it's seen on the phone (hermes over
+     * ssh stays as the fallback). A later pick of another agent stands: the marker keeps this
+     * from happening again.
+     */
+    private fun promotePantheon() {
+        // The pick lives in the guest home; with no Linux there's none to write (and Pantheon,
+        // first in the list, is the default anyway).
+        if (!proot.home.isDirectory) return
+        val pantheon = installed.firstOrNull { it.android } ?: return
+        val marker = File(proot.launcherConfig, "agent-pantheon-promoted")
+        if (marker.exists()) return
+        choose(pantheon)
+        runCatching { marker.writeText("1\n") }
     }
 
     /** Installed agents in Omarchy's order; re-read from disk after installs and removals. */
@@ -162,8 +202,15 @@ class AgentStore(
     /** The agent the launcher opens for prompts and widget work: the picked one, else the first installed in Omarchy's order. */
     val default: Agent? get() = installed.firstOrNull { it.bin == preferred } ?: installed.firstOrNull()
 
+    /** The agent for work that needs a terminal in the guest (editing widgets): never an Android app. */
+    val terminalDefault: Agent? get() =
+        installed.firstOrNull { it.bin == preferred && !it.android } ?: installed.firstOrNull { !it.android }
+
     fun choose(agent: Agent) {
         preferred = agent.bin
+        // Never create the guest home from here: a missing one means no Linux, and a partial
+        // rootfs is what a half-finished removal leaves (the launcher deletes it on start).
+        if (!proot.home.isDirectory) return
         runCatching {
             preferredFile.parentFile?.mkdirs()
             preferredFile.writeText(agent.bin + "\n")
@@ -175,7 +222,8 @@ class AgentStore(
 
     /** Installs [agent]: a remote agent's wrapper into the bound bin (no mise), the rest via mise. */
     fun installScript(agent: Agent) =
-        if (agent.remote) remoteInstallScript(agent) else miseInstallScript(agent)
+        if (agent.android) error("${agent.name} is an Android app; install it on the phone")
+        else if (agent.remote) remoteInstallScript(agent) else miseInstallScript(agent)
 
     /** Writes the wrapper into the directory proot binds from outside the rootfs, so it survives Linux removal. */
     private fun remoteInstallScript(agent: Agent) =
@@ -214,7 +262,7 @@ class AgentStore(
 
     /** Drawer entries for the installed agents, with their logos (see [bundledIcons]); each opens in a terminal in the home directory. */
     fun managed(): List<Managed> =
-        installed.map { agent ->
+        installed.filterNot { it.android }.map { agent ->
             Managed.text(File(proot.applications, "agent-${agent.bin}.desktop"), Policy.Owned) {
                 "[Desktop Entry]\nType=Application\nName=${agent.name}\nTerminal=true\nExec=${agent.bin}\nIcon=${bundledIcon("agent-${agent.bin}")}\n"
             }

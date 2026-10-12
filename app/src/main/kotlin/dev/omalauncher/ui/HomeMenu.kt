@@ -56,7 +56,7 @@ fun HomeMenu(
 ) {
     if (!state.homeMenuOpen) return
     val engine = runtime.widgets
-    val agent = runtime.agents.default
+    val agent = runtime.agents.terminalDefault
     val agentName = agent?.name?.lowercase() ?: "an agent"
     // These need Linux; without it they open its install sheet.
     val linux = runtime.bootstrap.isInstalled

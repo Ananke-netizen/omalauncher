@@ -157,7 +157,7 @@ fun HomeScreen(
     /** Opens the default agent on the widget's file; with no agent installed, the agents screen instead. */
     fun edit(item: WidgetItem) {
         state.editing = null
-        val agent = runtime.agents.default
+        val agent = runtime.agents.terminalDefault
         if (agent == null) state.agentsOpen = true else runtime.terminal(editWidgetCommand(agent.bin, item.spec), "Edit ${item.spec.name}", agent)
     }
 
@@ -293,7 +293,7 @@ fun HomeScreen(
                             waitsForLinux = if (engine.waitsForLinux(item.spec)) linuxState else null,
                             onInstallLinux = { state.linuxOpen = true },
                             onFix = { log ->
-                                val agent = runtime.agents.default
+                                val agent = runtime.agents.terminalDefault
                                 if (agent == null) {
                                     state.agentsOpen = true
                                 } else {

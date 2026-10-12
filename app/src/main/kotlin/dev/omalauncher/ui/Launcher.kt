@@ -252,7 +252,7 @@ private fun ThemesOverlay(
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
     if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true })
     if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })
-    if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
+    if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed.filterNot { it.android }, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
     if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
     if (state.linuxOpen) LinuxScreen(runtime, onDismiss = { state.linuxOpen = false })
     state.shared?.let { link ->
@@ -262,7 +262,7 @@ private fun ThemesOverlay(
             state.currentPage,
             // Stays open underneath, to add it once the agent has had its say.
             onReview = { path ->
-                val agent = runtime.agents.default
+                val agent = runtime.agents.terminalDefault
                 if (agent == null) state.agentsOpen = true else runtime.terminal(reviewSharedWidgetCommand(agent.bin, path), "Review widget", agent)
             },
             onDismiss = { state.shared = null },
@@ -279,14 +279,14 @@ private fun ThemesOverlay(
                     {
                         state.sharing = null
                         // The default agent opens a pull request (or an issue) on the store repo.
-                        val agent = runtime.agents.default
+                        val agent = runtime.agents.terminalDefault
                         if (agent == null) state.agentsOpen = true else runtime.terminal(publishWidgetCommand(agent.bin, spec), "Publish ${spec.name}", agent)
                     }
                 },
             // Closes the screen: what the agent changes would be shared from a fresh one.
             onCheck = {
                 state.sharing = null
-                val agent = runtime.agents.default
+                val agent = runtime.agents.terminalDefault
                 if (agent == null) state.agentsOpen = true else runtime.terminal(checkSecretsCommand(agent.bin, spec), "Check ${spec.name}", agent)
             },
             onDismiss = { state.sharing = null },
@@ -298,7 +298,7 @@ private fun ThemesOverlay(
             onDismiss = { state.agentsOpen = false },
             onOpen = { agent ->
                 state.agentsOpen = false
-                runtime.terminal(agent.bin, agent.name, agent)
+                if (agent.android) runtime.openApp(agent.app) else runtime.terminal(agent.bin, agent.name, agent)
             },
         )
     }

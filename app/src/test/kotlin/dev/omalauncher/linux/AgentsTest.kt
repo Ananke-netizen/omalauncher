@@ -11,7 +11,7 @@ class AgentsTest {
     @Test fun everyAgentHasAWindowAlias() {
         val manifest = File("src/main/AndroidManifest.xml").readText()
         val aliases = Regex("""<activity-alias(.*?)/>""", RegexOption.DOT_MATCHES_ALL).findAll(manifest).map { it.groupValues[1] }.toList()
-        for (agent in AGENTS) {
+        for (agent in AGENTS.filterNot { it.android }) {   // an Android app has no terminal window
             val alias = aliases.firstOrNull { "android:name=\".${agent.windowAlias}\"" in it }
             assertTrue("${agent.bin}: no .${agent.windowAlias} in the manifest", alias != null)
             assertTrue("${agent.bin}: not labelled \"${agent.name}\"", "android:label=\"${agent.name}\"" in alias!!)
@@ -19,13 +19,50 @@ class AgentsTest {
         }
     }
 
-    /** Hermes is the house assistant, not a mise package: she leads the list and takes the prompt with -q. */
+    /** Hermes is the house assistant, not a mise package: she leads the Linux agents and takes the prompt with -q. */
     @Test fun hermesIsTheRemoteAgent() {
         val hermes = AGENTS.first { it.bin == "hermes" }
         assertTrue("hermes should be marked remote", hermes.remote)
         assertEquals("", hermes.pkg)
-        assertEquals(hermes, AGENTS.first())
+        assertEquals(hermes, AGENTS.first { !it.android })
         assertEquals("hermes -q 'fix the build'", agentInvocation("hermes", "fix the build"))
+    }
+
+    /** Pantheon is the android kind: first in the list (so the default with no pick), no mise, no guest. */
+    @Test fun pantheonIsTheAndroidAgent() {
+        val pantheon = AGENTS.first()
+        assertEquals("pantheon", pantheon.bin)
+        assertTrue(pantheon.android)
+        assertEquals("com.axum.pocket", pantheon.app)
+        assertEquals("", pantheon.pkg)
+        assertFalse(pantheon.remote)
+        assertEquals(listOf(pantheon), AGENTS.filter { it.android })
+        // hold-to-talk goes to Pantheon's provider, not the wrapper's headless path
+        assertFalse(askHeadless(pantheon, hold = true))
+    }
+
+    /** Enter opens Pantheon with the reply streaming; hold-to-talk asks without a window. */
+    @Test fun pantheonVerbs() {
+        assertEquals("ask_open", pantheonVerb(hold = false))
+        assertEquals("ask_silent", pantheonVerb(hold = true))
+        assertEquals("com.axum.pocket.ask", PANTHEON_ASK_AUTHORITY)
+    }
+
+    /** With Pantheon gone or refusing, the hermes wrapper takes the prompt; nothing else does. */
+    @Test fun androidFallsBackToTheHermesWrapperOnly() {
+        val (pantheon, hermes, claude) = listOf("pantheon", "hermes", "claude").map { b -> AGENTS.first { it.bin == b } }
+        assertEquals(hermes, androidFallback(listOf(pantheon, hermes, claude)))
+        assertEquals(null, androidFallback(listOf(pantheon, claude)))
+        assertEquals(null, androidFallback(emptyList()))
+    }
+
+    /** The chip: Pantheon, Hermes and the picked agent by default; everything with the setting on. */
+    @Test fun chipListsPantheonHermesAndThePick() {
+        val all = AGENTS.filter { it.bin in listOf("pantheon", "hermes", "claude", "codex") }
+        val claude = all.first { it.bin == "claude" }
+        assertEquals(listOf("pantheon", "hermes", "claude"), chipAgents(all, claude, all = false).map { it.bin })
+        assertEquals(listOf("pantheon", "hermes"), chipAgents(all, all.first(), all = false).map { it.bin })
+        assertEquals(all, chipAgents(all, claude, all = true))
     }
 
     /** mise must never see a remote agent: an empty pkg would match every mise tool name. */

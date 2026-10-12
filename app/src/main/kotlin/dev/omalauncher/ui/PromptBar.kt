@@ -79,6 +79,9 @@ import androidx.compose.ui.window.PopupProperties
 import dev.omalauncher.Runtime
 import dev.omalauncher.linux.LinuxState
 import dev.omalauncher.linux.askHeadless
+import dev.omalauncher.linux.Agent
+import dev.omalauncher.linux.androidFallback
+import dev.omalauncher.linux.chipAgents
 import dev.omalauncher.linux.agentInvocation
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -134,25 +137,38 @@ internal fun PromptBar(
     fun send(prompt: String, headless: Boolean = false) {
         val p = prompt.trim()
         if (p.isEmpty()) return
-        if (!linux) return offerLinux()
         // Looked up now: speech results arrive after the bar may have recomposed.
-        val target = runtime.agents.default
-        if (target == null) {
-            state.query = p
-            state.agentsOpen = true
+        val picked = runtime.agents.default
+        fun done() {
+            state.query = ""
+            focusManager.clearFocus()
+            keyboard?.hide()
+            state.closeNow()
+        }
+        // The hermes wrapper (or any Linux agent): the guest has to be there.
+        fun viaLinux(target: Agent?) {
+            if (!linux) return offerLinux()
+            if (target == null) {
+                state.query = p
+                state.agentsOpen = true
+                return
+            }
+            if (askHeadless(target, headless)) {
+                // Hold-to-talk on a remote agent: fire the wrapper without a window; its answer
+                // lands in the Pantheon inbox, so a foot window would only flash and close.
+                runtime.askHeadless(agentInvocation(target.bin, p))
+            } else {
+                runtime.terminal("${agentInvocation(target.bin, p)}; exec bash", target.name, target)
+            }
+            done()
+        }
+        if (picked != null && picked.android) {
+            // Pantheon: no Linux in the path. If it's gone or refuses us, hermes over ssh takes it.
+            runtime.askAndroid(picked, p, headless) { viaLinux(androidFallback(runtime.agents.installed)) }
+            done()
             return
         }
-        if (askHeadless(target, headless)) {
-            // Hold-to-talk on a remote agent: fire the wrapper without a window; its answer
-            // lands in the Pantheon inbox, so a foot window would only flash and close.
-            runtime.askHeadless(agentInvocation(target.bin, p))
-        } else {
-            runtime.terminal("${agentInvocation(target.bin, p)}; exec bash", target.name, target)
-        }
-        state.query = ""
-        focusManager.clearFocus()
-        keyboard?.hide()
-        state.closeNow()
+        viaLinux(picked)
     }
 
     /** Enter: the highlighted app, or the agent. */
@@ -190,7 +206,8 @@ internal fun PromptBar(
         }
 
     fun talk(hold: Boolean) {
-        if (!linux) return offerLinux()
+        // Pantheon needs no Linux; every other agent runs in it.
+        if (!linux && runtime.agents.default?.android != true) return offerLinux()
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             listen(hold)
         } else {
@@ -312,7 +329,7 @@ internal fun PromptBar(
                             val hint =
                                 when {
                                     listening -> "listening…"
-                                    !linux || agent == null -> "open an app…"
+                                    (!linux && agent?.android != true) || agent == null -> "open an app…"
                                     else -> "open an app or ask ${agent.bin}…"
                                 }
                             BasicText(hint, style = Mono.copy(color = Palette.muted, fontSize = TextSize.Item), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -489,11 +506,9 @@ private fun AgentPicker(
                         .frame(2.dp, Palette.accent, Palette.background)
                         .padding(4.dp),
                 ) {
-                    // Decluttered by default: Hermes and the picked agent only; the rest stay
+                    // Decluttered by default: Pantheon, Hermes and the picked agent only; the rest stay
                     // installable from the agents screen (settings can show them all here).
-                    val listed =
-                        if (runtime.chipAll) store.installed
-                        else store.installed.filter { it.bin == "hermes" || it.bin == agent?.bin }
+                    val listed = chipAgents(store.installed, agent, runtime.chipAll)
                     for (a in listed) {
                         val current = a.bin == agent?.bin
                         Row(
