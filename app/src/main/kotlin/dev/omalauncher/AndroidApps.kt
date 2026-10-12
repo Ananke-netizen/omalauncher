@@ -1,6 +1,5 @@
 package dev.omalauncher
 
-import android.app.role.RoleManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -11,15 +10,26 @@ import android.content.pm.LauncherApps
 import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.os.Build
 import android.os.Process
 import android.os.UserHandle
 import android.os.UserManager
 import android.util.Log
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.PathParser
 import dev.omalauncher.ui.iconMask
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,44 +42,55 @@ import kotlinx.coroutines.withContext
 data class AndroidApp(
     val label: String,
     val component: ComponentName,
+    /** The profile it's installed in: the launcher's own, or one beside it like a work profile, where the same app can be installed again. */
+    val user: UserHandle,
+    /** [user]'s serial number, unlike its id never reused; null for the launcher's own profile. */
+    val profile: Long? = null,
     /** Preinstalled and never updated-in-place away from that: can't be uninstalled, only disabled. */
     val system: Boolean = false,
-    /** The profile it's installed in, like work; null for the launcher's own (personal) apps. */
-    val profile: AppProfile? = null,
 ) {
-    val id get() = AppId(component, profile?.serial)
+    /** Stable across restarts and unique across profiles; icons, usage and pinned apps go by it. */
+    val key get() = androidAppKey(component, profile)
 
-    /** "Chrome · work" for a profile's copy, for the menu and screen readers. */
-    val fullLabel get() = profileLabel(label, profile?.name, profile?.paused == true)
-
-    /** Opens a personal app; a profile's copy can't be reached this way, see [AndroidAppCatalog.open]. */
-    val intent: Intent
-        get() =
-            Intent(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_LAUNCHER)
-                .setComponent(component)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+    /** What screen readers say: "Work WhatsApp" beside "WhatsApp". */
+    val spoken get() = spokenLabel(label, profile)
 }
+
+/** [label] as screen readers say it; [profile] as in [AndroidApp.profile]. */
+fun spokenLabel(
+    label: String,
+    profile: Long?,
+) = if (profile == null) label else "Work $label"
+
+/** The activity alone in the launcher's own profile, as keys were before other profiles were listed; `@serial` in any other. */
+fun androidAppKey(
+    component: ComponentName,
+    profile: Long?,
+) = component.flattenToShortString() + (profile?.let { "@$it" } ?: "")
 
 /**
  * The phone's launchable apps, loaded once per process and kept current through
  * LauncherApps callbacks, so the drawer never waits on PackageManager.
- * Labels arrive first; icons fill in behind them. Apps of the user's other
- * profiles (work) are listed with the personal ones, each copy its own entry.
+ * Labels arrive first; icons fill in behind them. Apps in a work profile (or a clone profile)
+ * are listed beside the owner's, with a briefcase on their icons. Private space stays hidden:
+ * listing it takes ACCESS_HIDDEN_PROFILES.
  */
 class AndroidAppCatalog(
     private val context: Context,
 ) {
     val apps = mutableStateListOf<AndroidApp>()
+    /** By [AndroidApp.key]. */
+    val icons = mutableStateMapOf<String, ImageBitmap>()
 
-    /** Icons as shown in color: a profile's copy wears the system's badge for that profile. */
-    val icons = mutableStateMapOf<AppId, ImageBitmap>()
+    /** Alpha-only silhouettes of the same icons, for the monochrome icon style. */
+    val masks = mutableStateMapOf<String, ImageBitmap>()
 
-    /** Alpha-only silhouettes of the same icons, for the monochrome icon style; never badged. */
-    val masks = mutableStateMapOf<AppId, ImageBitmap>()
+    /** Serial numbers of the profiles whose apps are paused (work apps turned off); their apps show dimmed. */
+    var pausedProfiles by mutableStateOf(emptySet<Long>())
+        private set
 
-    /** The other profiles listed, by serial; pinned apps look theirs up here. */
-    val profiles = mutableStateMapOf<Long, AppProfile>()
+    /** Whether an app in [profile] (as in [AndroidApp.profile]) is paused. */
+    fun paused(profile: Long?) = profile != null && profile in pausedProfiles
 
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     private val userManager = context.getSystemService(UserManager::class.java)
@@ -97,14 +118,19 @@ class AndroidAppCatalog(
                 override fun onPackagesUnavailable(packageNames: Array<out String>, user: UserHandle, replacing: Boolean) = reload()
             },
         )
-        // A work profile added, removed, paused or resumed; only ever sent to receivers registered at runtime.
-        val filter =
+        // A work profile added, removed, paused or resumed; the package callback doesn't tell.
+        val profileChanged =
             IntentFilter().apply {
                 addAction(Intent.ACTION_MANAGED_PROFILE_ADDED)
                 addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED)
                 addAction(Intent.ACTION_MANAGED_PROFILE_AVAILABLE)
                 addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE)
-                addAction(Intent.ACTION_MANAGED_PROFILE_UNLOCKED)
+                if (Build.VERSION.SDK_INT >= 35) {
+                    addAction(Intent.ACTION_PROFILE_ADDED)
+                    addAction(Intent.ACTION_PROFILE_REMOVED)
+                    addAction(Intent.ACTION_PROFILE_AVAILABLE)
+                    addAction(Intent.ACTION_PROFILE_UNAVAILABLE)
+                }
             }
         val receiver =
             object : BroadcastReceiver() {
@@ -113,84 +139,57 @@ class AndroidAppCatalog(
                     intent: Intent,
                 ) = reload()
             }
-        if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED) else context.registerReceiver(receiver, filter)
+        if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(receiver, profileChanged, Context.RECEIVER_NOT_EXPORTED) else context.registerReceiver(receiver, profileChanged)
         reload()
     }
 
     /**
-     * Opens [app]. A profile's copy goes through LauncherApps, since startActivity can't
-     * reach another profile; a paused one brings up the system's "turn on work apps?".
+     * Opens [app] in its profile. One in a paused work profile asks to turn work apps back on
+     * instead (the system may ask for the work PIN first); a second tap then opens it.
      */
-    fun open(
-        app: AndroidApp,
-        from: Context = context,
-    ) = start(app.component, app.profile?.user, from)
+    fun open(app: AndroidApp) = open(app.component, app.user)
 
-    /**
-     * Opens a pinned app in the profile [serial] names (null: personal). If that profile is
-     * gone, nothing opens, as for an app that was uninstalled; never the personal copy instead.
-     */
+    /** Opens a pinned app; [profile] as in [AndroidApp.profile]. */
     fun open(
         component: ComponentName,
-        serial: Long?,
+        profile: Long?,
     ) {
-        val user = serial?.let { profiles[it]?.user ?: runCatching { userManager.getUserForSerialNumber(it) }.getOrNull() }
-        if (serial != null && user == null) {
-            Log.w(TAG, "cannot open $component: profile $serial is gone")
+        val user = if (profile == null) Process.myUserHandle() else userManager.getUserForSerialNumber(profile)
+        if (user == null) {
+            Log.w(TAG, "cannot open $component: its profile $profile is gone")
             return
         }
-        start(component, user, context)
+        open(component, user)
     }
 
-    private fun start(
+    private fun open(
         component: ComponentName,
-        user: UserHandle?,
-        from: Context,
+        user: UserHandle,
     ) {
-        runCatching {
-            if (user == null) from.startActivity(AndroidApp("", component).intent) else launcherApps.startMainActivity(component, user, null, null)
-        }.onFailure { Log.w(TAG, "cannot open $component", it) }
+        if (userManager.isQuietModeEnabled(user)) {
+            runCatching { userManager.requestQuietModeEnabled(false, user) }.onFailure { Log.w(TAG, "cannot resume profile $user", it) }
+            return
+        }
+        // Uninstalled or disabled since the list was loaded.
+        runCatching { launcherApps.startMainActivity(component, user, null, null) }
+            .onFailure { Log.w(TAG, "cannot open $component in $user", it) }
     }
 
-    /** The system's App info page, as stock launchers open it, for the copy in [app]'s profile. */
+    /** The system's App info page, as stock launchers open it. */
     fun openInfo(app: AndroidApp) {
-        runCatching { launcherApps.startAppDetailsActivity(app.component, app.profile?.user ?: Process.myUserHandle(), null, null) }
+        runCatching { launcherApps.startAppDetailsActivity(app.component, app.user, null, null) }
             .onFailure { Log.w(TAG, "cannot open info for ${app.component}", it) }
     }
 
-    /** Asks the system to uninstall [app]'s copy (EXTRA_USER, as Launcher3 does); the list updates through the package callback. */
+    /** Asks the system to uninstall; the list updates through the package callback. */
     fun uninstall(app: AndroidApp) {
         runCatching {
             context.startActivity(
                 Intent(Intent.ACTION_DELETE, Uri.parse("package:" + app.component.packageName))
-                    .putExtra(Intent.EXTRA_USER, app.profile?.user ?: Process.myUserHandle())
+                    .putExtra(Intent.EXTRA_USER, app.user)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         }.onFailure { Log.w(TAG, "cannot uninstall ${app.component}", it) }
-    }
-
-    /** Whether this is the default home app: only that may pause and resume work apps. */
-    fun canPause(): Boolean = runCatching { context.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_HOME) }.getOrDefault(false)
-
-    /**
-     * Pauses or resumes a work profile's apps, like Quick Settings' "Work apps". Resuming may
-     * ask for the work profile's lock first; the list follows through the profile broadcasts.
-     */
-    fun setPaused(
-        profile: AppProfile,
-        paused: Boolean,
-    ) {
-        runCatching { userManager.requestQuietModeEnabled(paused, profile.user) }
-            .onFailure { Log.w(TAG, "cannot ${if (paused) "pause" else "resume"} profile ${profile.serial}", it) }
-    }
-
-    /** [user] as listed: null for the launcher's own profile, or if it went away while loading. */
-    private fun profileOf(user: UserHandle): AppProfile? {
-        if (user == Process.myUserHandle()) return null
-        val serial = userManager.getSerialNumberForUser(user).takeIf { it >= 0 } ?: return null
-        // The user type only exists from Android 15; the color badge comes from the system either way.
-        val type = if (Build.VERSION.SDK_INT >= 35) runCatching { launcherApps.getLauncherUserInfo(user)?.userType }.getOrNull() else null
-        return AppProfile(user, serial, profileName(type), runCatching { userManager.isQuietModeEnabled(user) }.getOrDefault(false))
     }
 
     private fun reload(evict: String? = null) {
@@ -198,68 +197,104 @@ class AndroidAppCatalog(
         loading =
             scope.launch {
                 if (evict != null) {
-                    icons.keys.removeAll { it.component.packageName == evict }
-                    masks.keys.removeAll { it.component.packageName == evict }
+                    // In every profile: an update in one doesn't say which, and reloading an icon is cheap.
+                    icons.keys.removeAll { it.startsWith("$evict/") }
+                    masks.keys.removeAll { it.startsWith("$evict/") }
                 }
-                val (found, infos) =
+                var paused = emptySet<Long>()
+                val infos =
                     withContext(Dispatchers.IO) {
-                        // Every profile a launcher may show, personal first. The private space isn't among
-                        // them: only launchers that declare ACCESS_HIDDEN_PROFILES see it, and this one doesn't.
                         val me = Process.myUserHandle()
-                        val users = runCatching { launcherApps.profiles }.getOrNull()?.takeIf { me in it } ?: listOf(me)
-                        val found = users.mapNotNull { user -> profileOf(user).let { if (it == null && user != me) null else user to it } }
-                        found to
-                            found
-                                .flatMap { (user, profile) ->
-                                    // A profile that can't be listed (being removed) leaves the others.
-                                    runCatching { launcherApps.getActivityList(null, user) }
-                                        .onFailure { Log.w(TAG, "cannot list apps of $user", it) }
-                                        .getOrDefault(emptyList())
-                                        .filter { it.componentName.packageName != context.packageName }
-                                        .map { it to AndroidApp(it.label.toString(), it.componentName, it.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0, profile) }
-                                }
-                                .sortedWith(appOrder({ it.second.label }, { it.second.profile?.serial }))
+                        // Ours first; the system lists the profiles it lets a launcher see, ours included.
+                        val profiles = listOf(me) + runCatching { launcherApps.profiles }.getOrDefault(emptyList()).filter { it != me }
+                        profiles
+                            .flatMap { user ->
+                                val profile = if (user == me) null else userManager.getSerialNumberForUser(user)
+                                if (profile != null && userManager.isQuietModeEnabled(user)) paused += profile
+                                runCatching { launcherApps.getActivityList(null, user) }
+                                    .onFailure { Log.w(TAG, "cannot list apps in $user", it) }
+                                    .getOrDefault(emptyList())
+                                    .filter { it.componentName.packageName != context.packageName }
+                                    .map { it to AndroidApp(it.label.toString(), it.componentName, user, profile, it.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0) }
+                            }
+                            // The same app in two profiles: the owner's one first.
+                            .sortedWith(compareBy({ it.second.label.lowercase() }, { it.second.profile != null }))
                     }
-                val listed = found.mapNotNull { it.second }.associateBy { it.serial }
-                if (listed != profiles.toMap()) {
-                    profiles.keys.retainAll(listed.keys)
-                    profiles.putAll(listed)
-                }
+                pausedProfiles = paused
                 val list = infos.map { it.second }
                 if (list != apps.toList()) {
                     apps.clear()
                     apps += list
                 }
-                val present = list.mapTo(HashSet()) { it.id }
+                val present = list.mapTo(HashSet()) { it.key }
                 icons.keys.retainAll(present)
                 masks.keys.retainAll(present)
                 for ((info, app) in infos) {
-                    if (app.id in icons) continue
+                    if (app.key in icons) continue
                     launch {
                         // Both styles are rendered up front so switching is instant; masks are 1 byte per pixel.
                         val rendered =
                             withContext(iconDispatcher) {
                                 runCatching {
                                     val d = info.getIcon(0)
-                                    // In color a profile's copy wears the system's badge for that profile (work, clone).
-                                    // Silhouettes stay unbadged, since the badge's would be a blob; cells draw a themed one.
-                                    val shown = if (app.profile != null) info.getBadgedIcon(0) else d
                                     val bmp = Bitmap.createBitmap(iconPx, iconPx, Bitmap.Config.ARGB_8888)
-                                    shown.setBounds(0, 0, iconPx, iconPx)
-                                    shown.draw(Canvas(bmp))
-                                    bmp.asImageBitmap() to iconMask(d, iconPx).asImageBitmap()
+                                    d.setBounds(0, 0, iconPx, iconPx)
+                                    d.draw(Canvas(bmp))
+                                    var mask = iconMask(d, iconPx)
+                                    if (app.profile != null) mask = addBadge(bmp, mask)
+                                    bmp.asImageBitmap() to mask.asImageBitmap()
                                 }.getOrNull()
                             }
                         if (rendered != null) {
-                            icons[app.id] = rendered.first
-                            masks[app.id] = rendered.second
+                            icons[app.key] = rendered.first
+                            masks[app.key] = rendered.second
                         }
                     }
                 }
             }
     }
 
+    /**
+     * Marks an icon from another profile with a briefcase in its corner, and its silhouette too, where
+     * a gap cut around the briefcase keeps it apart from the logo in one color. Drawn here rather than
+     * taken from the system (PackageManager.getUserBadgedIcon), which leaves some work profiles unbadged.
+     */
+    private fun addBadge(
+        icon: Bitmap,
+        silhouette: Bitmap,
+    ): Bitmap {
+        val mask = if (silhouette.isMutable) silhouette else silhouette.copy(Bitmap.Config.ALPHA_8, true)
+        val r = iconPx * 0.2f
+        val cx = iconPx - r
+        val cy = iconPx - r
+        val glyph = Path(briefcase)
+        val scale = r * 1.2f / 24f
+        glyph.transform(Matrix().apply { setScale(scale, scale); postTranslate(cx - 12 * scale, cy - 12 * scale) })
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        Canvas(icon).run {
+            drawCircle(cx, cy, r, paint.apply { color = BADGE_BACKGROUND })
+            drawPath(glyph, paint.apply { color = Color.WHITE })
+        }
+        Canvas(mask).run {
+            drawCircle(cx, cy, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR) })
+            drawPath(glyph, paint)
+        }
+        return mask
+    }
+
     companion object {
         private const val TAG = "apps"
+
+        /** Material's "work" glyph, 24 units square. */
+        private val briefcase by lazy {
+            PathParser()
+                .parsePathString(
+                    "M20,6h-4V4c0,-1.11 -0.89,-2 -2,-2h-4c-1.11,0 -2,0.89 -2,2v2H4c-1.11,0 -1.99,0.89 -1.99,2L2,19c0,1.11 0.89,2 2,2h16" +
+                        "c1.11,0 2,-0.89 2,-2V8c0,-1.11 -0.89,-2 -2,-2zM14,6h-4V4h4v2z",
+                ).toPath()
+                .asAndroidPath()
+        }
+
+        private const val BADGE_BACKGROUND = 0xFF3C4043.toInt()
     }
 }
