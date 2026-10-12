@@ -1,0 +1,216 @@
+package dev.omalauncher.backup
+
+import dev.omalauncher.upgrade.Versioned
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.nio.file.Files
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+
+class BackupFormatTest {
+    @get:Rule val tmp = TemporaryFolder()
+
+    private val info = BackupInfo(BackupFormat.VERSION, "0.5.0-mhs.2", 10002, 1_760_000_000_000)
+
+    @Test fun entriesGoOnlyWhereTheLauncherKeepsThem() {
+        for (ok in listOf(
+            "backup.json",
+            "prefs/shortcuts.json",
+            "prefs/launcher.json",
+            "files/launcher-managed.json",
+            "files/widgets/clock.owl",
+            "files/widgets/examples/gauge.owl",
+            "files/widget-state/clock.owl.json",
+            "files/themes/mine/colors.toml",
+            "files/backgrounds/tokyo-night/me.png",
+        )) {
+            assertTrue(ok, entryFor(ok) != null)
+        }
+        for (bad in listOf(
+            "files/widgets/../shared_prefs/x.xml",
+            "files/widgets/.errors/clock.owl.txt",
+            "files/widgets/.hidden.owl",
+            "files/widgets/a\\b.owl",
+            "files/widgets//a.owl",
+            "files/widgets",
+            "files/omarchy/themes/x",
+            "files/shared_prefs/shortcuts.xml",
+            "files/arch/etc/passwd",
+            "prefs/evil.json",
+            "prefs/../x.json",
+            "/etc/passwd",
+            "../backup.json",
+            "widgets/clock.owl",
+        )) {
+            assertNull(bad, entryFor(bad))
+        }
+    }
+
+    @Test fun prefsKeepTheirTypes() {
+        val values = mapOf("s" to "x", "b" to true, "i" to 7, "l" to (1L shl 40), "f" to 1.5f, "ss" to setOf("a", "b"))
+        val back = prefsFromJson(JSONObject(prefsToJson(values, PrefsPart("any", null)).toString()))
+        assertEquals(values, back)
+        assertEquals(Long::class.javaObjectType, back["l"]!!::class.javaObjectType)
+        assertEquals(Int::class.javaObjectType, back["i"]!!::class.javaObjectType)
+    }
+
+    @Test fun onlyAPartsKeysAreBackedUp() {
+        val themes = BackupFormat.PREFS.first { it.name == "themes" }
+        val o = prefsToJson(mapOf("theme" to "kanagawa", "rendered_by" to "9-123", "mono_icons" to true), themes)
+        assertEquals(setOf("theme", "mono_icons"), o.keys().asSequence().toSet())
+        val launcher = BackupFormat.PREFS.first { it.name == "launcher" }
+        val l = prefsToJson(mapOf("setup_done" to true, "gpu_wanted" to true, "terminal_font" to "JetBrains Mono"), launcher)
+        assertEquals(setOf("terminal_font"), l.keys().asSequence().toSet())
+    }
+
+    @Test fun restoringAWholeFileClearsItFirst() {
+        val edit = prefsEdit(PrefsPart("shortcuts", null), mapOf("items" to "x"))
+        assertTrue(edit.clearAll)
+        assertEquals(mapOf("items" to "x"), edit.put)
+    }
+
+    @Test fun restoringSomeKeysLeavesTheRestAndResets() {
+        val themes = BackupFormat.PREFS.first { it.name == "themes" }
+        val edit = prefsEdit(themes, mapOf("theme" to "kanagawa", "stray" to 1))
+        assertFalse(edit.clearAll)
+        assertEquals(mapOf("theme" to "kanagawa"), edit.put)
+        // A background that wasn't set when backing up isn't left from before; Linux's theme files are written again.
+        assertTrue("background" in edit.remove)
+        assertTrue("rendered_by" in edit.remove)
+        assertFalse("theme" in edit.remove)
+    }
+
+    @Test fun backsUpAndRestoresTheHomeScreen() {
+        val from = home()
+        val prefs =
+            mapOf(
+                "shortcuts" to mapOf("items" to items(3), "folders" to Versioned.write(1, JSONArray().put(JSONObject().put("key", "folder:a")))),
+                "widget_grid" to mapOf("layout" to "{\"v\":1,\"data\":{}}", "portrait_rows_1080x2400" to 10),
+                "themes" to mapOf("theme" to "kanagawa", "rendered_by" to "x"),
+                "launcher" to mapOf("setup_done" to true, "terminal_text" to "large"),
+            )
+        val zip = ByteArrayOutputStream().also { writeBackup(it, info, prefs, from) }.toByteArray()
+
+        val staged = readBackup(ByteArrayInputStream(zip), tmp.newFolder("staging"))
+        assertEquals(info, staged.info)
+        assertEquals(0, staged.skipped)
+        assertEquals(mapOf("layout" to "{\"v\":1,\"data\":{}}"), staged.prefs["widget_grid"])
+        assertEquals(mapOf("terminal_text" to "large"), staged.prefs["launcher"])
+        assertEquals(Summary(apps = 3, folders = 1, widgets = 2, theme = "kanagawa"), staged.summary())
+
+        val to = tmp.newFolder("to")
+        File(to, "widgets/old.owl").apply { parentFile.mkdirs() }.writeText("old")
+        File(to, "backgrounds/x/y.png").apply { parentFile.mkdirs() }.writeText("y")
+        File(to, "omarchy/keep.txt").apply { parentFile.mkdirs() }.writeText("not ours to restore")
+        applyFiles(staged, to) { it.deleteRecursively() }
+
+        for (path in listOf("widgets/clock.owl", "widgets/notes.owl", "widgets/examples/gauge.owl", "widget-state/notes.owl.json", "themes/mine/colors.toml", "launcher-managed.json")) {
+            assertArrayEquals(path, File(from, path).readBytes(), File(to, path).readBytes())
+        }
+        assertArrayEquals(File(from, "backgrounds/tokyo-night/me.png").readBytes(), File(to, "backgrounds/tokyo-night/me.png").readBytes())
+        // What wasn't in the backup goes; caches, previews and links were never in it; the rest of the app's files stay.
+        assertFalse(File(to, "widgets/old.owl").exists())
+        assertFalse(File(to, "backgrounds/x").exists())
+        assertFalse(File(to, "widgets/.errors").exists())
+        assertFalse(File(to, "widgets/link.owl").exists())
+        assertTrue(File(to, "omarchy/keep.txt").exists())
+    }
+
+    @Test fun aRestoreWithoutTheRecordDropsTheOldOne() {
+        val from = tmp.newFolder("from")
+        File(from, "widgets/a.owl").apply { parentFile.mkdirs() }.writeText("a")
+        val zip = ByteArrayOutputStream().also { writeBackup(it, info, emptyMap(), from) }.toByteArray()
+        val to = tmp.newFolder("to")
+        File(to, "launcher-managed.json").writeText("{}")
+        applyFiles(readBackup(ByteArrayInputStream(zip), tmp.newFolder("s")), to) { it.deleteRecursively() }
+        assertFalse(File(to, "launcher-managed.json").exists())
+    }
+
+    @Test fun unknownEntriesAreLeftOutAndNothingLeavesStaging() {
+        val staging = tmp.newFolder("staging")
+        val zip =
+            zipOf(
+                "backup.json" to info.toJson().toString(),
+                "files/widgets/../../escaped.txt" to "x",
+                "files/widgets/a.owl" to "a",
+                "something/else" to "y",
+            )
+        val staged = readBackup(ByteArrayInputStream(zip), staging)
+        assertEquals(2, staged.skipped)
+        assertTrue(File(staging, "files/widgets/a.owl").isFile)
+        assertFalse(File(staging.parentFile, "escaped.txt").exists())
+        assertFalse(File(staging, "escaped.txt").exists())
+    }
+
+    @Test fun refusesWhatIsntABackup() {
+        expectRefusal("not an omalauncher backup") { readBackup(ByteArrayInputStream(zipOf("files/widgets/a.owl" to "a")), tmp.newFolder("a")) }
+        // ZipInputStream reads bytes that aren't a zip as an empty one: no backup.json, so the same answer.
+        expectRefusal("not an omalauncher backup") { readBackup(ByteArrayInputStream("not a zip at all".toByteArray()), tmp.newFolder("b")) }
+        val newer = info.copy(version = BackupFormat.VERSION + 1).toJson().toString()
+        expectRefusal("newer") { readBackup(ByteArrayInputStream(zipOf("backup.json" to newer)), tmp.newFolder("c")) }
+    }
+
+    @Test fun refusesEntriesPastTheLimits() {
+        val zip = zipOf("backup.json" to info.toJson().toString(), "files/widgets/big.owl" to "x".repeat(2000))
+        expectRefusal("too large") { readBackup(ByteArrayInputStream(zip), tmp.newFolder("d"), Limits(entryBytes = 1000)) }
+        expectRefusal("too large") { readBackup(ByteArrayInputStream(zip), tmp.newFolder("e"), Limits(totalBytes = 1500)) }
+        expectRefusal("too many") { readBackup(ByteArrayInputStream(zip), tmp.newFolder("f"), Limits(entries = 1)) }
+    }
+
+    /** A launcher's files: two widgets and an example, a widget's state, a theme, a background, the record, and what's left out. */
+    private fun home(): File {
+        val dir = tmp.newFolder("from")
+        fun put(
+            path: String,
+            text: String,
+        ) = File(dir, path).apply { parentFile.mkdirs() }.writeText(text)
+        put("widgets/clock.owl", "clock")
+        put("widgets/notes.owl", "notes")
+        put("widgets/examples/gauge.owl", "gauge")
+        put("widgets/.errors/clock.owl.txt", "error")
+        put("widgets/.preview/clock.owl.png", "png")
+        put("widget-state/notes.owl.json", "{\"todo\":[\"milk\"]}")
+        put("themes/mine/colors.toml", "accent = \"#7aa2f7\"")
+        File(dir, "backgrounds/tokyo-night/me.png").apply { parentFile.mkdirs() }.writeBytes(ByteArray(256) { it.toByte() })
+        put("launcher-managed.json", "{\"v\":1,\"data\":{\"widgets/clock.owl\":\"abc\"}}")
+        Files.createSymbolicLink(File(dir, "widgets/link.owl").toPath(), File(dir, "widgets/clock.owl").toPath())
+        return dir
+    }
+
+    private fun items(n: Int) = Versioned.write(1, JSONArray().apply { repeat(n) { put(JSONObject().put("key", "app:x$it")) } })
+
+    private fun zipOf(vararg entries: Pair<String, String>): ByteArray =
+        ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { z ->
+                for ((name, text) in entries) {
+                    z.putNextEntry(ZipEntry(name))
+                    z.write(text.toByteArray())
+                    z.closeEntry()
+                }
+            }
+        }.toByteArray()
+
+    private fun expectRefusal(
+        containing: String,
+        block: () -> Unit,
+    ) {
+        try {
+            block()
+            fail("expected a refusal containing \"$containing\"")
+        } catch (e: BackupException) {
+            assertTrue("\"${e.message}\" should contain \"$containing\"", e.message!!.contains(containing))
+        }
+    }
+}
