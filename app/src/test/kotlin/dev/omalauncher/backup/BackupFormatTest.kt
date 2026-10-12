@@ -30,6 +30,7 @@ class BackupFormatTest {
             "prefs/shortcuts.json",
             "prefs/launcher.json",
             "files/launcher-managed.json",
+            "files/style/style.toml",
             "files/widgets/clock.owl",
             "files/widgets/examples/gauge.owl",
             "files/widget-state/clock.owl.json",
@@ -45,6 +46,8 @@ class BackupFormatTest {
             "files/widgets/a\\b.owl",
             "files/widgets//a.owl",
             "files/widgets",
+            "files/style/defaults.toml",
+            "files/style/errors.txt",
             "files/omarchy/themes/x",
             "files/shared_prefs/shortcuts.xml",
             "files/arch/etc/passwd",
@@ -117,15 +120,18 @@ class BackupFormatTest {
         assertEquals(0, staged.skipped)
         assertEquals(mapOf("layout" to "{\"v\":1,\"data\":{}}"), staged.prefs["widget_grid"])
         assertEquals(mapOf("terminal_text" to "large"), staged.prefs["launcher"])
-        assertEquals(Summary(apps = 3, folders = 1, widgets = 2, theme = "kanagawa"), staged.summary())
+        // The theme style.toml names, not the one the preferences kept from before it.
+        assertEquals(Summary(apps = 3, folders = 1, widgets = 2, theme = "nord"), staged.summary())
 
         val to = tmp.newFolder("to")
+        File(to, "style/style.toml").apply { parentFile.mkdirs() }.writeText("theme = \"old\"")
+        File(to, "style/defaults.toml").writeText("this app's")
         File(to, "widgets/old.owl").apply { parentFile.mkdirs() }.writeText("old")
         File(to, "backgrounds/x/y.png").apply { parentFile.mkdirs() }.writeText("y")
         File(to, "omarchy/keep.txt").apply { parentFile.mkdirs() }.writeText("not ours to restore")
         applyFiles(staged, to) { it.deleteRecursively() }
 
-        for (path in listOf("widgets/clock.owl", "widgets/notes.owl", "widgets/examples/gauge.owl", "widget-state/notes.owl.json", "themes/mine/colors.toml", "launcher-managed.json")) {
+        for (path in listOf("widgets/clock.owl", "widgets/notes.owl", "widgets/examples/gauge.owl", "widget-state/notes.owl.json", "themes/mine/colors.toml", "launcher-managed.json", "style/style.toml")) {
             assertArrayEquals(path, File(from, path).readBytes(), File(to, path).readBytes())
         }
         assertArrayEquals(File(from, "backgrounds/tokyo-night/me.png").readBytes(), File(to, "backgrounds/tokyo-night/me.png").readBytes())
@@ -135,6 +141,25 @@ class BackupFormatTest {
         assertFalse(File(to, "widgets/.errors").exists())
         assertFalse(File(to, "widgets/link.owl").exists())
         assertTrue(File(to, "omarchy/keep.txt").exists())
+        // style.toml alone: its defaults and errors are this app's.
+        assertEquals("this app's", File(to, "style/defaults.toml").readText())
+        assertFalse(File(to, "style/errors.txt").exists())
+    }
+
+    @Test fun aStyleGoesWhereThereWasNone() {
+        val from = tmp.newFolder("from")
+        File(from, "style/style.toml").apply { parentFile.mkdirs() }.writeText("theme = \"nord\"")
+        val zip = ByteArrayOutputStream().also { writeBackup(it, info, emptyMap(), from) }.toByteArray()
+        val to = tmp.newFolder("to")
+        applyFiles(readBackup(ByteArrayInputStream(zip), tmp.newFolder("s")), to) { it.deleteRecursively() }
+        assertEquals("theme = \"nord\"", File(to, "style/style.toml").readText())
+    }
+
+    @Test fun aBackupFromBeforeStyleTomlHasItsThemeInThePreferences() {
+        val from = tmp.newFolder("from")
+        File(from, "widgets/a.owl").apply { parentFile.mkdirs() }.writeText("a")
+        val zip = ByteArrayOutputStream().also { writeBackup(it, info, mapOf("themes" to mapOf("theme" to "kanagawa")), from) }.toByteArray()
+        assertEquals("kanagawa", readBackup(ByteArrayInputStream(zip), tmp.newFolder("s")).summary().theme)
     }
 
     @Test fun aRestoreWithoutTheRecordDropsTheOldOne() {
@@ -178,7 +203,7 @@ class BackupFormatTest {
         expectRefusal("too many") { readBackup(ByteArrayInputStream(zip), tmp.newFolder("f"), Limits(entries = 1)) }
     }
 
-    /** A launcher's files: two widgets and an example, a widget's state, a theme, a background, the record, and what's left out. */
+    /** A launcher's files: two widgets and an example, a widget's state, a theme, a background, the record, the style, and what's left out. */
     private fun home(): File {
         val dir = tmp.newFolder("from")
         fun put(
@@ -194,6 +219,9 @@ class BackupFormatTest {
         put("themes/mine/colors.toml", "accent = \"#7aa2f7\"")
         File(dir, "backgrounds/tokyo-night/me.png").apply { parentFile.mkdirs() }.writeBytes(ByteArray(256) { it.toByte() })
         put("launcher-managed.json", "{\"v\":1,\"data\":{\"widgets/clock.owl\":\"abc\"}}")
+        put("style/style.toml", "version = 1\ntheme = \"nord\"\n[widgets]\ngaps-in = 8\n")
+        put("style/defaults.toml", "# every setting")
+        put("style/errors.txt", "widgets.gaps-in: too large")
         Files.createSymbolicLink(File(dir, "widgets/link.owl").toPath(), File(dir, "widgets/clock.owl").toPath())
         return dir
     }

@@ -1,5 +1,8 @@
 package dev.omalauncher.backup
 
+import dev.omalauncher.theme.Style
+import dev.omalauncher.theme.StyleFile
+import dev.omalauncher.theme.Toml
 import dev.omalauncher.upgrade.Versioned
 import org.json.JSONArray
 import org.json.JSONObject
@@ -44,12 +47,13 @@ internal object BackupFormat {
             PrefsPart("widget_grid", setOf("layout")),
             // The recent apps strip.
             PrefsPart("app_usage", null),
-            // Theme, background and every option on the style screen, those upstream adds later included;
-            // rendered_by only says Linux's theme files were written here, so they're written again.
+            // Before style.toml (0.7), the theme, background and every option on the style screen; kept for
+            // restoring such a backup, and for an older launcher. rendered_by only says Linux's theme files
+            // were written here, so they're written again.
             PrefsPart("themes", null, reset = setOf("rendered_by"), exclude = setOf("rendered_by")),
             PrefsPart("feed", setOf("settings")),
-            // The terminal's text size and font and what swiping up on home does (settings > gestures);
-            // the rest of these preferences are this install's.
+            // The terminal's text size and font before style.toml, and what swiping up on home does
+            // (settings > gestures); the rest of these preferences are this install's.
             PrefsPart("launcher", setOf("terminal_text", "terminal_font", "gesture_swipe_up")),
         )
 
@@ -59,11 +63,14 @@ internal object BackupFormat {
      */
     val DIRS = listOf("widgets", "widget-state", "themes", "backgrounds")
 
+    /** The style, from 0.7: theme, background and the style screen's options. defaults.toml and errors.txt beside it are this app's. */
+    const val STYLE = "style/style.toml"
+
     /**
      * Files under the app's files. The launcher's record of the default widgets it wrote keeps a
      * restored default updating, and one deleted before the backup deleted.
      */
-    val FILES = listOf("launcher-managed.json")
+    val FILES = listOf("launcher-managed.json", STYLE)
 
     fun prefsEntry(name: String) = "prefs/$name.json"
 
@@ -184,15 +191,25 @@ internal data class Summary(
     val theme: String?,
 )
 
-/** [shortcuts] and [themes] as their preferences hold them, [widgetsDir] the widget files. */
+/**
+ * [shortcuts] and [themes] as their preferences hold them, [style] the style.toml, [widgetsDir]
+ * the widget files. The theme is style.toml's; a backup from before it has it in [themes].
+ */
 internal fun summarize(
     shortcuts: Map<String, Any>,
     themes: Map<String, Any>,
+    style: File,
     widgetsDir: File,
 ): Summary {
     fun count(key: String) = (Versioned.read(shortcuts[key] as? String, 1) as? JSONArray)?.length() ?: 0
     val widgets = widgetsDir.listFiles { f -> f.isFile && f.name.endsWith(".owl") && !f.name.startsWith(".") }?.size ?: 0
-    return Summary(count("items"), count("folders"), widgets, themes["theme"] as? String)
+    val theme =
+        if (style.isFile) {
+            runCatching { StyleFile.decode(Toml.parse(style.readText()).also(StyleFile::migrate)).style[Style.THEME] }.getOrNull()
+        } else {
+            themes["theme"] as? String
+        }
+    return Summary(count("items"), count("folders"), widgets, theme)
 }
 
 /** Caps on what [readBackup] unpacks: a backup is a file from anywhere. */
@@ -212,7 +229,7 @@ internal class Staged(
 ) {
     val files get() = File(dir, "files")
 
-    fun summary() = summarize(prefs["shortcuts"].orEmpty(), prefs["themes"].orEmpty(), File(files, "widgets"))
+    fun summary() = summarize(prefs["shortcuts"].orEmpty(), prefs["themes"].orEmpty(), File(files, BackupFormat.STYLE), File(files, "widgets"))
 }
 
 /** Refused backups: the message is for the user. */
@@ -349,8 +366,9 @@ private fun copyCapped(
 
 /**
  * Puts [staged]'s files in place of [filesDir]'s: each directory and file of [BackupFormat]
- * replaced whole, so what isn't in the backup goes too. [deleteTree] removes a directory without
- * following symlinks.
+ * replaced whole, so what isn't in the backup goes too. A file is moved over the one it replaces,
+ * never deleted first: the style's watcher would take a missing style.toml for the defaults.
+ * [deleteTree] removes a directory without following symlinks.
  */
 internal fun applyFiles(
     staged: Staged,
@@ -366,7 +384,11 @@ internal fun applyFiles(
     for (path in BackupFormat.FILES) {
         val target = File(filesDir, path)
         val from = File(staged.files, path)
-        target.delete()
-        if (from.isFile && !from.renameTo(target)) throw IOException("can't move $path into place")
+        if (!from.isFile) {
+            target.delete()
+            continue
+        }
+        target.parentFile?.mkdirs()
+        if (!from.renameTo(target)) throw IOException("can't move $path into place")
     }
 }

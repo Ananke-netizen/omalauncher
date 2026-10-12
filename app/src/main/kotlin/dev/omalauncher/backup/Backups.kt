@@ -9,6 +9,9 @@ import android.util.Log
 import dev.omalauncher.BuildConfig
 import dev.omalauncher.LauncherData
 import dev.omalauncher.MainActivity
+import dev.omalauncher.theme.StyleFile
+import dev.omalauncher.theme.StyleStore
+import dev.omalauncher.theme.Toml
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -37,7 +40,7 @@ internal class Backups(
     val undoAt get() = undoFile.takeIf { it.isFile }?.lastModified()
 
     /** What the home screen holds now. */
-    fun current(): Summary = summarize(values("shortcuts"), values("themes"), File(filesDir, "widgets"))
+    fun current(): Summary = summarize(values("shortcuts"), values("themes"), File(filesDir, BackupFormat.STYLE), File(filesDir, "widgets"))
 
     /** Writes a backup to [uri], one the system's file picker made. */
     suspend fun backUp(uri: Uri) =
@@ -74,7 +77,7 @@ internal class Backups(
             val tmp = File(undoFile.parentFile, ".${undoFile.name}.tmp")
             tmp.outputStream().use(::write)
             if (!tmp.renameTo(undoFile)) throw IOException("can't keep a copy of the home screen")
-            applyFiles(staged, filesDir, LauncherData::deleteTree)
+            // The preferences first: they're where a backup from before style.toml has the style.
             for (part in BackupFormat.PREFS) {
                 val values = staged.prefs[part.name] ?: continue
                 val edit = prefsEdit(part, values)
@@ -85,6 +88,13 @@ internal class Backups(
                 // Written now, not later: the process ends below.
                 if (!editor.commit()) throw IOException("can't save ${part.name}")
             }
+            // Without one, its style.toml is made from them, as the launcher's first start after 0.7 makes it.
+            val style = File(staged.files, BackupFormat.STYLE)
+            if (!style.isFile) {
+                style.parentFile?.mkdirs()
+                style.writeText(Toml.write(StyleFile.encode(emptyMap(), StyleStore.importPrefs(context)), StyleFile.HEADER))
+            }
+            applyFiles(staged, filesDir, LauncherData::deleteTree)
             staging.deleteRecursively()
         }
         Log.i(TAG, "restored a backup from ${staged.info.createdAt}; restarting")
