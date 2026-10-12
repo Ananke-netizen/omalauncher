@@ -22,7 +22,7 @@ class Compiler private constructor(
          * instead of failing on what they don't know. Bump it with every
          * addition a widget could depend on: nodes, properties, builtins.
          */
-        const val LEVEL = 6
+        const val LEVEL = 7
         private const val MAX_ASSET_BYTES = 2 shl 20
 
         fun compile(src: String): Program =
@@ -103,8 +103,10 @@ class Compiler private constructor(
                 listOf("Slider", "Input", "file", "android.notifications", "android.volume", "volume", "notification", "every", "at", "when", "on").associateWith { 4 } +
                 // owl 5: a full-screen view of the widget.
                 listOf("screen", "close", "screenWidth", "screenHeight", "optional", "linux", "android.system").associateWith { 5 } +
-                // owl 6: properties, named Node.property.
-                mapOf("Input.focus" to 6)
+                // owl 6: properties, named Node.property; values in commands, quoted; the launcher's corner style.
+                listOf("Input.focus", "sh", "corners").associateWith { 6 } +
+                // owl 7: more of the phone, without new permissions.
+                listOf("android.alarm", "android.modes", "torch", "share", "haptic").associateWith { 7 }
 
         // No onLongPress: long-press belongs to the home screen, which lifts the tile to move it.
         /**
@@ -123,8 +125,8 @@ class Compiler private constructor(
         /** What triggers bind in their statements. */
         private val TRIGGER_PARAMS = mapOf("on" to listOf("value", "old"))
 
-        /** Data only Android has; battery, media, notifications and volume update as they change, device is fixed. */
-        val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system")
+        /** Data only Android has; battery, media, notifications, volume, alarm and modes update as they change, device is fixed. */
+        val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "alarm", "modes")
 
         /** media("...") commands. */
         val MEDIA = setOf("toggle", "play", "pause", "next", "previous", "open")
@@ -132,17 +134,67 @@ class Compiler private constructor(
         /** volume("...") commands; a number sets the level in percent instead. */
         val VOLUME = setOf("up", "down", "mute", "unmute", "toggle")
 
+        /** torch("...") commands; true and false also turn it on and off. */
+        val TORCH = setOf("on", "off", "toggle")
+
         /** notification("...", key) commands. */
         val NOTIFICATION = setOf("open", "dismiss")
 
         /** The tile's size, readable anywhere a declaration of the same name doesn't shadow it. */
-        val TILE = setOf("cols", "rows", "tileWidth", "tileHeight", "screenWidth", "screenHeight")
+        val TILE = setOf("cols", "rows", "tileWidth", "tileHeight", "screenWidth", "screenHeight", "corners")
 
         /** Whether Linux is installed and running, for widgets with `optional` sources. Shadowable like [TILE]. */
         const val LINUX = "linux"
 
         /** Prefixes an `optional` source's command in [Program.commands], so a reviewer (and the store) can tell. */
         const val IF_LINUX = "if Linux is installed: "
+
+        /** Where a command has an sh(...) value, as [Program.commands] lists it. */
+        const val VALUE = "‹value›"
+
+        /** Where a command has a number, which can't be anything but digits, a dot and a sign. */
+        const val NUMBER = "‹number›"
+
+        /** Builtins that always give a number (or null, which reads as …). */
+        private val NUMBERS = setOf("int", "round", "floor", "ceil", "abs", "fixed", "len", "count", "sum", "min", "max", "clamp")
+
+        private const val MAX_SHAPES = 8
+
+        /**
+         * Whether bash reads every [VALUE] in [shape] as the quoted word sh(...) made it: not inside quotes,
+         * where its own quotes would close them or `$(...)` still runs; not in a comment, which a line break
+         * in it would end; and not in a heredoc, whose body expands whatever it holds.
+         */
+        fun quotable(shape: String): Boolean {
+            if (VALUE !in shape) return true
+            if ("<<" in shape) return false
+            var quote: Char? = null
+            var comment = false
+            var i = 0
+            while (i < shape.length) {
+                if (shape.startsWith(VALUE, i)) {
+                    if (quote != null || comment) return false
+                    i += VALUE.length
+                    continue
+                }
+                val c = shape[i]
+                when {
+                    comment -> if (c == '\n') comment = false
+                    quote == '\'' -> if (c == '\'') quote = null
+                    // " and `, and $'...', where a backslash escapes the next character.
+                    quote != null -> if (c == '\\') i++ else if (c == quote || quote == '$' && c == '\'') quote = null
+                    c == '\\' -> i++
+                    c == '$' && shape.getOrNull(i + 1) == '\'' -> {
+                        quote = '$'
+                        i++
+                    }
+                    c == '\'' || c == '"' || c == '`' -> quote = c
+                    c == '#' && (i == 0 || shape[i - 1].isWhitespace() || shape[i - 1] in ";&|(") -> comment = true
+                }
+                i++
+            }
+            return true
+        }
         private val WIDGET_PROPS = setOf("size", "minSize", "page", "order", "padding", "background")
     }
 
@@ -320,6 +372,59 @@ class Compiler private constructor(
         return globals.size - 1
     }
 
+    /**
+     * Lists a command for the reviewer, and its text for [scripts]. Fixed text as it is; put together while
+     * the widget runs, its [shapes] when every value goes in through sh(...) where quoting holds, and
+     * "[what] built from widget values" when one doesn't: then it could run anything.
+     */
+    private fun listCommand(
+        e: Expr,
+        ev: Ev,
+        s: Scope,
+        what: String,
+        prefix: String = "",
+    ) {
+        (ev.const as? Str)?.v?.let {
+            scripts += it
+            commands += prefix + it
+            return
+        }
+        val shapes = shapes(e, s)?.takeIf { it.all(::quotable) }
+        if (shapes == null) {
+            commands += "$prefix$what built from widget values"
+            return
+        }
+        for (shape in shapes) {
+            // For ShellWords, a value is a word it skips, like a variable.
+            scripts += shape.replace(VALUE, "\"\$v\"").replace(NUMBER, "0")
+            commands += prefix + shape
+        }
+    }
+
+    /**
+     * What [e] can turn out as, one string per way, with each sh(...) as [VALUE] and each number as
+     * [NUMBER]. Null when a value goes in any other way, or there are more than [MAX_SHAPES].
+     */
+    private fun shapes(
+        e: Expr,
+        s: Scope,
+    ): List<String>? {
+        ex(e, s).const?.let { c -> return if (c is Str || c is Num) listOf(c.toString()) else null }
+        fun join(
+            a: List<String>,
+            b: List<String>,
+        ) = a.flatMap { x -> b.map { x + it } }
+        val out =
+            when (e) {
+                is Expr.Interp -> e.parts.fold(listOf("")) { acc, p -> join(acc, shapes(p, s) ?: return null) }
+                is Expr.Binary -> if (e.op == "+") join(shapes(e.a, s) ?: return null, shapes(e.b, s) ?: return null) else null
+                is Expr.Cond -> (shapes(e.a, s) ?: return null) + (shapes(e.b, s) ?: return null)
+                is Expr.Call -> if (e.name == "sh") listOf(VALUE) else if (e.name in NUMBERS) listOf(NUMBER) else null
+                else -> null
+            }
+        return out?.distinct()?.takeIf { it.size <= MAX_SHAPES }
+    }
+
     private fun constant(
         e: Expr,
         what: String,
@@ -358,8 +463,7 @@ class Compiler private constructor(
             e is Expr.Call && e.name in setOf("cmd", "stream") -> {
                 if (e.args.size != 1 || e.named.isNotEmpty()) fail("${e.name}(\"command\") takes one command", e.pos)
                 val arg = ex(e.args[0], root)
-                (arg.const as? Str)?.v?.let { scripts += it }
-                commands += listed + ((arg.const as? Str)?.v ?: "${e.name}(…) built from widget values")
+                listCommand(e.args[0], arg, root, "${e.name}(…)", listed)
                 if (!d.optional) guest = true
                 Global.Source(d.name, e.name, arg, (every ?: 60.0).coerceAtLeast(1.0), d.json, timeout.coerceIn(1, 300), d.status, optional = d.optional)
             }
@@ -561,8 +665,11 @@ class Compiler private constructor(
         if (n.type == "Terminal") {
             terminal = true
             val command = props["command"]
-            (command?.const as? Str)?.v?.let { scripts += it }
-            commands += if (command == null) "a terminal running the login shell" else (command.const as? Str)?.v ?: "Terminal command built from widget values"
+            if (command == null) {
+                commands += "a terminal running the login shell"
+            } else {
+                listCommand(body.props.first { it.name == "command" }.value, command, scope, "Terminal command")
+            }
             guest = true
         }
         // Shaders get `time` whether they use it or not.
@@ -629,8 +736,7 @@ class Compiler private constructor(
                             // result = run("..."): the output arrives later, when the command finishes.
                             if (call.args.size != 1 || call.named.isNotEmpty()) fail("run takes one command", call.pos)
                             val command = ex(call.args[0], inner)
-                            (command.const as? Str)?.v?.let { scripts += it }
-                            commands += (command.const as? Str)?.v ?: "run(…) built from widget values"
+                            listCommand(call.args[0], command, inner, "run(…)")
                             guest = true
                             val run: (Env) -> Unit = { env -> env.host.runInto(command(env).toString(), slot) }
                             return@map run
@@ -650,14 +756,16 @@ class Compiler private constructor(
                         if (call.name == "volume") {
                             (args[0].const as? Str)?.v?.let { c -> if (c !in VOLUME && c.toDoubleOrNull() == null) fail("volume takes a level in percent, or ${VOLUME.joinToString()}", call.pos) }
                         }
+                        if (call.name == "torch") {
+                            (args[0].const as? Str)?.v?.let { c -> if (c !in TORCH) fail("torch takes true, false, ${TORCH.joinToString()}", call.pos) }
+                        }
                         if (call.name == "notification") {
                             (args[0].const as? Str)?.v?.let { c -> if (c !in NOTIFICATION) fail("notification takes ${NOTIFICATION.joinToString()} and a notification's key", call.pos) }
                         }
                         since(call.name, call.pos)
                         if (call.name == "screen" || call.name == "close") screenAction = screenAction ?: call.pos
                         if (call.name in setOf("run", "terminal", "app")) {
-                            (args[0].const as? Str)?.v?.let { scripts += it }
-                            commands += (args[0].const as? Str)?.v ?: "${call.name}(…) built from widget values"
+                            listCommand(call.args[0], args[0], inner, "${call.name}(…)")
                             // A tap on terminal(...) or app(...) without Linux offers to install it; run(...) would fail unseen.
                             if (call.name == "run") guest = true
                         }
@@ -832,6 +940,7 @@ class Compiler private constructor(
         if (e.name in setOf("history", "prev")) fail("${e.name}(...) keeps samples over time, so it only works as: let x = ${e.name}(...)", e.pos)
         if (e.name in setOf("cmd", "stream", "http", "file")) fail("${e.name}(...) is a source: source x = ${e.name}(\"...\")", e.pos)
         val b = Builtins.all[e.name] ?: fail("unknown function '${e.name}'", e.pos)
+        since(e.name, e.pos)
         if (e.named.isNotEmpty()) fail("${e.name} takes no named arguments", e.named[0].second.pos)
         if (e.args.size < b.min || e.args.size > b.max) {
             fail("${e.name} takes ${if (b.min == b.max) "${b.min}" else "${b.min}-${b.max}"} arguments, not ${e.args.size}", e.pos)

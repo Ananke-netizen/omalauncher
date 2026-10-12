@@ -70,7 +70,7 @@ object Builtins {
     val constants = mapOf("pi" to Num(PI), "transparent" to Col(null, 0))
 
     /** Handler-only calls; they reach [Host.act]. */
-    val actions = mapOf("terminal" to 1..2, "app" to 1..1, "run" to 1..1, "url" to 1..1, "launcher" to 1..1, "refresh" to 0..1, "media" to 1..1, "androidApp" to 1..1, "copy" to 1..1, "notify" to 1..2, "volume" to 1..1, "notification" to 2..2, "screen" to 0..0, "close" to 0..0)
+    val actions = mapOf("terminal" to 1..2, "app" to 1..1, "run" to 1..1, "url" to 1..1, "launcher" to 1..1, "refresh" to 0..1, "media" to 1..1, "androidApp" to 1..1, "copy" to 1..1, "notify" to 1..2, "volume" to 1..1, "notification" to 2..2, "screen" to 0..0, "close" to 0..0, "torch" to 1..1, "share" to 1..1, "haptic" to 0..0)
 
     private fun lst(items: List<Value>) = Lst(if (items.size > MAX_LIST) items.subList(0, MAX_LIST) else items)
 
@@ -304,6 +304,8 @@ object Builtins {
             "split" to Builtin(2, 2) { a -> lst(a.str(0).split(a.str(1)).map(::Str)) },
             "join" to Builtin(1, 2) { a -> Str(a.list(0).joinToString(if (a.size > 1) a.str(1) else "") { if (it is Str) it.v else it.toString() }) },
             "replace" to Builtin(3, 3) { a -> Str(a.str(0).replace(a.str(1), a.str(2))) },
+            // owl 6: a value as one shell word, for commands put together while the widget runs.
+            "sh" to Builtin(1, 1) { a -> Str(shQuote(a[0].let { if (it == Null) "" else it.text() })) },
             "startsWith" to Builtin(2, 2) { a -> bool(a.str(0).startsWith(a.str(1))) },
             "endsWith" to Builtin(2, 2) { a -> bool(a.str(0).endsWith(a.str(1))) },
             "contains" to
@@ -542,3 +544,6 @@ object Builtins {
         return false
     }
 }
+
+/** [s] in single quotes, each `'` in it closed, escaped and reopened: bash reads it back as one word, exactly [s]. */
+fun shQuote(s: String) = "'" + s.replace("'", "'\\''") + "'"
