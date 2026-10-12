@@ -25,6 +25,12 @@ object LauncherData {
     /** Omarchy's release: themes, wallpapers, templates. The guest sees ~/.local/share/omarchy. */
     fun omarchyDir(context: Context) = File(context.filesDir, "omarchy")
 
+    /** The user's own Omarchy themes. The guest sees ~/.config/omarchy/themes, where omarchy-theme-install puts them. */
+    fun userThemesDir(context: Context) = File(context.filesDir, "themes")
+
+    /** The user's extra backgrounds, per theme. The guest sees ~/.config/omarchy/backgrounds. */
+    fun userBackgroundsDir(context: Context) = File(context.filesDir, "backgrounds")
+
     /** Widget files. The guest sees ~/.config/omalauncher/widgets. */
     fun widgetsDir(context: Context) = File(context.filesDir, "widgets")
 

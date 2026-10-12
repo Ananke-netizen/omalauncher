@@ -23,17 +23,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import dev.omalauncher.linux.JobState
 
-/** A full-screen framed panel with a title, optional [actions] and a close button: themes, agents, the store. */
+/**
+ * A full-screen framed panel with a title, optional [actions] and a close button: themes, agents, the store.
+ * With a [contentWidth], a wide screen centers the content at that width; the frame and title still span the panel.
+ */
 @Composable
 fun OverlayPanel(
     title: String,
     onDismiss: () -> Unit,
     actions: @Composable RowScope.() -> Unit = {},
+    contentWidth: Dp = Dp.Unspecified,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Box(
@@ -42,7 +47,7 @@ fun OverlayPanel(
             .background(Palette.overlay)
             .clickable(onClick = onDismiss)
             .safeDrawingPadding()
-            .padding(12.dp),
+            .padding(HomeGap),
     ) {
         Column(
             Modifier
@@ -50,19 +55,50 @@ fun OverlayPanel(
                 .frame(2.dp, Palette.accent, Palette.background, radius = 20.dp)
                 // Taps inside the panel don't reach the scrim behind it.
                 .pointerInput(Unit) { detectTapGestures { } }
-                .padding(12.dp),
+                .padding(PanelPadding),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                BasicText(title, style = Mono.copy(color = Palette.accent, fontSize = Mono.fontSize * 1.3f))
+                BasicText(title, style = Mono.copy(color = Palette.accent, fontSize = TextSize.Title))
                 Spacer(Modifier.weight(1f))
                 actions()
-                Box(Modifier.clickable(onClick = onDismiss).padding(8.dp)) { BasicText("✕", style = Mono.copy(color = Palette.red)) }
+                Symbol(Glyph.Close, Palette.red, Modifier.clickable(onClick = onDismiss).padding(8.dp), TextSize.Title)
             }
             Spacer(Modifier.height(8.dp))
-            content()
+            if (contentWidth == Dp.Unspecified) {
+                content()
+            } else {
+                Column(Modifier.weight(1f).widthIn(max = contentWidth).fillMaxWidth().align(Alignment.CenterHorizontally), content = content)
+            }
         }
     }
 }
+
+/** [OverlayPanel]'s padding inside its frame; rows that scroll sideways [bleed] through it to the frame. */
+val PanelPadding = 12.dp
+
+/** Widens the element by [gutter] on both sides, drawing over its parent's padding. */
+fun Modifier.bleed(gutter: Dp) =
+    layout { measurable, constraints ->
+        val extra = gutter.roundToPx() * 2
+        val placeable = measurable.measure(constraints.copy(minWidth = constraints.minWidth + extra, maxWidth = constraints.maxWidth + extra))
+        layout(placeable.width - extra, placeable.height) { placeable.place(-extra / 2, 0) }
+    }
+
+/** A muted heading over a group of rows: settings sections, the app drawer's letters. */
+@Composable
+fun SectionLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+) = BasicText(text, modifier.padding(top = 12.dp, bottom = 4.dp), style = Mono.copy(color = Palette.muted))
+
+/** A [Glyph] from the launcher's Nerd Font subset, sized like text. */
+@Composable
+fun Symbol(
+    glyph: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    fontSize: TextUnit = TextSize.Body,
+) = BasicText(glyph, modifier, style = Mono.copy(color = color, fontSize = fontSize, fontFamily = NerdSymbols))
 
 /** A terminal-style `[ label ]` button. */
 @Composable
@@ -90,7 +126,7 @@ fun JobLog(
         }
     if (log.isEmpty()) return
     Spacer(Modifier.height(6.dp))
-    val style = Mono.copy(color = if (state is JobState.Failed) Palette.red else Palette.muted, fontSize = Mono.fontSize * 0.8f)
+    val style = Mono.copy(color = if (state is JobState.Failed) Palette.red else Palette.muted, fontSize = TextSize.Small)
     // A failure's reason is usually at the end of the line: let it wrap.
     for (line in log.takeLast(lines)) BasicText(line, style = style, maxLines = if (state is JobState.Failed) 3 else 1)
 }

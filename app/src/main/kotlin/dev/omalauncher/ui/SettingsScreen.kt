@@ -32,7 +32,7 @@ import dev.omalauncher.linux.LinuxState
 fun SettingsScreen(
     runtime: Runtime,
     onDismiss: () -> Unit,
-    onThemes: () -> Unit,
+    onStyle: () -> Unit,
     onAgents: () -> Unit,
     onPackages: () -> Unit,
     onStore: () -> Unit,
@@ -43,7 +43,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val linux by runtime.bootstrap.state.collectAsState()
     val installed = linux == LinuxState.Installed
-    OverlayPanel("settings", onDismiss) {
+    OverlayPanel("settings", onDismiss, contentWidth = ReadingWidth) {
         val linuxStatus =
             when (val l = linux) {
                 LinuxState.Installed -> "installed · remove"
@@ -54,7 +54,7 @@ fun SettingsScreen(
             }
         val rows =
             listOf(
-                Triple("themes", runtime.themes.current?.title ?: "colors and backgrounds", onThemes),
+                Triple("style", runtime.themes.current?.title ?: "theme, background, home screen", onStyle),
                 Triple("linux", linuxStatus, onLinux),
                 if (installed) {
                     Triple("coding agents", runtime.agents.default?.let { "default: ${it.name}" } ?: "install Claude Code, OpenCode, …", onAgents)
@@ -92,10 +92,10 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        BasicText(title, style = Mono.copy(fontSize = Mono.fontSize * 1.1f))
-                        BasicText(subtitle, style = Mono.copy(color = Palette.muted, fontSize = Mono.fontSize * 0.85f))
+                        BasicText(title, style = Mono.copy(fontSize = TextSize.Item))
+                        BasicText(subtitle, style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
                     }
-                    BasicText("›", style = Mono.copy(color = Palette.accent, fontSize = Mono.fontSize * 1.4f))
+                    Symbol(Glyph.ChevronRight, Palette.accent, fontSize = TextSize.Title)
                 }
             }
         }
@@ -159,10 +159,10 @@ private fun UpdatesRow(runtime: Runtime) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                BasicText("system updates", style = Mono.copy(fontSize = Mono.fontSize * 1.1f))
+                BasicText("system updates", style = Mono.copy(fontSize = TextSize.Item))
                 BasicText(
                     status,
-                    style = Mono.copy(color = if ((pending?.count ?: 0) > 0 && !working) Palette.accent else Palette.muted, fontSize = Mono.fontSize * 0.85f),
+                    style = Mono.copy(color = if ((pending?.count ?: 0) > 0 && !working) Palette.accent else Palette.muted, fontSize = TextSize.Small),
                     maxLines = 3,
                 )
             }

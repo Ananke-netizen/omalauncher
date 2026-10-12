@@ -30,6 +30,7 @@ import dev.omalauncher.linux.Pacman
 import dev.omalauncher.linux.Proot
 import dev.omalauncher.linux.LinuxState
 import dev.omalauncher.linux.SystemUpdates
+import dev.omalauncher.linux.TerminalFont
 import dev.omalauncher.linux.bundledIcons
 import dev.omalauncher.linux.defaultApps
 import dev.omalauncher.linux.loadLinuxApps
@@ -72,6 +73,7 @@ class Runtime(
     val server = WaylandServer(proot.waylandSocket.path, wm).also { wm.server = it }
     val keyboard = KeyboardBridge(wm)
     val terminals = TerminalTiles(this)
+    val terminalFont = TerminalFont(context, proot)
     val linuxApps = mutableStateListOf<LinuxApp>()
 
     /** Icons of [linuxApps] by desktop id; apps without a PNG icon have no entry. */
@@ -150,6 +152,9 @@ class Runtime(
                 else -> false
             }
         }
+        // A terminal shown again after the text size changed catches up, with foot's own zoom keys.
+        wm.created = { window -> if (followsTerminalFont(window.appId)) terminalFont.track(window) }
+        wm.focusGained = { window -> wm.zoom(window, terminalFont.catchUp(window)) }
         wm.openAppWindow = { handle ->
             // Recents uses the activity's manifest label, not the task description's; see the aliases in the manifest.
             val window = wm.windowByHandle(handle)
@@ -279,6 +284,9 @@ class Runtime(
                 proot.procShim.start()
                 openBridge.start()
             }
+        } else {
+            // Linux installed again: its new home has no foot-font.ini yet.
+            terminalFont.write()
         }
         linux = true
         // The recent apps strip on home lists Linux apps before the app list is ever opened.
@@ -317,22 +325,32 @@ class Runtime(
         }
     }
 
-    /** Tells Wayland clients the screen's size and scale; they get it again on rotation or a density change. */
+    /**
+     * Tells Wayland clients the screen's size and scale; they get it again on
+     * rotation, a density change or a new Android font size, which also sizes
+     * the terminal font.
+     */
     private fun updateOutput() {
         val metrics = context.resources.displayMetrics
         val mmPerPx = 25.4f / metrics.xdpi
+        val scale = outputScale()
         server.updateOutput(
             OutputInfo(
                 metrics.widthPixels,
                 metrics.heightPixels,
-                // wl_output scales are integers. Rounded down (2.625 -> 2): terminals then fit the
-                // 80 columns btop needs in portrait, which foot.ini's font size is tuned for.
-                metrics.density.toInt().coerceIn(1, 4),
+                scale,
                 (metrics.widthPixels * mmPerPx).toInt(),
                 (metrics.heightPixels * mmPerPx).toInt(),
             ),
         )
+        terminalFont.update(metrics.density, context.resources.configuration.fontScale, scale, metrics.widthPixels)
     }
+
+    /** wl_output scales are integers, so the density rounds down (2.625 -> 2); [TerminalFont] makes up the rest. */
+    private fun outputScale() =
+        context.resources.displayMetrics.density
+            .toInt()
+            .coerceIn(1, 4)
 
     /** Re-runs update steps that failed, e.g. offline; see [Bootstrap.updates]. */
     fun retryUpdates() {
@@ -402,6 +420,15 @@ class Runtime(
     /** Wayland app_id -> the agent running in it, for sessions not named after their agent ("New app"). */
     private val launchedAgents = ConcurrentHashMap<String, Agent>()
 
+    /** Whether a window's foot takes its size from foot.ini, as its own terminals, plain foot and most tiles do. */
+    private fun followsTerminalFont(appId: String) =
+        when {
+            appId == "foot" -> true
+            launchedNames.containsKey(appId) -> !terminalFont.hasOwnSize(appId)
+            appId.startsWith(TerminalTiles.APP_ID_PREFIX) -> !terminals.hasOwnFont(appId)
+            else -> false
+        }
+
     /**
      * Opens [command] (or a shell) in a terminal named [name]. Each gets its own
      * foot app_id, so Recents shows "Grok" or "btop" rather than one "foot" per window.
@@ -422,7 +449,7 @@ class Runtime(
         launchedNames[appId] = name
         if (agent != null) launchedAgents[appId] = agent
         val args = command?.let { " -e bash -c " + shellQuote(it) }.orEmpty()
-        launch("foot --app-id=$appId$args")
+        launch("foot --app-id=$appId${terminalFont.optionFor(appId, command)}$args")
     }
 
     /**

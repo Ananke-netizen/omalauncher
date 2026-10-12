@@ -86,7 +86,8 @@ private fun DesktopScreen(
             state.licensesOpen -> state.licensesOpen = false
             state.agentsOpen -> state.agentsOpen = false
             state.storeOpen -> state.storeOpen = false
-            state.themesOpen -> state.themesOpen = false
+            state.themeBrowserOpen -> state.themeBrowserOpen = false
+            state.styleOpen -> state.styleOpen = false
             state.packagesOpen -> state.packagesOpen = false
             state.feedSettingsOpen -> state.feedSettingsOpen = false
             state.settingsOpen -> state.settingsOpen = false
@@ -174,7 +175,7 @@ private fun DesktopScreen(
         )
     }
     // The bar and the panel above it; the keyboard lifts both. Nothing here takes touches while the panel is closed,
-    // except the bar. Landscape folds them into a rail beside the grid, and unfolds them over it, centered.
+    // except the bar. A phone's landscape folds them into a rail beside the grid, and unfolds them over it, centered.
     val side = homeSide()
     if (side != null && !panelShown) {
         if (runtime.terminals.active == null) {
@@ -186,7 +187,7 @@ private fun DesktopScreen(
                 .fillMaxSize()
                 .safePadding()
                 .imePadding()
-                .then(if (side != null) Modifier.wrapContentWidth().widthIn(max = 640.dp) else Modifier),
+                .then(if (side != null) Modifier.wrapContentWidth().widthIn(max = ReadingWidth) else Modifier),
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (panelShown) {
@@ -211,7 +212,7 @@ private fun DesktopScreen(
                 }
             }
             // Hidden while a terminal tile types: it would sit on the keyboard, over the tile.
-            if (runtime.terminals.active == null) {
+            if (runtime.terminals.active == null || runtime.terminals.keyboardLeaving) {
                 // Home only: the open app list has everything.
                 if (LauncherStyle.recentApps && !panelShown) RecentStrip(runtime, handlers)
                 // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.
@@ -238,7 +239,7 @@ private fun ThemesOverlay(
         SettingsScreen(
             runtime,
             onDismiss = { state.settingsOpen = false },
-            onThemes = { state.themesOpen = true },
+            onStyle = { state.styleOpen = true },
             onAgents = { state.agentsOpen = true },
             onPackages = { state.packagesOpen = true },
             onStore = { state.storeOpen = true },
@@ -249,7 +250,8 @@ private fun ThemesOverlay(
     }
     if (state.feedSettingsOpen) FeedSettingsScreen(runtime.feed, onDismiss = { state.feedSettingsOpen = false })
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
-    if (state.themesOpen) ThemePicker(runtime.themes, onDismiss = { state.themesOpen = false })
+    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true })
+    if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })
     if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
     if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
     if (state.linuxOpen) LinuxScreen(runtime, onDismiss = { state.linuxOpen = false })

@@ -40,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -89,7 +88,7 @@ internal fun SetupScreen(runtime: Runtime) {
             ) {
                 Wordmark()
                 if (started) {
-                    ThemeDownloadProgress(themes.bundled.firstOrNull { it.name == themes.picked }?.title?.lowercase() ?: themes.picked, error, onRetry = ::fetchTheme, onSkip = runtime::finishWelcome)
+                    ThemeDownloadProgress(themes.choices.firstOrNull { it.name == themes.picked }?.title?.lowercase() ?: themes.picked, error, onRetry = ::fetchTheme, onSkip = runtime::finishWelcome)
                 } else {
                     Welcome(themes, linux, { linux = !linux }, picked) { bin -> picked = if (bin in picked) picked - bin else picked + bin }
                 }
@@ -133,7 +132,7 @@ private fun Welcome(
     Appear(0) {
         Column {
             Spacer(Modifier.height(10.dp))
-            BasicText("omarchy on your home screen", style = Mono.copy(fontSize = 16.sp))
+            BasicText("omarchy on your home screen", style = Mono.copy(fontSize = TextSize.Large))
             Spacer(Modifier.height(10.dp))
             BasicText(
                 "Omarchy's themes and wallpapers, your Android apps, and home-screen widgets. Arch Linux adds " +
@@ -146,10 +145,10 @@ private fun Welcome(
     // Each theme starts downloading as it's selected, the default one right away.
     LaunchedEffect(Unit) { themes.prefetch(themes.picked) }
     Appear(1) {
-        ThemeStrip(themes) {
+        ThemeStrip(themes, onPick = {
             themes.pick(it)
             themes.prefetch(it.name)
-        }
+        })
     }
     Spacer(Modifier.height(32.dp))
     Appear(2) {
@@ -176,7 +175,7 @@ internal fun AgentPicker(
         BasicText(
             "Pick any to install with Linux. You can add or remove them later in settings.",
             Modifier.padding(top = 4.dp, bottom = 14.dp),
-            style = Mono.copy(color = Subtle, fontSize = 12.sp),
+            style = Mono.copy(color = Subtle, fontSize = TextSize.Small),
         )
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (agent in AGENTS) Choice(agent.name, agent.description, agent.bin in picked) { onToggle(agent.bin) }
@@ -199,7 +198,7 @@ private fun StartButton(
                 "Downloads the theme's wallpaper now and Omarchy's other themes (about 70 MB) in the background."
             },
             Modifier.padding(top = 10.dp).fillMaxWidth(),
-            style = Mono.copy(color = Subtle, fontSize = 11.sp, lineHeight = 16.sp),
+            style = Mono.copy(color = Subtle, fontSize = TextSize.Small, lineHeight = 16.sp),
         )
     }
 }
@@ -215,7 +214,7 @@ private fun ThemeDownloadProgress(
     Spacer(Modifier.height(10.dp))
     BasicText(
         if (error != null) "the theme didn't download" else "getting $theme",
-        style = Mono.copy(fontSize = 16.sp, color = if (error != null) Palette.red else Palette.foreground),
+        style = Mono.copy(fontSize = TextSize.Large, color = if (error != null) Palette.red else Palette.foreground),
     )
     Spacer(Modifier.height(28.dp))
     StageRow(
@@ -230,12 +229,12 @@ private fun ThemeDownloadProgress(
         BasicText(
             "continue without wallpapers",
             Modifier.padding(top = 16.dp).clickable(onClick = onSkip),
-            style = Mono.copy(color = Palette.accent, fontSize = 13.sp),
+            style = Mono.copy(color = Palette.accent, fontSize = TextSize.Body),
         )
         BasicText(
-            "The theme's colors apply anyway. The launcher tries again later, or download them in settings › themes.",
+            "The theme's colors apply anyway. The launcher tries again later, or download them in settings › style.",
             Modifier.padding(top = 6.dp),
-            style = Mono.copy(color = Subtle, fontSize = 11.sp, lineHeight = 16.sp),
+            style = Mono.copy(color = Subtle, fontSize = TextSize.Small, lineHeight = 16.sp),
         )
     }
 }
@@ -258,8 +257,8 @@ private fun Choice(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            BasicText(title, style = Mono.copy(fontSize = 14.sp, color = if (on) Palette.foreground else Palette.foreground.copy(alpha = 0.8f)))
-            BasicText(description, style = Mono.copy(color = Subtle, fontSize = 11.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            BasicText(title, style = Mono.copy(fontSize = TextSize.Body, color = if (on) Palette.foreground else Palette.foreground.copy(alpha = 0.8f)))
+            BasicText(description, style = Mono.copy(color = Subtle, fontSize = TextSize.Small), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(12.dp))
         Check(on)
@@ -290,7 +289,7 @@ internal fun PrimaryButton(
             .padding(vertical = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(label, style = Mono.copy(color = Palette.background, fontSize = 15.sp, fontWeight = FontWeight.Bold))
+        BasicText(label, style = Mono.copy(color = Palette.background, fontSize = TextSize.Item, fontWeight = FontWeight.Bold))
     }
 }
 
@@ -307,7 +306,7 @@ internal fun LinuxProgress(
     val log = working?.log ?: failed?.log.orEmpty()
     BasicText(
         if (failed != null) "setup stopped" else "setting up linux",
-        style = Mono.copy(fontSize = 16.sp, color = if (failed != null) Palette.red else Palette.foreground),
+        style = Mono.copy(fontSize = TextSize.Large, color = if (failed != null) Palette.red else Palette.foreground),
     )
     Spacer(Modifier.height(24.dp))
     val stages = Stage.entries.filter { it != Stage.Agents || agents.isNotEmpty() }
@@ -338,7 +337,7 @@ internal fun LinuxProgress(
         BasicText(
             "You can close this and use the launcher; setup keeps going in the background.",
             Modifier.padding(top = 16.dp),
-            style = Mono.copy(color = Subtle, fontSize = 11.sp),
+            style = Mono.copy(color = Subtle, fontSize = TextSize.Small),
         )
     }
 }
@@ -355,9 +354,9 @@ private fun StageRow(
     Row {
         Box(Modifier.width(28.dp)) {
             when (status) {
-                StageStatus.Done -> BasicText("\udb80\udd2c", style = Mono.copy(color = Palette.green, fontFamily = NerdSymbols))
+                StageStatus.Done -> Symbol(Glyph.Check, Palette.green)
                 StageStatus.Running -> Spinner()
-                StageStatus.Failed -> BasicText("\udb80\udd56", style = Mono.copy(color = Palette.red, fontFamily = NerdSymbols))
+                StageStatus.Failed -> Symbol(Glyph.Close, Palette.red)
                 StageStatus.Pending -> BasicText("·", style = Mono.copy(color = Palette.border))
             }
         }
@@ -366,7 +365,7 @@ private fun StageRow(
                 label,
                 style =
                     Mono.copy(
-                        fontSize = 14.sp,
+                        fontSize = TextSize.Body,
                         color =
                             when (status) {
                                 StageStatus.Pending -> Subtle
@@ -379,7 +378,7 @@ private fun StageRow(
                 BasicText(
                     detail,
                     Modifier.padding(top = 4.dp),
-                    style = Mono.copy(color = if (status == StageStatus.Failed) Palette.red else Subtle, fontSize = 11.sp),
+                    style = Mono.copy(color = if (status == StageStatus.Failed) Palette.red else Subtle, fontSize = TextSize.Small),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -426,11 +425,11 @@ private fun LogTail(
         Row {
             Label("output")
             Spacer(Modifier.weight(1f))
-            BasicText(if (expanded) "less" else "more", style = Mono.copy(color = Palette.accent, fontSize = 11.sp))
+            BasicText(if (expanded) "less" else "more", style = Mono.copy(color = Palette.accent, fontSize = TextSize.Small))
         }
         Spacer(Modifier.height(6.dp))
         for (line in log.takeLast(if (expanded) 40 else 3)) {
-            BasicText(line, style = Mono.copy(color = Subtle, fontSize = 10.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            BasicText(line, style = Mono.copy(color = Subtle, fontSize = TextSize.Small), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -438,15 +437,18 @@ private fun LogTail(
 /**
  * Omarchy's themes as swatches in a horizontal row; tapping one recolors everything right away.
  * [gutter] is the parent's side padding, which the row scrolls under. By default a pick only
- * recolors, for setup where the full themes aren't downloaded yet.
+ * recolors, for setup where the full themes aren't downloaded yet. With [onBrowse], the row
+ * ends in a tile that opens the community themes.
  */
 @Composable
 internal fun ThemeStrip(
     themes: ThemeStore,
     gutter: Dp = Gutter,
     onPick: (BundledTheme) -> Unit = themes::pick,
+    onBrowse: (() -> Unit)? = null,
 ) {
-    val list = themes.bundled
+    RescanThemes(themes)
+    val list = themes.choices
     if (list.isEmpty()) return
     Column {
         Row {
@@ -454,7 +456,7 @@ internal fun ThemeStrip(
             Spacer(Modifier.weight(1f))
             BasicText(
                 list.firstOrNull { it.name == themes.picked }?.title?.lowercase().orEmpty(),
-                style = Mono.copy(color = Subtle, fontSize = 11.sp),
+                style = Mono.copy(color = Subtle, fontSize = TextSize.Small),
             )
         }
         Spacer(Modifier.height(12.dp))
@@ -467,6 +469,7 @@ internal fun ThemeStrip(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(list, key = { it.name }) { theme -> ThemeSwatch(theme, theme.name == themes.picked) { onPick(theme) } }
+            if (onBrowse != null) item(key = "browse") { BrowseSwatch(onBrowse) }
         }
     }
 }
@@ -487,7 +490,7 @@ private fun ThemeSwatch(
             .clickable(onClick = onClick)
             .padding(10.dp),
     ) {
-        BasicText(theme.title.lowercase(), style = Mono.copy(color = color("foreground"), fontSize = 11.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        BasicText(theme.title.lowercase(), style = Mono.copy(color = color("foreground"), fontSize = TextSize.Small), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             for (key in listOf("accent", "red", "yellow", "green", "magenta")) {
@@ -497,9 +500,27 @@ private fun ThemeSwatch(
     }
 }
 
+/** The strip's last tile, shaped like a [ThemeSwatch]: opens the community themes. */
+@Composable
+private fun BrowseSwatch(onClick: () -> Unit) {
+    Column(
+        Modifier
+            .width(112.dp)
+            .frame(1.dp, Palette.border, Palette.surface, radius = 12.dp)
+            .clickable(onClick = onClick)
+            .padding(10.dp),
+    ) {
+        BasicText("more themes ›", style = Mono.copy(color = Palette.accent, fontSize = TextSize.Small), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            repeat(5) { Box(Modifier.size(width = 14.dp, height = 6.dp).background(Palette.border)) }
+        }
+    }
+}
+
 @Composable
 internal fun Label(text: String) {
-    BasicText(text.uppercase(), style = Mono.copy(color = Palette.accent, fontSize = 11.sp, letterSpacing = 1.5.sp))
+    BasicText(text.uppercase(), style = Mono.copy(color = Palette.accent, fontSize = TextSize.Small, letterSpacing = 1.5.sp))
 }
 
 /** Fades and slides content in, [index] steps after the screen appears; its space is kept from the start. */
@@ -530,10 +551,3 @@ private val Subtle get() = Palette.foreground.copy(alpha = 0.6f)
 /** Side padding of the setup screens. */
 private val Gutter = 24.dp
 
-/** Widens the element by [gutter] on both sides, drawing over its parent's padding. */
-private fun Modifier.bleed(gutter: Dp) =
-    layout { measurable, constraints ->
-        val extra = gutter.roundToPx() * 2
-        val placeable = measurable.measure(constraints.copy(minWidth = constraints.minWidth + extra, maxWidth = constraints.maxWidth + extra))
-        layout(placeable.width - extra, placeable.height) { placeable.place(-extra / 2, 0) }
-    }

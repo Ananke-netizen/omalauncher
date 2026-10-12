@@ -45,7 +45,7 @@ fun FeedSettingsScreen(
 ) {
     val s = store.settings
     val update = store::update
-    OverlayPanel("feed", onDismiss) {
+    OverlayPanel("feed", onDismiss, contentWidth = ReadingWidth) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             item {
                 Choice("feed", listOf("on", "off"), if (s.enabled) 0 else 1) { i -> update { it.copy(enabled = i == 0) } }
@@ -141,7 +141,7 @@ private fun <T> Set<T>.with(
 private fun Group(title: String) {
     Row(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         BasicText("── ", style = Mono.copy(color = Palette.border))
-        BasicText(title, style = Mono.copy(color = Palette.accent, fontSize = Mono.fontSize * 1.1f))
+        BasicText(title, style = Mono.copy(color = Palette.accent, fontSize = TextSize.Item))
     }
 }
 
@@ -152,11 +152,11 @@ private fun FieldLabel(text: String) {
 
 @Composable
 private fun Hint(text: String) {
-    BasicText(text, Modifier.padding(vertical = 4.dp), style = Mono.copy(color = Palette.muted, fontSize = Mono.fontSize * 0.85f))
+    BasicText(text, Modifier.padding(vertical = 4.dp), style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
 }
 
 /**
- * A labeled segmented choice, like the themes screen's: the picked option fills with the accent color. The
+ * A labeled segmented choice, like the style screen's: the picked option fills with the accent color. The
  * label goes above when the options wouldn't fit beside it on a phone.
  */
 @Composable

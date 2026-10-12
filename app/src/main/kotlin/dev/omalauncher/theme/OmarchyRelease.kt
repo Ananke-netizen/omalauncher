@@ -1,11 +1,8 @@
 package dev.omalauncher.theme
 
+import dev.omalauncher.httpGet
 import dev.omalauncher.upgrade.writeAtomically
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import java.io.File
-import java.io.FilterInputStream
-import java.net.URL
-import java.util.zip.GZIPInputStream
 
 /** What we keep from the Omarchy repo: themes, config templates and app configs. */
 private val KEEP_PATHS =
@@ -47,46 +44,16 @@ class OmarchyRelease(
         path: String,
         target: File,
     ) {
-        val conn = URL("https://raw.githubusercontent.com/omacom/omarchy/${ThemeStore.OMARCHY_REF}/$path").openConnection()
-        conn.connectTimeout = 15_000
-        conn.readTimeout = 30_000
-        writeAtomically(target, conn.getInputStream().use { it.readBytes() })
+        val url = "https://raw.githubusercontent.com/omacom/omarchy/${ThemeStore.OMARCHY_REF}/$path"
+        writeAtomically(target, httpGet(url, connectTimeout = 15_000, readTimeout = 30_000))
     }
 
     /** Blocking. [onProgress] gets the megabytes read so far. */
     fun download(onProgress: (Int) -> Unit) {
         val staging = File(dir.parentFile, ".omarchy.download").apply { deleteRecursively() }
-        val conn = URL("https://codeload.github.com/omacom/omarchy/tar.gz/${ThemeStore.OMARCHY_REF}").openConnection()
-        conn.connectTimeout = 15_000
-        conn.readTimeout = 30_000
-        var read = 0L
-        val counting =
-            object : FilterInputStream(conn.getInputStream()) {
-                override fun read(
-                    b: ByteArray,
-                    off: Int,
-                    len: Int,
-                ): Int =
-                    super.read(b, off, len).also {
-                        if (it > 0) {
-                            val before = read shr 20
-                            read += it
-                            if (read shr 20 != before) onProgress((read shr 20).toInt())
-                        }
-                    }
-            }
-        TarArchiveInputStream(GZIPInputStream(counting.buffered(1 shl 16))).use { tar ->
-            while (true) {
-                val entry = tar.nextEntry ?: break
-                // Entries look like omarchy-<ref>/themes/<name>/...
-                val path = entry.name.substringAfter('/')
-                val keep = KEEP_PATHS.any { path.startsWith(it) }
-                // The lock-screen images are unused here and add ~20 MB.
-                if (!keep || path.endsWith("unlock.png") || !entry.isFile) continue
-                val out = File(staging, path)
-                out.parentFile?.mkdirs()
-                out.outputStream().use { tar.copyTo(it) }
-            }
+        unpackTarball("https://codeload.github.com/omacom/omarchy/tar.gz/${ThemeStore.OMARCHY_REF}", staging, onProgress) { path ->
+            // The lock-screen images are unused here and add ~20 MB.
+            KEEP_PATHS.any { path.startsWith(it) } && !path.endsWith("unlock.png")
         }
         File(staging, marker.name).writeText(ThemeStore.OMARCHY_REF + "\n")
         dir.deleteRecursively()
