@@ -1,0 +1,1 @@
+Backups now include what swiping up on home does (settings › gestures), so a restore brings that back too.

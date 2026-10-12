@@ -46,8 +46,9 @@ internal object BackupFormat {
             // Theme, background and the style screen's options. Linux's theme files are written again.
             PrefsPart("themes", setOf("theme", "background", "mono_icons", "bare_app_icons", "recent_apps", "corners"), reset = setOf("rendered_by")),
             PrefsPart("feed", setOf("settings")),
-            // The terminal's text size and font; the rest of these preferences are this install's.
-            PrefsPart("launcher", setOf("terminal_text", "terminal_font")),
+            // The terminal's text size and font and what swiping up on home does (settings > gestures);
+            // the rest of these preferences are this install's.
+            PrefsPart("launcher", setOf("terminal_text", "terminal_font", "gesture_swipe_up")),
         )
 
     /**
