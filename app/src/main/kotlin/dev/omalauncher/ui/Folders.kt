@@ -275,7 +275,7 @@ internal fun FolderPanel(
                 val f = FastOutSlowInEasing.transform(phase(t, 0f, 0.6f))
                 val r = lerp(from, to, f)
                 val stroke = 2.dp.toPx()
-                val radius = lerp(16.dp, 20.dp, f).toPx() * LauncherStyle.corners.scale
+                val radius = lerp(16.dp, 20.dp, f).toPx() * LauncherStyle.cornerScale
                 drawRoundRect(Palette.background.copy(alpha = f), r.topLeft, r.size, CornerRadius(radius))
                 drawRoundRect(
                     lerp(Palette.border, Palette.accent, f),

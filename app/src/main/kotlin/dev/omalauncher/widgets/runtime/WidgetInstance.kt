@@ -274,7 +274,7 @@ class WidgetInstance(
         val v =
             when (name) {
                 "linux" -> return bool(linux())
-                "corners" -> return Num(LauncherStyle.corners.scale.toDouble())
+                "corners" -> return Num(LauncherStyle.cornerScale.toDouble())
                 "screenWidth" -> screenSize.value[0]
                 "screenHeight" -> screenSize.value[1]
                 "cols" -> tileSize.value[0]
