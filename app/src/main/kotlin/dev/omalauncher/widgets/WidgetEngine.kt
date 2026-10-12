@@ -727,11 +727,20 @@ class WidgetEngine(
     /** Agents look for AGENTS.md / CLAUDE.md in the guest home; these point them at the widget docs. */
     fun guestManaged(): List<Managed> =
         listOf("AGENTS.md", "CLAUDE.md").map { Managed.text(File(proot.home, it), Policy.Seeded) { AGENT_POINTER } } +
-            listOf("owl-check", "owl-send", "house").map { bin ->
+            listOf("owl-check", "owl-send", "house", "house-menu", "house-mirror", "agenda").map { bin ->
                 Managed(File(proot.rootfs, "usr/local/bin/$bin"), Policy.Owned, executable = true) { context.assets.open("$bin.sh").use { it.readBytes() } }
+            } +
+            // The home server's two terminal apps, in the drawer: house (its menu) and agenda.
+            HOUSE_APPS.map { (bin, name) ->
+                Managed.text(File(proot.applications, "house-$bin.desktop"), Policy.Owned) {
+                    "[Desktop Entry]\nType=Application\nName=$name\nTerminal=true\nExec=$bin\n"
+                }
             }
 
     companion object {
+        /** The home server's terminal apps in the drawer: command to name. */
+        val HOUSE_APPS = listOf("house" to "House", "agenda" to "Agenda")
+
         /** The default terminal tile, which [addTerminalWidget] copies. */
         private const val TERMINAL_ASSET = "45-terminal.owl"
         private const val TERMINAL_PREFIX = "terminal-"

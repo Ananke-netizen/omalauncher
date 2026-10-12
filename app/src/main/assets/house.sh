@@ -12,6 +12,9 @@
 # User text never goes through a shell on the Pi: it travels on stdin and is read there with "$(cat)".
 set -u
 PI=${HOUSE_PI:-raspberrypi}
+# The widgets dir on the Pi, under its home (house-mirror reads it too).
+export HOUSE_WIDGETS=${HOUSE_WIDGETS:-omalauncher/widgets}
+[[ $HOUSE_WIDGETS =~ ^[A-Za-z0-9._/-]+$ && $HOUSE_WIDGETS != *..* ]] || { echo "house: bad HOUSE_WIDGETS" >&2; exit 2; }
 CACHE=${XDG_CACHE_HOME:-$HOME/.cache}
 HERE=$(dirname "$0")
 
@@ -23,8 +26,8 @@ sync() {
     tmp=$(mktemp -d "$CACHE/.house.XXXXXX") || die "no temp dir"
     trap 'rm -rf "$tmp"' EXIT
     # One ssh: the snapshot, then the Pi's top-level widgets for house-mirror.
-    pi 'mkdir -p ~/omalauncher/widgets && cd ~/omalauncher/widgets && find . -maxdepth 1 -name "*.owl" -type f -printf "%f\n" |
-        tar -cf - -C ~/.local/share/house house.json -C ~/omalauncher/widgets -T -' < /dev/null | tar -xf - -C "$tmp" 2> /dev/null
+    pi "mkdir -p ~/$HOUSE_WIDGETS && cd ~/$HOUSE_WIDGETS && find . -maxdepth 1 -name '*.owl' -type f -printf '%f\\n' |
+        tar -cf - -C ~/.local/share/house house.json -C ~/$HOUSE_WIDGETS -T -" < /dev/null | tar -xf - -C "$tmp" 2> /dev/null
     local got=("${PIPESTATUS[@]}")
     [ -s "$tmp/house.json" ] || die "couldn't reach $PI"
     chmod 600 "$tmp/house.json"
