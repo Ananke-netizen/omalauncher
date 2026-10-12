@@ -13,6 +13,20 @@
 >
 > MIT licensed, like the original ([LICENSE](LICENSE)).
 
+### What this fork adds: the feed
+
+Swipe right on the first home page for Hacker News, recent posts from tech accounts on X,
+and headlines from tech and news sites, in the theme's colors. Settings › feed picks the
+sites, the X accounts, muted words and how often it refreshes ([more](#using-it)).
+
+<p>
+  <img src="docs/fork/screenshots/feed-1.png" width="32%" alt="The feed: Hacker News, posts from X and tech and news headlines, one swipe right from home">
+  <img src="docs/fork/screenshots/feed-2.png" width="32%" alt="The feed's settings: sites, X accounts, muted words and how often it refreshes">
+  <img src="docs/fork/screenshots/feed-3.png" width="32%" alt="The feed in the White, Tokyo Night and Vantablack themes">
+</p>
+
+---
+
 An Android home screen with the look of [Omarchy](https://omarchy.org), and an
 optional Arch Linux ARM system next to your phone apps. Omalauncher runs the
 system under proot, without root, and is its Wayland compositor: every Linux
