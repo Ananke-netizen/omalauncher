@@ -45,11 +45,14 @@ class LauncherState {
     val feed = FeedReveal()
     var feedSettingsOpen by mutableStateOf(false)
 
+    /** Backing the home screen up to a file and restoring it. */
+    var backupOpen by mutableStateOf(false)
+
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
         get() =
             drawer.value > 0.99f || settingsOpen || styleOpen || themeBrowserOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null ||
-                sharing != null || feed.progress.value > 0.99f || feedSettingsOpen
+                sharing != null || feed.progress.value > 0.99f || feedSettingsOpen || backupOpen
 
     /** Closes every overlay screen (settings and what it opens). */
     fun closeScreens() {
@@ -65,6 +68,7 @@ class LauncherState {
         shared = null
         sharing = null
         feedSettingsOpen = false
+        backupOpen = false
         if (feed.isOpen) feed.close()
     }
 

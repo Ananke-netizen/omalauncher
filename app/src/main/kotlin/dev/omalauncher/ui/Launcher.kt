@@ -91,6 +91,7 @@ private fun DesktopScreen(
             state.styleOpen -> state.styleOpen = false
             state.packagesOpen -> state.packagesOpen = false
             state.feedSettingsOpen -> state.feedSettingsOpen = false
+            state.backupOpen -> state.backupOpen = false
             state.settingsOpen -> state.settingsOpen = false
             runtime.widgets.openScreen != null -> runtime.widgets.openScreen = null
             state.feed.isOpen -> state.feed.close()
@@ -245,9 +246,11 @@ private fun ThemesOverlay(
             onLinux = { state.linuxOpen = true },
             onLicenses = { state.licensesOpen = true },
             onFeed = { state.feedSettingsOpen = true },
+            onBackup = { state.backupOpen = true },
         )
     }
     if (state.feedSettingsOpen) FeedSettingsScreen(runtime.feed, onDismiss = { state.feedSettingsOpen = false })
+    if (state.backupOpen) BackupScreen(onDismiss = { state.backupOpen = false })
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
     if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true })
     if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })

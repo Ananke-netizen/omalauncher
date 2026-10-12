@@ -53,6 +53,13 @@ off; settings › feed picks the sources, the X accounts, muted words and how
 often it refreshes. X has no free API for reading, so its posts come through
 FxTwitter's open API (api.fxtwitter.com), which now and then misses an account.
 
+Backup: settings › backup & restore saves the home screen to a file you pick
+(pinned apps and folders, widgets with their data, where everything sits, the
+theme and style, the feed's settings) and restores it from one, showing what the
+file holds first and keeping what it replaces so the restore can be undone. It
+carries a home screen across an uninstall, a new signing key or a new phone;
+Linux itself isn't in it.
+
 Touch input in Linux windows: tap is a left click, long press is a right
 click, drag scrolls; apps with touch support (foot, GTK) get real touch.
 Hardware keyboard shortcuts: Super+Enter (terminal), Super+Space or
