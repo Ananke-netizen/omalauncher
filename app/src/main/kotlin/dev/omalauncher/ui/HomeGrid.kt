@@ -10,6 +10,7 @@ import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.graphicsLayer
@@ -551,6 +552,7 @@ internal fun HomeGrid(
                             var last = start
                             var released = false
                             var consumedBySomeoneElse = false
+                            var crossing: PointerInputChange? = null
                             val held =
                                 withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                                     while (true) {
@@ -562,7 +564,10 @@ internal fun HomeGrid(
                                         }
                                         last = c.position
                                         // Moved before the long press: it's a drag, not a menu press.
-                                        if ((last - start).getDistance() > viewConfiguration.touchSlop) break
+                                        if ((last - start).getDistance() > viewConfiguration.touchSlop) {
+                                            crossing = c
+                                            break
+                                        }
                                     }
                                 } == null
                             if (held) {
@@ -582,15 +587,9 @@ internal fun HomeGrid(
                                     lastTap = null
                                 }
                             } else if (!released) {
-                                while (true) {
-                                    val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
-                                    if (c.isConsumed) consumedBySomeoneElse = true
-                                    if (!c.pressed) break
-                                    last = c.position
-                                }
-                                if (!consumedBySomeoneElse) {
-                                    classifyHomeSwipe(last.x - start.x, last.y - start.y, 120f)?.let(onSwipe)
-                                }
+                                // Past slop: a clearly vertical drag is claimed from the pager (see
+                                // followEmptySpaceDrag), so a slightly diagonal swipe up still opens the bar.
+                                followEmptySpaceDrag(down.id, start, crossing, consumedBySomeoneElse)?.let(onSwipe)
                             }
                             return@awaitEachGesture
                         }

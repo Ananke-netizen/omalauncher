@@ -250,7 +250,7 @@ fun HomeScreen(
             layout = engine.layout,
             arrange = arrange,
             // Dragging past the first page pulls in the feed.
-            modifier = Modifier.weight(1f).fillMaxWidth().nestedScroll(rememberFeedScroll(state.feed, runtime.feed.settings.enabled)),
+            modifier = Modifier.weight(1f).fillMaxWidth().nestedScroll(rememberFeedScroll(state.feed, runtime.feed.settings.enabled)).feedPullGate(state.feed),
             selected = state.editing,
             onSelect = { state.editing = it },
             actions = { item ->

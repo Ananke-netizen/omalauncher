@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -62,6 +64,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -140,17 +143,41 @@ class FeedReveal {
         launch { progress.snapTo(to) }
     }
 
+    /**
+     * Whether the touch now on screen may start pulling the feed in: set by [feedPullGate] once it passes
+     * touch slop, so only a level drag ([feedPullAllowed]) opens it, never a swipe up that leaned sideways.
+     * True until a gate is attached, so the feed still works wherever none is.
+     */
+    var pullAllowed = true
+        internal set
+
     /** Settles after a drag; [velocity] is in px/s, positive towards open. */
     fun settle(velocity: Float) {
         if (!dragging) return
-        when {
-            velocity > 800f -> open()
-            velocity < -800f -> close()
-            position > 0.35f -> open()
-            else -> close()
-        }
+        if (feedSettlesOpen(velocity, position)) open() else close()
     }
 }
+
+/**
+ * Watches every touch over home, without consuming it, to decide at touch slop whether it may pull the feed
+ * in ([FeedReveal.pullAllowed]). The pager can't tell: it only passes on the horizontal part of a drag.
+ */
+internal fun Modifier.feedPullGate(reveal: FeedReveal): Modifier =
+    pointerInput(reveal) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            reveal.pullAllowed = false
+            while (true) {
+                val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                if (!c.pressed) break
+                val d = c.position - down.position
+                if (d.getDistance() > viewConfiguration.touchSlop) {
+                    reveal.pullAllowed = feedPullAllowed(d.x, d.y)
+                    break
+                }
+            }
+        }
+    }
 
 /** +1 when the feed is to the left of home, -1 under a right-to-left layout, where the first page is on the right. */
 @Composable
@@ -186,6 +213,8 @@ internal fun rememberFeedScroll(
                 source: NestedScrollSource,
             ): Offset {
                 if (!on || source != NestedScrollSource.UserInput || side * available.x <= 0f) return Offset.Zero
+                // Only a level drag starts a pull; once it's started, the pre-scroll above carries it.
+                if (!reveal.dragging && !reveal.pullAllowed) return Offset.Zero
                 reveal.dragBy(side * available.x / width)
                 return Offset(available.x, 0f)
             }

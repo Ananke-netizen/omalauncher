@@ -36,8 +36,12 @@ android {
         }
     }
 
-    // android.util.Log and friends are no-ops in JVM tests instead of throwing.
-    testOptions { unitTests.isReturnDefaultValues = true }
+    // android.util.Log and friends are no-ops in JVM tests instead of throwing. Robolectric tests (the Compose
+    // gesture tests) get the real framework and need the merged manifest for ui-test's host activity.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
+    }
 
     signingConfigs {
         create("release") {
@@ -76,4 +80,8 @@ dependencies {
     testImplementation(libs.junit)
     // android.jar only has stubs of org.json.
     testImplementation(libs.org.json)
+    // Compose UI tests on the JVM: swipes through the real pager, feed gate and home axis lock.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
