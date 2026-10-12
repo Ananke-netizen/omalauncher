@@ -71,8 +71,8 @@ class BackupFormatTest {
         val o = prefsToJson(mapOf("theme" to "kanagawa", "rendered_by" to "9-123", "mono_icons" to true), themes)
         assertEquals(setOf("theme", "mono_icons"), o.keys().asSequence().toSet())
         val launcher = BackupFormat.PREFS.first { it.name == "launcher" }
-        val l = prefsToJson(mapOf("setup_done" to true, "gpu_wanted" to true, "terminal_font" to "JetBrains Mono"), launcher)
-        assertEquals(setOf("terminal_font"), l.keys().asSequence().toSet())
+        val l = prefsToJson(mapOf("setup_done" to true, "gpu_wanted" to true, "terminal_font" to "JetBrains Mono", "gesture_swipe_up" to "none"), launcher)
+        assertEquals(setOf("terminal_font", "gesture_swipe_up"), l.keys().asSequence().toSet())
     }
 
     @Test fun restoringAWholeFileClearsItFirst() {

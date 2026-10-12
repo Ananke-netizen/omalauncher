@@ -68,7 +68,7 @@ FxTwitter's open API (api.fxtwitter.com), which now and then misses an account.
 
 Backup: settings › backup & restore saves the home screen to a file you pick
 (pinned apps and folders, widgets with their data, where everything sits, the
-theme and style, the feed's settings) and restores it from one, showing what the
+theme, style and gestures, the feed's settings) and restores it from one, showing what the
 file holds first and keeping what it replaces so the restore can be undone. It
 carries a home screen across an uninstall, a new signing key or a new phone;
 Linux itself isn't in it.
