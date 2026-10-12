@@ -68,8 +68,9 @@ class BackupFormatTest {
 
     @Test fun onlyAPartsKeysAreBackedUp() {
         val themes = BackupFormat.PREFS.first { it.name == "themes" }
-        val o = prefsToJson(mapOf("theme" to "kanagawa", "rendered_by" to "9-123", "mono_icons" to true), themes)
-        assertEquals(setOf("theme", "mono_icons"), o.keys().asSequence().toSet())
+        // Every style option, one added after this test included, but not what says Linux was themed here.
+        val o = prefsToJson(mapOf("theme" to "kanagawa", "rendered_by" to "9-123", "mono_icons" to true, "framed_system_bars" to false, "a_later_option" to 2), themes)
+        assertEquals(setOf("theme", "mono_icons", "framed_system_bars", "a_later_option"), o.keys().asSequence().toSet())
         val launcher = BackupFormat.PREFS.first { it.name == "launcher" }
         val l = prefsToJson(mapOf("setup_done" to true, "gpu_wanted" to true, "terminal_font" to "JetBrains Mono", "gesture_swipe_up" to "none"), launcher)
         assertEquals(setOf("terminal_font", "gesture_swipe_up"), l.keys().asSequence().toSet())
@@ -82,14 +83,22 @@ class BackupFormatTest {
     }
 
     @Test fun restoringSomeKeysLeavesTheRestAndResets() {
-        val themes = BackupFormat.PREFS.first { it.name == "themes" }
-        val edit = prefsEdit(themes, mapOf("theme" to "kanagawa", "stray" to 1))
+        val launcher = BackupFormat.PREFS.first { it.name == "launcher" }
+        val edit = prefsEdit(launcher, mapOf("terminal_font" to "Hack", "setup_done" to true))
         assertFalse(edit.clearAll)
-        assertEquals(mapOf("theme" to "kanagawa"), edit.put)
-        // A background that wasn't set when backing up isn't left from before; Linux's theme files are written again.
-        assertTrue("background" in edit.remove)
+        // This install's own state (setup, GPU) stays as it is.
+        assertEquals(mapOf("terminal_font" to "Hack"), edit.put)
+        // A setting that wasn't set when backing up isn't left from before.
+        assertTrue("gesture_swipe_up" in edit.remove)
+        assertFalse("setup_done" in edit.remove)
+    }
+
+    @Test fun restoringTheStyleReplacesItAndThemesLinuxAgain() {
+        val themes = BackupFormat.PREFS.first { it.name == "themes" }
+        val edit = prefsEdit(themes, mapOf("theme" to "kanagawa", "framed_system_bars" to false))
+        assertTrue(edit.clearAll)
+        assertEquals(mapOf("theme" to "kanagawa", "framed_system_bars" to false), edit.put)
         assertTrue("rendered_by" in edit.remove)
-        assertFalse("theme" in edit.remove)
     }
 
     @Test fun backsUpAndRestoresTheHomeScreen() {

@@ -1,0 +1,1 @@
+Backups now carry every option on the style screen, including whether home frames the status and gesture bars, and any style option added later, so a restore brings your whole look back.
