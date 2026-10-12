@@ -13,13 +13,14 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
- * A SharedPreferences file in a backup. [keys] are the ones it holds, null for all of them;
- * [reset] are removed on restore, since they record what was done on this install.
+ * A SharedPreferences file in a backup. [keys] are the ones it holds, null for all of them but
+ * [exclude]; [reset] are removed on restore, since they record what was done on this install.
  */
 internal class PrefsPart(
     val name: String,
     val keys: Set<String>?,
     val reset: Set<String> = emptySet(),
+    val exclude: Set<String> = emptySet(),
 )
 
 /**
@@ -43,8 +44,9 @@ internal object BackupFormat {
             PrefsPart("widget_grid", setOf("layout")),
             // The recent apps strip.
             PrefsPart("app_usage", null),
-            // Theme, background and the style screen's options. Linux's theme files are written again.
-            PrefsPart("themes", setOf("theme", "background", "mono_icons", "bare_app_icons", "recent_apps", "corners"), reset = setOf("rendered_by")),
+            // Theme, background and every option on the style screen, those upstream adds later included;
+            // rendered_by only says Linux's theme files were written here, so they're written again.
+            PrefsPart("themes", null, reset = setOf("rendered_by"), exclude = setOf("rendered_by")),
             PrefsPart("feed", setOf("settings")),
             // The terminal's text size and font and what swiping up on home does (settings > gestures);
             // the rest of these preferences are this install's.
@@ -101,7 +103,7 @@ internal fun prefsToJson(
 ): JSONObject {
     val o = JSONObject()
     for ((key, value) in values) {
-        if (part.keys != null && key !in part.keys) continue
+        if (part.keys != null && key !in part.keys || key in part.exclude) continue
         val typed =
             when (value) {
                 is String -> JSONObject().put("t", "s").put("v", value)
