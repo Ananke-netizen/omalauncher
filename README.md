@@ -1,5 +1,18 @@
 # Omalauncher
 
+> **This is a personal fork of [Omalauncher](https://github.com/SimonSchubert/omalauncher),
+> created by [Simon Schubert](https://github.com/SimonSchubert).** The official app is on
+> [Google Play](https://play.google.com/store/apps/details?id=dev.omalauncher).
+>
+> This fork follows upstream and adds its own changes: a feed left of the first home page,
+> folders that open out of their tile, and backup & restore. Its APKs are published on
+> [this repository's releases](https://github.com/Mhsbrian/omalauncher/releases) and signed
+> with a different key, so they are not the Google Play app: one can't be installed over the
+> other, and the original author doesn't support this fork. Please don't report its problems
+> upstream.
+>
+> MIT licensed, like the original ([LICENSE](LICENSE)).
+
 An Android home screen with the look of [Omarchy](https://omarchy.org), and an
 optional Arch Linux ARM system next to your phone apps. Omalauncher runs the
 system under proot, without root, and is its Wayland compositor: every Linux
