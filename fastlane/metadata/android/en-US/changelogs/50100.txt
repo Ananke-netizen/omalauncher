@@ -1,0 +1,1 @@
+Work apps pause and turn on from the work tab's switch, as in stock launchers; the extra "pause work apps" entry in a work app's long-press menu is gone, since the tab does the same.

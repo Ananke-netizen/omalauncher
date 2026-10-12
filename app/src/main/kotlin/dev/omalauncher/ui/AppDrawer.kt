@@ -205,8 +205,6 @@ internal class AppHandlers(
     val pin: (AppHit) -> Unit,
     val info: (AndroidApp) -> Unit,
     val uninstall: (AndroidApp) -> Unit,
-    /** A work app's pause or turn on work apps entry, when offered; see [dev.omalauncher.WorkApps]. */
-    val work: (AndroidApp) -> Pair<String, () -> Unit>? = { null },
 )
 
 /** The long-press menu of an app cell: pin to home, and for Android apps their info and uninstall. */
@@ -218,7 +216,6 @@ private fun AppHit.actions(handlers: AppHandlers): List<Pair<String, () -> Unit>
                 "add to home" to { handlers.pin(this) },
                 "app info" to { handlers.info(app) },
                 if (app.system) null else "uninstall" to { handlers.uninstall(app) },
-                handlers.work(app),
             )
     }
 
