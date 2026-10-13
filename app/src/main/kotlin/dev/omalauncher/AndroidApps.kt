@@ -188,6 +188,20 @@ class AndroidAppCatalog(
     /** Names by [AndroidApp.key] and [AndroidShortcut.key], in the phone's language now; home's tiles go by these. */
     val labels by derivedStateOf { apps.associate { it.key to it.label } + shortcuts.associate { it.key to it.label } }
 
+    private val byKey by derivedStateOf { apps.associateBy { it.key } }
+
+    /**
+     * The app a home tile pinned as [component] in [profile] opens now. Apps that let you pick another icon (Duolingo,
+     * X) do it by switching to another launcher activity, and an update may rename theirs, so a tile whose activity is
+     * gone goes to its app's current one. Null while neither is listed.
+     */
+    fun pinned(
+        component: ComponentName,
+        profile: Long?,
+    ): AndroidApp? =
+        byKey[androidAppKey(component, profile)]
+            ?: apps.firstOrNull { it.component.packageName == component.packageName && it.profile == profile }
+
     /** Serial numbers of the profiles whose apps are paused (work apps turned off); their apps show dimmed. */
     var pausedProfiles by mutableStateOf(emptySet<Long>())
         private set
