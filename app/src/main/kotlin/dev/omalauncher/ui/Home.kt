@@ -81,6 +81,8 @@ fun HomeScreen(
         showPage = null
     }
     var menuFor by remember { mutableStateOf<HomeItem?>(null) }
+    // The folder whose name is being typed, from its open panel or its edit bar.
+    var naming by remember { mutableStateOf<String?>(null) }
 
     val terminals = runtime.terminals
     BackHandler(enabled = terminals.active != null) { terminals.deactivate() }
@@ -264,6 +266,12 @@ fun HomeScreen(
             actions = { item ->
                 EditBar {
                     if (item is WidgetItem) EditAction("edit") { edit(item) }
+                    if (item is Folder) {
+                        EditAction("rename") {
+                            state.editing = null
+                            naming = item.key
+                        }
+                    }
                     // A pinned Android app's icon, as from the drawer.
                     if (item is Shortcut && item.component != null) {
                         runtime.androidApps.apps.firstOrNull { it.component == item.component && it.profile == item.profile }?.let { app ->
@@ -357,6 +365,22 @@ fun HomeScreen(
             },
             onGroup = { app, target -> engine.shortcuts.group(app, target) },
             onReorder = { app, before -> engine.shortcuts.moveBefore(app.key, before) },
+            onNameFolder = { naming = it.key },
+        )
+    }
+
+    naming?.let { key ->
+        TextDialog(
+            title = "name folder",
+            initial = (engine.shortcuts.onGrid().firstOrNull { it.key == key } as? Folder)?.name.orEmpty(),
+            confirm = "save",
+            hint = "leave it empty for no name",
+            allowBlank = true,
+            onDismiss = { naming = null },
+            onConfirm = {
+                engine.shortcuts.rename(key, it)
+                naming = null
+            },
         )
     }
 

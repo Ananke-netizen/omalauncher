@@ -107,6 +107,32 @@ class FolderGeometryTest {
         assertTrue(g.wave(6) < g.wave(3) && g.wave(3) < g.wave(0) && g.wave(0) < g.wave(2))
     }
 
+    @Test fun theNameSitsOverTheAppsInsideThePanel() {
+        for (count in 2..20) {
+            for ((x, y) in listOf(0 to 0, 5 to 0, 2 to 5, 0 to rows - 1, 5 to rows - 1)) {
+                val g = geometry(tile(x, y), count)
+                assertTrue("$count apps from ($x, $y): ${g.name} inside ${g.panel}", g.panel.contains(g.name))
+                assertTrue(g.naming.contains(g.name))
+                for (i in 0 until count) assertTrue("app $i under the name", g.app(i).top >= g.name.bottom)
+                // Lined up with the first column's tiles.
+                assertEquals(g.app(0).left, g.name.left)
+            }
+        }
+    }
+
+    @Test fun tappingAboveTheAppsTakesATouchTarget() {
+        val g = geometry(tile(2, 5), 6)
+        assertTrue("${g.naming.height} px tall", g.naming.height >= 48)
+        assertEquals(g.panel.width, g.naming.width)
+    }
+
+    @Test fun aLargerFontGetsATallerName() {
+        val normal = FolderGeometry(tiles(page), tile(2, 5), cell, cell, gap, 6, Density(1f))
+        val large = FolderGeometry(tiles(page), tile(2, 5), cell, cell, gap, 6, Density(1f, fontScale = 2f))
+        assertTrue("${large.name.height} > ${normal.name.height}", large.name.height > normal.name.height)
+        assertTrue(large.panel.contains(large.name))
+    }
+
     @Test fun phasesClampToTheirStretch() {
         assertEquals(0f, phase(0.1f, 0.3f, 0.6f), 0f)
         assertEquals(0.5f, phase(0.45f, 0.3f, 0.6f), 1e-6f)
