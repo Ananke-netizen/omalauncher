@@ -19,8 +19,8 @@ android {
         targetSdk = 37
         // This fork's releases from 0.5.1: MAJOR.MINOR as upstream's, PATCH its own count; the code is
         // MAJOR*1000000 + MINOR*10000 + PATCH*100, above 0.5.0-mhs.1..3's 10001..10003 (docs/DEVELOPMENT.md).
-        versionCode = 70400
-        versionName = "0.7.4"
+        versionCode = 70500
+        versionName = "0.7.5"
         ndk { abiFilters += "arm64-v8a" }
     }
 
