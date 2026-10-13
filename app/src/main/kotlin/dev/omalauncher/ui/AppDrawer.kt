@@ -199,21 +199,23 @@ internal fun searchApps(
     return BarSearch(ranked.map { it.first }, ranked.firstOrNull()?.let { isStrongMatch(it.second, query) } == true)
 }
 
-/** What the app cells do: open, pin to home, and the Android app's info and uninstall. */
+/** What the app cells do: open, pin to home, and the Android app's info, uninstall and icon. */
 internal class AppHandlers(
     val launch: (AppHit) -> Unit,
     val pin: (AppHit) -> Unit,
     val info: (AndroidApp) -> Unit,
     val uninstall: (AndroidApp) -> Unit,
+    val icon: (AndroidApp) -> Unit,
 )
 
-/** The long-press menu of an app cell: pin to home, and for Android apps their info and uninstall. */
+/** The long-press menu of an app cell: pin to home, and for Android apps their icon, info and uninstall. */
 private fun AppHit.actions(handlers: AppHandlers): List<Pair<String, () -> Unit>> =
     when (this) {
         is AppHit.Linux -> listOf("add to home" to { handlers.pin(this) })
         is AppHit.Android ->
             listOfNotNull(
                 "add to home" to { handlers.pin(this) },
+                "icon" to { handlers.icon(app) },
                 "app info" to { handlers.info(app) },
                 if (app.system) null else "uninstall" to { handlers.uninstall(app) },
             )

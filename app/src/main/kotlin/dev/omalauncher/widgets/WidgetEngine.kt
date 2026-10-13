@@ -19,6 +19,7 @@ import dev.omalauncher.linux.pacmanInstall
 import dev.omalauncher.linux.runJob
 import dev.omalauncher.linux.shellQuote
 import dev.omalauncher.ui.Palette
+import dev.omalauncher.icons.IconStore
 import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.upgrade.Managed
 import dev.omalauncher.upgrade.Policy
@@ -752,6 +753,8 @@ class WidgetEngine(
                 "widget's state or refresh it with `owl-send <file> set <state> <value>` and `owl-send <file> refresh`.\n\n" +
                 "The launcher's look (theme, background, tile spacing and borders, corners, the system bars' colors, the " +
                 "terminals' font) is ~/${StyleStore.GUEST_DIR}/${StyleStore.FILE}; ${StyleStore.DEFAULTS} next to it lists every " +
-                "setting with its default and range. Changes show within a second; ${StyleStore.ERRORS} there says what was ignored and why.\n"
+                "setting with its default and range. Changes show within a second; ${StyleStore.ERRORS} there says what was ignored and why.\n\n" +
+                "Apps' icons can be replaced with files in ~/${IconStore.GUEST_DIR}: README.md there says how, ${IconStore.APPS} lists " +
+                "the apps and the file name each takes, and `icon-check <file>` shows an icon as the phone draws it.\n"
     }
 }

@@ -59,9 +59,9 @@ internal object BackupFormat {
 
     /**
      * Directories under the app's files, kept whole except dot-entries: the widget engine's
-     * errors, checks, previews, inbox and trash, and temporary files.
+     * errors, checks, previews, inbox and trash, icon-check's checks and previews, and temporary files.
      */
-    val DIRS = listOf("widgets", "widget-state", "themes", "backgrounds")
+    val DIRS = listOf("widgets", "widget-state", "themes", "backgrounds", "icons", "icon-packs")
 
     /** The style, from 0.7: theme, background and the style screen's options. defaults.toml and errors.txt beside it are this app's. */
     const val STYLE = "style/style.toml"

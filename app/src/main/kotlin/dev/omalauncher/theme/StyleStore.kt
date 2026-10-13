@@ -132,6 +132,11 @@ class StyleStore(
         if (reported.add(problem)) saveErrors()
     }
 
+    /** Takes back what [report] said about [setting], now that it holds again (an app that was missing is installed). */
+    fun clearReports(setting: Setting<*>) {
+        if (reported.removeAll { it.startsWith("${setting.key}:") }) saveErrors()
+    }
+
     /** defaults.toml, which always matches this launcher's settings. */
     fun managed(): List<Managed> = listOf(Managed.text(File(dir, DEFAULTS), Policy.Owned) { StyleFile.defaultsText() })
 

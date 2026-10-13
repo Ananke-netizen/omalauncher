@@ -65,6 +65,17 @@ class StyleTest {
         assertEquals(table, Toml.parse(text))
     }
 
+    @Test fun iconPackIsAPackageNameAndUnsetByDefault() {
+        assertEquals(null, Style()[Style.ICON_PACK])
+        assertEquals(true, Style()[Style.ICON_PACK_BACKDROP])
+        val decoded = StyleFile.decode(Toml.parse("[icons]\npack = \"com.example.icons\"\npack-backdrop = false\n"))
+        assertEquals(emptyList<String>(), decoded.problems)
+        assertEquals("com.example.icons", decoded.style[Style.ICON_PACK])
+        assertEquals(false, decoded.style[Style.ICON_PACK_BACKDROP])
+        // The icons section stays one table in defaults.toml.
+        assertEquals(1, StyleFile.defaultsText().lines().count { it == "[icons]" })
+    }
+
     @Test fun defaultsFileReadsAsTheDefaults() {
         val decoded = StyleFile.decode(Toml.parse(StyleFile.defaultsText()))
         assertEquals(emptyList<String>(), decoded.problems)

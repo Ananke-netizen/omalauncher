@@ -30,7 +30,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.PathParser
+import dev.omalauncher.icons.IconSource
 import dev.omalauncher.ui.iconMask
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -94,6 +96,12 @@ class AndroidAppCatalog(
 
     /** Alpha-only silhouettes of the same icons, for the monochrome icon style. */
     val masks = mutableStateMapOf<String, ImageBitmap>()
+
+    /** Draws icons in place of the apps' own: an icon pack's, the user's files ([dev.omalauncher.icons.IconStore]). */
+    var iconSource: IconSource? = null
+
+    /** Keys whose icons are drawn again on the next load; the old ones show until then. */
+    private val stale = HashSet<String>()
 
     /** Serial numbers of the profiles whose apps are paused (work apps turned off); their apps show dimmed. */
     var pausedProfiles by mutableStateOf(emptySet<Long>())
@@ -225,6 +233,12 @@ class AndroidAppCatalog(
         }.onFailure { Log.w(TAG, "cannot uninstall ${app.component}", it) }
     }
 
+    /** Draws [keys]' icons again, every app's with null, as where they come from changed. No icon goes blank meanwhile. */
+    fun refreshIcons(keys: Collection<String>? = null) {
+        stale += keys ?: icons.keys
+        reload()
+    }
+
     private fun reload(evict: String? = null) {
         loading?.cancel()
         loading =
@@ -269,22 +283,41 @@ class AndroidAppCatalog(
                 val present = list.mapTo(HashSet()) { it.key }
                 icons.keys.retainAll(present)
                 masks.keys.retainAll(present)
+                stale.retainAll(present)
                 for ((info, app) in infos) {
-                    if (app.key in icons) continue
+                    if (app.key in icons && app.key !in stale) continue
                     launch {
                         // Both styles are rendered up front so switching is instant; masks are 1 byte per pixel.
                         val rendered =
                             withContext(iconDispatcher) {
                                 runCatching {
-                                    val d = info.getIcon(0)
-                                    val bmp = Bitmap.createBitmap(iconPx, iconPx, Bitmap.Config.ARGB_8888)
-                                    d.setBounds(0, 0, iconPx, iconPx)
-                                    d.draw(Canvas(bmp))
-                                    var mask = iconMask(d, iconPx)
+                                    val custom =
+                                        try {
+                                            iconSource?.render(app, info, iconPx)
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            // A broken pack or file: the app's own icon rather than none.
+                                            Log.w(TAG, "can't draw the custom icon of ${app.component}", e)
+                                            null
+                                        }
+                                    val bmp: Bitmap
+                                    var mask: Bitmap
+                                    if (custom != null) {
+                                        bmp = custom.icon
+                                        mask = custom.mask
+                                    } else {
+                                        val d = info.getIcon(0)
+                                        bmp = Bitmap.createBitmap(iconPx, iconPx, Bitmap.Config.ARGB_8888)
+                                        d.setBounds(0, 0, iconPx, iconPx)
+                                        d.draw(Canvas(bmp))
+                                        mask = iconMask(d, iconPx)
+                                    }
                                     if (app.profile != null) mask = addBadge(bmp, mask, if (app.clone) cloneMark else briefcase)
                                     bmp.asImageBitmap() to mask.asImageBitmap()
                                 }.getOrNull()
                             }
+                        stale -= app.key
                         if (rendered != null) {
                             icons[app.key] = rendered.first
                             masks[app.key] = rendered.second

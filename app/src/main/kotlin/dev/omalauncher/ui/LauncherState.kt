@@ -49,11 +49,17 @@ class LauncherState {
     /** Backing the home screen up to a file and restoring it. */
     var backupOpen by mutableStateOf(false)
 
+    /** Settings › icons: the icon pack, and each app's icon. */
+    var iconsOpen by mutableStateOf(false)
+
+    /** The app whose icon is being picked, from the icons screen, the drawer or home. */
+    var iconApp by mutableStateOf<dev.omalauncher.AndroidApp?>(null)
+
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
         get() =
             drawer.value > 0.99f || settingsOpen || styleOpen || themeBrowserOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || gesturesOpen || shared != null ||
-                sharing != null || feed.progress.value > 0.99f || feedSettingsOpen || backupOpen
+                sharing != null || feed.progress.value > 0.99f || feedSettingsOpen || backupOpen || iconsOpen || iconApp != null
 
     /** Closes every overlay screen (settings and what it opens). */
     fun closeScreens() {
@@ -71,6 +77,8 @@ class LauncherState {
         sharing = null
         feedSettingsOpen = false
         backupOpen = false
+        iconsOpen = false
+        iconApp = null
         if (feed.isOpen) feed.close()
     }
 

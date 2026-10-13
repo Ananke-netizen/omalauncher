@@ -85,6 +85,10 @@ fun HomeMenu(
                 else -> runtime.terminal(newAppCommand(agent.bin), "New app", agent)
             }
         }
+        MenuItem("new icon pack with $agentName") {
+            state.homeMenuOpen = false
+            runIconTask(runtime, state, IconTask.NewPack)
+        }
         MenuItem("widget store") {
             state.homeMenuOpen = false
             state.storeOpen = true

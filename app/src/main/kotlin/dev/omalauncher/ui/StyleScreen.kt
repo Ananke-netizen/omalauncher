@@ -78,6 +78,8 @@ fun StyleScreen(
     onDismiss: () -> Unit,
     /** Opens the community themes over this screen. */
     onBrowse: () -> Unit,
+    /** Opens settings › icons over this screen. */
+    onIcons: () -> Unit,
 ) {
     val store = runtime.themes
     val scope = rememberCoroutineScope()
@@ -101,6 +103,17 @@ fun StyleScreen(
             Heading("home screen")
             val style = runtime.style
             Flag("icons", "monochrome", "colored", style, Style.MONOCHROME_ICONS)
+            Row(Modifier.fillMaxWidth().clickable(onClick = onIcons).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                OptionLabel("icon pack")
+                BasicText(
+                    runtime.icons.pack?.label ?: "apps' own",
+                    Modifier.weight(1f).padding(vertical = 8.dp),
+                    style = Mono.copy(color = Palette.accent),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Symbol(Glyph.ChevronRight, Palette.accent, fontSize = TextSize.Title)
+            }
             Flag("home apps", "boxed", "icon only", style, Style.APP_TILES)
             Flag("recent apps", "shown", "hidden", style, Style.RECENT_APPS)
             NumberOption("corners", Corners.entries.map { it.label to it.scale.toDouble() }, Style.CORNER_SCALE, style)
@@ -310,7 +323,7 @@ private val PREVIEW =
 
 /** A section's title, set apart from the muted labels of the options under it by the accent color, as the weather screen sets its sections apart; [actions] go at the far end. */
 @Composable
-private fun Heading(
+internal fun Heading(
     text: String,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
@@ -351,14 +364,14 @@ private val LabelWidth = 104.dp
 
 /** An option's name; a long one wraps rather than push its control out of line with the others. */
 @Composable
-private fun OptionLabel(
+internal fun OptionLabel(
     text: String,
     modifier: Modifier = Modifier,
 ) = BasicText(text, modifier.width(LabelWidth).padding(end = 8.dp), style = Mono.copy(color = Palette.muted))
 
 /** A note under an option, lined up with its control. */
 @Composable
-private fun OptionHint(
+internal fun OptionHint(
     text: String,
     modifier: Modifier = Modifier,
 ) = BasicText(text, modifier.padding(start = LabelWidth), style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
@@ -401,7 +414,7 @@ private fun Stepper(
 
 /** [Style] flags as a choice of two, [on] first, set together. */
 @Composable
-private fun Flag(
+internal fun Flag(
     label: String,
     on: String,
     off: String,

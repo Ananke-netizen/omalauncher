@@ -48,6 +48,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import dev.omalauncher.Runtime
+import dev.omalauncher.icons.drawIconCommand
+import dev.omalauncher.icons.editPackCommand
+import dev.omalauncher.icons.fillPackCommand
+import dev.omalauncher.icons.newPackCommand
 import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.widgets.checkSecretsCommand
@@ -99,6 +103,8 @@ private fun DesktopScreen(
             state.agentsOpen -> state.agentsOpen = false
             state.storeOpen -> state.storeOpen = false
             state.themeBrowserOpen -> state.themeBrowserOpen = false
+            state.iconApp != null -> state.iconApp = null
+            state.iconsOpen -> state.iconsOpen = false
             state.styleOpen -> state.styleOpen = false
             state.packagesOpen -> state.packagesOpen = false
             state.feedSettingsOpen -> state.feedSettingsOpen = false
@@ -168,6 +174,10 @@ private fun DesktopScreen(
                     runtime.androidApps.openInfo(app)
                 },
                 uninstall = { app -> runtime.androidApps.uninstall(app) },
+                icon = { app ->
+                    state.closeNow()
+                    state.iconApp = app
+                },
             )
         }
 
@@ -291,13 +301,16 @@ private fun ThemesOverlay(
             onGestures = { state.gesturesOpen = true },
             onFeed = { state.feedSettingsOpen = true },
             onBackup = { state.backupOpen = true },
+            onIcons = { state.iconsOpen = true },
         )
     }
     if (state.feedSettingsOpen) FeedSettingsScreen(runtime.feed, onDismiss = { state.feedSettingsOpen = false })
     if (state.backupOpen) BackupScreen(onDismiss = { state.backupOpen = false })
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
-    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true })
+    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true }, onIcons = { state.iconsOpen = true })
     if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })
+    if (state.iconsOpen) IconsScreen(runtime, onDismiss = { state.iconsOpen = false }, onPick = { state.iconApp = it }, onTask = { runIconTask(runtime, state, it) })
+    state.iconApp?.let { app -> IconPickerScreen(runtime, app, onDismiss = { state.iconApp = null }, onTask = { runIconTask(runtime, state, it) }) }
     if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
     if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
     if (state.gesturesOpen) GesturesScreen(runtime, onDismiss = { state.gesturesOpen = false })
@@ -348,6 +361,30 @@ private fun ThemesOverlay(
                 runtime.terminal(agent.bin, agent.name, agent)
             },
         )
+    }
+}
+
+/**
+ * Starts the launcher's agent, the one the bar asks, on [task], in a terminal. Without Linux or an
+ * agent, the screen that sets them up opens instead.
+ */
+internal fun runIconTask(
+    runtime: Runtime,
+    state: LauncherState,
+    task: IconTask,
+) {
+    val agent = runtime.agents.default
+    when {
+        !runtime.bootstrap.isInstalled -> state.linuxOpen = true
+        agent == null -> state.agentsOpen = true
+        else ->
+            when (task) {
+                IconTask.NewPack -> runtime.terminal(newPackCommand(agent.bin), "New icon pack", agent)
+                is IconTask.Fill -> runtime.terminal(fillPackCommand(agent.bin, task.pack), "Fill in ${task.pack.label}", agent)
+                is IconTask.Edit -> runtime.terminal(editPackCommand(agent.bin, task.pack), "Change ${task.pack.label}", agent)
+                is IconTask.Draw -> runtime.terminal(drawIconCommand(agent.bin, runtime.icons.stemFor(task.app), task.app.label), "Icon for ${task.app.label}", agent)
+                IconTask.Setup -> state.agentsOpen = true
+            }
     }
 }
 
