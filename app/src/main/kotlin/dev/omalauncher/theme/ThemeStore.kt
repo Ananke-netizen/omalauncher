@@ -127,7 +127,7 @@ class ThemeStore(
      */
 
     /** The theme picked, applied or not; its full version is applied once downloaded. */
-    val picked get() = themeOf(style.style)
+    val picked get() = style.style[Style.THEME] ?: DEFAULT_THEME
 
     /** Recolors the launcher right away and remembers the choice, with its first background, until the theme itself is installed. */
     fun pick(theme: BundledTheme) {
@@ -512,8 +512,8 @@ class ThemeStore(
         private const val DEFAULT_THEME = "tokyo-night"
 
         /**
-         * The theme [style] names. Unset is the default one: style.toml leaves out what's at its
-         * default, so a first run that kept the theme it offered never writes it.
+         * The theme [style] names, unset being the default one, as [picked] and [savedSelection] read it;
+         * for what has a style but no store, like a backup's summary.
          */
         fun themeOf(style: Style) = style[Style.THEME] ?: DEFAULT_THEME
 
@@ -535,7 +535,9 @@ class ThemeStore(
          */
         fun savedSelection(context: Context): Pair<Map<String, String>, File?>? {
             val saved = StyleStore.read(context)
-            val theme = runCatching { themeDirs(context).load(themeOf(saved)) }.getOrNull() ?: return null
+            // Unset is the default theme: first run leaves the one it showed unsaved.
+            val name = saved[Style.THEME] ?: DEFAULT_THEME
+            val theme = runCatching { themeDirs(context).load(name) }.getOrNull() ?: return null
             // Unset, or not one of the theme's: its first, as the launcher shows.
             val bg = theme.backgrounds().let { list -> list.firstOrNull { it.name == saved[Style.BACKGROUND] } ?: list.firstOrNull() }
             return theme.colors to bg
