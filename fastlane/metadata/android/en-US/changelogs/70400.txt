@@ -1,0 +1,1 @@
+Apps can pin shortcuts to your home screen after you agree, like websites installed from Chrome's Add to Home screen. They show on home and in a shortcuts section of the app list, and long-press removes one.
