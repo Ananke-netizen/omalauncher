@@ -154,6 +154,7 @@ private fun DesktopScreen(
         when (hit) {
             is AppHit.Linux -> runtime.launch(hit.app)
             is AppHit.Android -> runtime.androidApps.open(hit.app)
+            is AppHit.Shortcut -> runtime.androidApps.open(hit.shortcut)
         }
     }
 
@@ -166,6 +167,7 @@ private fun DesktopScreen(
                     when (hit) {
                         is AppHit.Linux -> runtime.widgets.shortcuts.addLinux(hit.app, state.currentPage)
                         is AppHit.Android -> runtime.widgets.shortcuts.addAndroid(hit.app, state.currentPage)
+                        is AppHit.Shortcut -> runtime.widgets.shortcuts.addAndroidShortcut(hit.shortcut, state.currentPage)
                     }
                     state.close()
                 },
@@ -177,6 +179,11 @@ private fun DesktopScreen(
                 icon = { app ->
                     state.closeNow()
                     state.iconApp = app
+                },
+                // Off home too: its tile would only be a name that opens nothing.
+                remove = { shortcut ->
+                    runtime.androidApps.remove(shortcut)
+                    runtime.widgets.shortcuts.removeAndroidShortcut(shortcut)
                 },
             )
         }
