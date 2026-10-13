@@ -1,0 +1,1 @@
+Swiping down on home pulls down the notification shade, like stock launchers. In settings › gestures it can open quick settings instead, with the power and settings buttons, or the home menu, or do nothing.
