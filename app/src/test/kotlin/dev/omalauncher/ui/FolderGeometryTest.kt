@@ -22,11 +22,14 @@ class FolderGeometryTest {
     ) = IntRect((gap + x * cell).roundToInt(), (gap + y * cell).roundToInt(), ((x + 1) * cell).roundToInt(), ((y + 1) * cell).roundToInt())
         .translate(side * page.width, 0)
 
+    /** Where [page]'s tiles go: inside the gap to its edges, here the same as between tiles. */
+    private fun tiles(page: IntRect) = IntRect(page.left + gap, page.top + gap, page.right - gap, page.bottom - gap)
+
     private fun geometry(
         anchor: IntRect?,
         count: Int,
-        bounds: IntRect = page,
-    ) = FolderGeometry(bounds, anchor, cell, cell, gap, count, Density(1f))
+        area: IntRect = tiles(page),
+    ) = FolderGeometry(area, anchor, cell, cell, gap, count, Density(1f))
 
     private fun IntRect.contains(r: IntRect) = r.left >= left && r.top >= top && r.right <= right && r.bottom <= bottom
 
@@ -45,7 +48,7 @@ class FolderGeometryTest {
     }
 
     @Test fun alwaysCoversItsTileAndStaysOnItsPage() {
-        val inside = IntRect(page.left + gap, page.top + gap, page.right - gap, page.bottom - gap)
+        val inside = tiles(page)
         for (count in 2..20) {
             for (x in 0 until 6) {
                 for (y in 0 until rows) {
@@ -62,8 +65,31 @@ class FolderGeometryTest {
     @Test fun unfoldedItStaysOnTheFoldersSideOfTheFold() {
         val right = page.translate(page.width, 0)
         // The left column of the right page: opening left would cross the fold.
-        val g = geometry(tile(0, 9, side = 1), 9, right)
+        val g = geometry(tile(0, 9, side = 1), 9, tiles(right))
         assertTrue(g.panel.left >= right.left + gap)
+    }
+
+    @Test fun withWiderEdgesItStaysWhereTheTilesAre() {
+        // style.toml's widgets.gaps-out at 24, the gap between tiles still 6: the tiles start 24 from the edges.
+        val area = IntRect(24, 24, 1080 - 24, 1800)
+        val cell = (area.width + gap) / 6f
+        val rows = ((area.height + gap) / cell).toInt()
+        for (count in 2..20) {
+            for (x in 0 until 6) {
+                for (y in 0 until rows) {
+                    val from =
+                        IntRect(
+                            (area.left + x * cell).roundToInt(),
+                            (area.top + y * cell).roundToInt(),
+                            (area.left + (x + 1) * cell - gap).roundToInt(),
+                            (area.top + (y + 1) * cell - gap).roundToInt(),
+                        )
+                    val g = FolderGeometry(area, from, cell, cell, gap, count, Density(1f))
+                    assertTrue("$count apps from ($x, $y): ${g.panel} covers $from", g.panel.contains(from))
+                    assertTrue("$count apps from ($x, $y): ${g.panel} inside $area", area.contains(g.panel))
+                }
+            }
+        }
     }
 
     @Test fun withoutATileItsCentered() {

@@ -368,14 +368,14 @@ internal fun HomeGrid(
             shown: List<Int>,
         ) = if (key == null) -1 else shown.indexOfFirst { page -> itemsOn(page).any { it.key == key } }
 
-        /** The open [folder]'s panel: out of its tile on the page at [side], and kept on that page. */
+        /** The open [folder]'s panel: out of its tile on the page at [side], and kept where that page's tiles are. */
         fun folderGeometry(
             folder: Folder,
             side: Int,
             g: Grid,
             density: Density,
         ) = FolderGeometry(
-            IntRect(side * g.width, 0, (side + 1) * g.width, g.height),
+            IntRect(side * g.width + g.pad.left, g.pad.top, (side + 1) * g.width - g.pad.right, g.height - g.pad.bottom),
             layout.cell(folder.key)?.let { g.screen(g.rect(g.fit(it, folder)), side) },
             g.cellW,
             g.cellH,

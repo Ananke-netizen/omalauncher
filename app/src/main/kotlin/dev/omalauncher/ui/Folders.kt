@@ -120,12 +120,15 @@ private fun AppGlyph(
  * Where an open folder draws, in the home grid's pixels: a panel that opens out of the folder's
  * tile, [anchor], up and to the right, with the apps at home's cell size. Where it doesn't fit
  * that way it opens down or to the left instead, from the tile's other corner, and it stays inside
- * [bounds] within home's outer gap, so it always covers its tile. Smaller only when it doesn't fit
+ * [area], so it always covers its tile. Smaller only when it doesn't fit
  * at all; centered with no [anchor]. The grid's gestures and the panel's drawing share it.
  */
 internal class FolderGeometry(
-    /** Where the panel may go: the folder's page, so on an unfolded foldable it stays off the fold. */
-    bounds: IntRect,
+    /**
+     * Where the panel may go: where the folder's page has its tiles, inside the gaps to the screen's
+     * edges, so on an unfolded foldable it stays off the fold.
+     */
+    private val area: IntRect,
     /** The folder's tile, which the panel opens out of and folds back into. */
     val anchor: IntRect?,
     cellW: Float,
@@ -138,8 +141,6 @@ internal class FolderGeometry(
     private val rows = ((count + cols - 1) / cols).coerceAtLeast(1)
     private val pad = with(density) { 16.dp.roundToPx() }
 
-    // Where tiles stop too.
-    private val area = IntRect(bounds.left + gap, bounds.top + gap, bounds.right - gap, bounds.bottom - gap)
     private val scale =
         minOf(
             1f,
@@ -246,7 +247,8 @@ internal fun rememberFolderReveal(open: String?): FolderReveal {
  * Taps, long-presses and drags are [HomeGrid]'s, like every touch on home.
  *
  * It opens with [progress], from 0 to 1: the folder tile's frame grows out of the tile into the
- * panel, turning from border to accent, and the apps fade in as it does, nearest the tile first.
+ * panel, turning from the tiles' outline to the panel's accent, and the apps fade in as it does,
+ * nearest the tile first.
  * Closing runs it backwards, into the tile. While [closing], its apps swallow taps, so one meant
  * for home under it can't open a folder app on its way out.
  */
@@ -270,20 +272,23 @@ internal fun FolderPanel(
             .drawWithContent {
                 val t = progress()
                 drawRect(Palette.overlay.copy(alpha = 0.6f * phase(t, 0f, 0.5f)))
-                // The tile's frame (FolderTile's tileFrame) becomes the panel's: a wireframe at first, so the
-                // tile still shows through, filling in as it grows.
+                // The tile's frame (FolderTile's tileFrame, style.toml's widgets.border) becomes the panel's: a
+                // wireframe at first, so the tile still shows through, filling in as it grows.
                 val f = FastOutSlowInEasing.transform(phase(t, 0f, 0.6f))
                 val r = lerp(from, to, f)
-                val stroke = 2.dp.toPx()
+                val stroke = lerp(LauncherStyle.borderWidth, 2.dp, f).toPx()
                 val radius = lerp(16.dp, 20.dp, f).toPx() * LauncherStyle.cornerScale
                 drawRoundRect(Palette.background.copy(alpha = f), r.topLeft, r.size, CornerRadius(radius))
-                drawRoundRect(
-                    lerp(Palette.border, Palette.accent, f),
-                    r.topLeft + Offset(stroke / 2, stroke / 2),
-                    Size(r.width - stroke, r.height - stroke),
-                    CornerRadius((radius - stroke / 2).coerceAtLeast(0f)),
-                    style = Stroke(stroke),
-                )
+                // A tile without an outline starts without one: a 0 wide stroke would be a hairline.
+                if (stroke > 0f) {
+                    drawRoundRect(
+                        lerp(LauncherStyle.tileBorder, Palette.accent, f),
+                        r.topLeft + Offset(stroke / 2, stroke / 2),
+                        Size(r.width - stroke, r.height - stroke),
+                        CornerRadius((radius - stroke / 2).coerceAtLeast(0f)),
+                        style = Stroke(stroke),
+                    )
+                }
                 // The apps show only inside the frame so far.
                 clipRect(r.left + stroke, r.top + stroke, r.right - stroke, r.bottom - stroke) { this@drawWithContent.drawContent() }
             },
