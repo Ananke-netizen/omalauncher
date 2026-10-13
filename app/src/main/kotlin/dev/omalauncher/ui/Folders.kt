@@ -45,9 +45,10 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -83,9 +84,13 @@ fun FolderTile(
             .pointerInput(folder.key) { detectTapGestures(onTap = { onTap() }) }
             .padding(4.dp),
     ) {
-        // Laid out like ShortcutTile, so the badge lines up with the apps beside it; without a name, the label's room stays empty.
-        val showLabel = maxHeight > 64.dp
-        val badge = min(maxWidth, maxHeight - if (showLabel) 18.dp else 0.dp) * if (bare) 0.95f else 0.85f
+        // Laid out like ShortcutTile, so the badge lines up with the apps beside it; without a name, the label's room
+        // stays empty. Apps show their names only where there's room under the icon, but a named folder shows its name
+        // on any tile, over a smaller badge if need be: four tiny icons don't say what's in it.
+        val showLabel = maxHeight > 64.dp || folder.name != null
+        // The label's line and the gap above it: ShortcutTile's 18dp at the usual font size, more with a larger one.
+        val labelRoom = maxOf(18.dp, with(LocalDensity.current) { TextSize.Small.toDp() } * 1.35f)
+        val badge = min(maxWidth, maxHeight - if (showLabel) labelRoom else 0.dp) * if (bare) 0.95f else 0.85f
         Column(
             Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -344,8 +349,9 @@ internal fun FolderPanel(
 }
 
 /**
- * An open folder's name over its apps, or a muted invitation to give it one. It shows with the
- * apps nearest the tile; the grid takes the touch, so only TalkBack's click comes here.
+ * An open folder's name over its apps, or a muted button to give it one, short enough for a
+ * two-column panel. It shows with the apps nearest the tile; the grid takes the touch, so only
+ * TalkBack's click comes here.
  */
 @Composable
 private fun FolderName(
@@ -360,7 +366,8 @@ private fun FolderName(
             .offset { IntOffset(at.left, at.top) }
             .size(with(density) { at.width.toDp() }, with(density) { at.height.toDp() })
             .graphicsLayer { alpha = LinearOutSlowInEasing.transform(phase(progress(), 0.3f, 0.65f)) }
-            .semantics(mergeDescendants = true) {
+            .clearAndSetSemantics {
+                contentDescription = name ?: "name this folder"
                 role = Role.Button
                 onClick("rename folder") {
                     onName()
@@ -370,7 +377,7 @@ private fun FolderName(
         contentAlignment = Alignment.CenterStart,
     ) {
         BasicText(
-            name ?: "name this folder",
+            name ?: "[ name ]",
             style = Mono.copy(color = if (name != null) Palette.accent else Palette.muted, fontSize = TextSize.Body),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
