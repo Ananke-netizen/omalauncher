@@ -185,6 +185,8 @@ private fun DesktopScreen(
                     runtime.androidApps.remove(shortcut)
                     runtime.widgets.shortcuts.removeAndroidShortcut(shortcut)
                 },
+                // Opening one leaves the drawer at once, as opening an app does; pinning one closes it to show the new tile, as pin does.
+                shortcuts = { app -> shortcutMenu(runtime, app, page = { state.currentPage }, onOpen = state::closeNow, onPinned = state::close) },
             )
         }
 

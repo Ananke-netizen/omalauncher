@@ -221,7 +221,12 @@ internal class AppHandlers(
     val uninstall: (AndroidApp) -> Unit,
     val icon: (AndroidApp) -> Unit,
     val remove: (AndroidShortcut) -> Unit,
+    /** An Android app's shortcuts, for its long-press menu. */
+    val shortcuts: (AndroidApp) -> ShortcutMenu,
 )
+
+/** The shortcuts an Android app offers above its menu's actions; null for anything else. */
+private fun AppHit.shortcutMenu(handlers: AppHandlers): ShortcutMenu? = (this as? AppHit.Android)?.let { handlers.shortcuts(it.app) }
 
 /** The long-press menu of an app cell: pin to home, for Android apps their icon, info and uninstall, and for shortcuts removing them. */
 private fun AppHit.actions(handlers: AppHandlers): List<Pair<String, () -> Unit>> =
@@ -257,7 +262,7 @@ private fun HitCell(
     selected: Boolean = false,
 ) {
     val (icon, mask, glyph) = hit.icons(runtime)
-    AppCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, glyph = glyph, selected = selected, spoken = hit.spoken, paused = hit.paused(runtime))
+    AppCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, shortcuts = { hit.shortcutMenu(handlers) }, glyph = glyph, selected = selected, spoken = hit.spoken, paused = hit.paused(runtime))
 }
 
 /** Height of the recent apps strip; home keeps this much room for it above the bar, even while it's empty. */
@@ -294,7 +299,7 @@ internal fun RecentStrip(
         val cells: LazyListScope.() -> Unit = {
             items(apps, key = { it.key }) { hit ->
                 val (icon, mask, glyph) = hit.icons(runtime)
-                StripCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, glyph = glyph, spoken = hit.spoken, paused = hit.paused(runtime))
+                StripCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, shortcuts = { hit.shortcutMenu(handlers) }, glyph = glyph, spoken = hit.spoken, paused = hit.paused(runtime))
             }
         }
         if (vertical) {
@@ -314,6 +319,8 @@ private fun StripCell(
     onClick: () -> Unit,
     /** Built when the menu opens: a fresh list of lambdas would keep the cell from skipping recomposition. */
     actions: () -> List<Pair<String, () -> Unit>>,
+    /** Also built when the menu opens. */
+    shortcuts: () -> ShortcutMenu? = { null },
     glyph: ImageVector? = null,
     /** As in [AppHit.spoken]. */
     spoken: String = label,
@@ -354,7 +361,7 @@ private fun StripCell(
             bmp != null -> Image(bmp, spoken, Modifier.size(size * if (mono) 0.85f else 1f), colorFilter = if (mono) ColorFilter.tint(Palette.accent) else null)
             else -> BasicText(initials(label), style = Mono.copy(color = Palette.accent, fontSize = TextSize.Large))
         }
-        if (menuOpen) AppActions(actions(), onDismiss = { menuOpen = false })
+        if (menuOpen) AppActions(actions(), shortcuts, onDismiss = { menuOpen = false })
     }
 }
 
@@ -672,6 +679,8 @@ private fun AppCell(
     onClick: () -> Unit,
     /** Built when the menu opens, as in [StripCell]. */
     actions: () -> List<Pair<String, () -> Unit>>,
+    /** As in [StripCell]. */
+    shortcuts: () -> ShortcutMenu? = { null },
     /** Built-in apps (Files) draw a theme-colored glyph instead of a bitmap. */
     glyph: ImageVector? = null,
     /** What Enter in the bar would open: outlined in the accent color. */
@@ -729,7 +738,7 @@ private fun AppCell(
             overflow = TextOverflow.Ellipsis,
         )
         if (menuOpen) {
-            AppActions(actions(), onDismiss = { menuOpen = false })
+            AppActions(actions(), shortcuts, onDismiss = { menuOpen = false })
         }
     }
 }
@@ -738,11 +747,16 @@ private fun AppCell(
 @Composable
 private fun AppActions(
     actions: List<Pair<String, () -> Unit>>,
+    shortcuts: () -> ShortcutMenu?,
     onDismiss: () -> Unit,
 ) {
+    val (menu, offered) = offeredShortcuts(Unit, shortcuts)
+    if (offered == null) return
     val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
+    // From the screen's sides, as far as home's tiles are.
+    val edge = with(LocalDensity.current) { EdgeGap.roundToPx() }
     val position =
-        remember(gap) {
+        remember(gap, edge) {
             object : PopupPositionProvider {
                 override fun calculatePosition(
                     anchorBounds: IntRect,
@@ -750,7 +764,7 @@ private fun AppActions(
                     layoutDirection: LayoutDirection,
                     popupContentSize: IntSize,
                 ): IntOffset {
-                    val x = (anchorBounds.center.x - popupContentSize.width / 2).coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
+                    val x = (anchorBounds.center.x - popupContentSize.width / 2).coerceIn(edge, (windowSize.width - edge - popupContentSize.width).coerceAtLeast(edge))
                     val above = anchorBounds.top - popupContentSize.height - gap
                     val y = if (above >= 0) above else anchorBounds.bottom + gap
                     return IntOffset(x, y)
@@ -758,6 +772,8 @@ private fun AppActions(
             }
         }
     Popup(popupPositionProvider = position, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
-        MenuItems(actions, onDismiss, minWidth = 160.dp, itemPadding = 12.dp, fontSize = TextSize.Item)
+        MenuItems(actions, onDismiss, minWidth = 160.dp, itemPadding = 12.dp, fontSize = TextSize.Item) {
+            if (menu != null) ShortcutRows(offered, menu, onDismiss, TextSize.Item)
+        }
     }
 }

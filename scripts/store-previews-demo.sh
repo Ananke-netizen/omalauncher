@@ -284,8 +284,8 @@ printf 'Personal = file://%s/personal.ics\nWork = file://%s/work.ics\n' "$demo" 
 # Codex reply read aloud, and a sentence dictated. The voice service itself isn't installed, so
 # nothing overwrites these while the previews are drawn.
 aside "$voice"
-printf '%s' '3.2-a17095f3' > "$voice"
+printf '%s' '3.3-32999871' > "$voice"
 aside "$voicestate"
-printf '{"source":"codex","status":"已朗讀最新回覆","status_en":"Read the latest reply","awaiting":false,"reply_at":%s,"summary":"已修正登入頁的表單驗證，並為空白密碼新增兩個測試；全部測試都通過了。"}\n' "$(( $(date +%s) - 240 ))" > "$voicestate"
+printf '{"source":"codex","status":"播放完成","status_ui":"Playback complete","awaiting":false,"reply_at":%s,"summary":"Fixed the form validation on the login page and added two tests for an empty password; all tests pass."}\n' "$(( $(date +%s) - 240 ))" > "$voicestate"
 aside "$dictated"
-printf '%s' '把首頁的標題改成粗體，然後再跑一次測試。' > "$dictated"
+printf '%s' 'Make the title on the home page bold, then run the tests again.' > "$dictated"

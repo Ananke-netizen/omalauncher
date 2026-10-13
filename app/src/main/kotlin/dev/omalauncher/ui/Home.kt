@@ -13,6 +13,8 @@ import dev.omalauncher.widgets.Shortcut
 import dev.omalauncher.widgets.WidgetItem
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -264,31 +266,44 @@ fun HomeScreen(
             selected = state.editing,
             onSelect = { state.editing = it },
             actions = { item ->
-                EditBar {
-                    if (item is WidgetItem) EditAction("edit") { edit(item) }
-                    if (item is Folder) {
-                        EditAction("rename") {
-                            state.editing = null
-                            naming = item.key
-                        }
+                // A pinned Android app offers its shortcuts above the bar, as its long-press menu in the drawer does.
+                val app = (item as? Shortcut)?.component?.let { c -> runtime.androidApps.apps.firstOrNull { it.component == c && it.profile == item.profile } }
+                val (menu, offered) =
+                    offeredShortcuts(item.key) {
+                        app?.let { shortcutMenu(runtime, it, page = { item.page }, onOpen = { arrange.folder = null }) }
                     }
-                    // A pinned Android app's icon, as from the drawer.
-                    if (item is Shortcut && item.component != null) {
-                        runtime.androidApps.apps.firstOrNull { it.component == item.component && it.profile == item.profile }?.let { app ->
+                // Nothing until they're loaded, so the bar doesn't jump down as they arrive.
+                if (offered != null) Column {
+                    if (menu != null && offered.isNotEmpty()) {
+                        MenuItems(emptyList(), { state.editing = null }, minWidth = 160.dp, itemPadding = 12.dp, fontSize = TextSize.Item) {
+                            ShortcutRows(offered, menu, { state.editing = null }, TextSize.Item, rule = false)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    EditBar {
+                        if (item is WidgetItem) EditAction("edit") { edit(item) }
+                        if (item is Folder) {
+                            EditAction("rename") {
+                                state.editing = null
+                                naming = item.key
+                            }
+                        }
+                        // A pinned Android app's icon, as from the drawer.
+                        if (app != null) {
                             EditAction("icon") {
                                 state.editing = null
                                 state.iconApp = app
                             }
                         }
-                    }
-                    // As a QR code or link, or (your own) to the store. An agent's tile is a terminal, not a widget to pass on.
-                    if (item is WidgetItem && !item.spec.file.name.startsWith("agent-")) {
-                        EditAction("share") {
-                            state.editing = null
-                            state.sharing = item.spec
+                        // As a QR code or link, or (your own) to the store. An agent's tile is a terminal, not a widget to pass on.
+                        if (item is WidgetItem && !item.spec.file.name.startsWith("agent-")) {
+                            EditAction("share") {
+                                state.editing = null
+                                state.sharing = item.spec
+                            }
                         }
+                        EditAction("remove", Palette.red) { remove(item) }
                     }
-                    EditAction("remove", Palette.red) { remove(item) }
                 }
             },
             render = { item, tile, highlighted ->
@@ -330,6 +345,7 @@ fun HomeScreen(
                     is Shortcut ->
                         ShortcutTile(
                             shortcut = item,
+                            label = runtime.shortcutLabel(item),
                             icon = runtime.shortcutIcon(item, LauncherStyle.monochromeIcons),
                             focused = highlighted,
                             modifier = tile,
@@ -345,6 +361,7 @@ fun HomeScreen(
                         FolderTile(
                             folder = item,
                             icons = item.apps.take(4).map { runtime.shortcutIcon(it, LauncherStyle.monochromeIcons) },
+                            labels = item.apps.take(4).map { runtime.shortcutLabel(it) },
                             focused = highlighted,
                             modifier = tile,
                             onTap = { arrange.folder = item.key },

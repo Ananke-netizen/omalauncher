@@ -131,7 +131,7 @@ fun JobLog(
     for (line in log.takeLast(lines)) BasicText(line, style = style, maxLines = if (state is JobState.Failed) 3 else 1)
 }
 
-/** The items of a popup menu; picking one closes the menu first. */
+/** The items of a popup menu, framed like home's edit bar and menu; picking one closes the menu first. */
 @Composable
 fun MenuItems(
     items: List<Pair<String, () -> Unit>>,
@@ -139,14 +139,17 @@ fun MenuItems(
     minWidth: Dp,
     itemPadding: Dp,
     fontSize: TextUnit,
+    /** Above the items, inside the frame: an app's shortcuts ([ShortcutRows]). */
+    top: @Composable ColumnScope.() -> Unit = {},
 ) {
     Column(
         Modifier
             .width(IntrinsicSize.Max)
             .widthIn(min = minWidth)
-            .frame(1.dp, Palette.border, Palette.surface)
+            .frame(2.dp, Palette.accent, Palette.background)
             .padding(vertical = 6.dp),
     ) {
+        top()
         for ((label, action) in items) {
             BasicText(
                 label,
