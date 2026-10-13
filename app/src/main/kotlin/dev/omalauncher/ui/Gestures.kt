@@ -48,6 +48,8 @@ enum class GestureAction(
 ) {
     Drawer("drawer", "app drawer"),
     Notifications("notifications", "notifications"),
+    QuickSettings("quick_settings", "quick settings"),
+    HomeMenu("home_menu", "home menu"),
     None("none", "nothing"),
     ;
 
@@ -60,7 +62,7 @@ enum class GestureAction(
 private val SwipeUpChoices = listOf(GestureAction.Drawer, GestureAction.None)
 
 /** What swiping down on home can do, the default first. */
-private val SwipeDownChoices = listOf(GestureAction.Notifications, GestureAction.None)
+private val SwipeDownChoices = listOf(GestureAction.Notifications, GestureAction.QuickSettings, GestureAction.HomeMenu, GestureAction.None)
 
 /** The actions picked for home's gestures. */
 class Gestures(
@@ -118,8 +120,8 @@ internal fun Modifier.drawerSwipe(
     )
 }
 
-/** What a swipe on home moves. */
-internal enum class SwipeTarget { Drawer, Shade, None }
+/** What a swipe on home moves: the drawer, or whatever swiping down is set to. */
+internal enum class SwipeTarget { Drawer, Down, None }
 
 /**
  * What a swipe on home moves, from how far the drawer is open and the swipe's first step ([dy] > 0 is down). With
@@ -132,7 +134,7 @@ internal fun swipeTarget(
     down: GestureAction,
 ) = when {
     drawer > 0f -> SwipeTarget.Drawer
-    dy > 0f && down == GestureAction.Notifications -> SwipeTarget.Shade
+    dy > 0f && down != GestureAction.None -> SwipeTarget.Down
     // With nothing set for swiping down, the drawer still follows a swipe that starts down and turns up.
     up == GestureAction.Drawer -> SwipeTarget.Drawer
     else -> SwipeTarget.None
@@ -140,7 +142,7 @@ internal fun swipeTarget(
 
 /**
  * Swiping on home (the pages, the recent apps strip, the bar) does what's picked in gesture settings: up opens the
- * drawer under the finger, down pulls down Android's notification shade.
+ * drawer under the finger, down pulls down Android's notification shade or quick settings, or opens the home menu.
  */
 @Composable
 internal fun Modifier.homeSwipe(
@@ -153,7 +155,7 @@ internal fun Modifier.homeSwipe(
     val drawerShown by remember(state) { derivedStateOf { state.drawer.value > 0f } }
     // Whether the drawer shows is only read when it matters: read here, it would recompose all of home (its Box is
     // inline) each time the drawer opens or closes.
-    val drags = gestures.swipeUp == GestureAction.Drawer || gestures.swipeDown == GestureAction.Notifications || drawerShown
+    val drags = gestures.swipeUp == GestureAction.Drawer || gestures.swipeDown != GestureAction.None || drawerShown
     val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     // Picked by the swipe's first step, so one that starts down and turns up doesn't open the drawer under the shade.
     var target by remember { mutableStateOf<SwipeTarget?>(null) }
@@ -165,7 +167,7 @@ internal fun Modifier.homeSwipe(
             rememberDraggableState { dy ->
                 if (target == null && dy != 0f) {
                     target = swipeTarget(state.drawer.value, dy, gestures.swipeUp, gestures.swipeDown)
-                    if (target == SwipeTarget.Shade) expandNotifications(context)
+                    if (target == SwipeTarget.Down) swipedDown(context, state, gestures.swipeDown)
                 }
                 if (target == SwipeTarget.Drawer) state.dragBy(-dy / screenHeight)
             },
@@ -174,18 +176,38 @@ internal fun Modifier.homeSwipe(
     )
 }
 
+/** Runs [action], what swiping down is set to, once per swipe. */
+private fun swipedDown(
+    context: Context,
+    state: LauncherState,
+    action: GestureAction,
+) {
+    when (action) {
+        GestureAction.Notifications -> expandStatusBar(context, "expandNotificationsPanel")
+        // The whole panel, with its power and settings buttons.
+        GestureAction.QuickSettings -> expandStatusBar(context, "expandSettingsPanel")
+        GestureAction.HomeMenu -> state.homeMenuOpen = true
+        GestureAction.Drawer, GestureAction.None -> {}
+    }
+}
+
 /**
- * Pulls down Android's notification shade. There's no public call for it: launchers that aren't part of the system,
- * like Lawnchair, call StatusBarManager's hidden expandNotificationsPanel, which needs EXPAND_STATUS_BAR.
+ * Pulls down Android's notification shade or quick settings with StatusBarManager's [method]. There's no public call
+ * for either: launchers that aren't part of the system, like Lawnchair, call these hidden ones, which need
+ * EXPAND_STATUS_BAR. expandSettingsPanel only without arguments: the one taking a tile is closed to apps targeting
+ * Android 12 and up.
  */
 @SuppressLint("WrongConstant")
-private fun expandNotifications(context: Context) {
+private fun expandStatusBar(
+    context: Context,
+    method: String,
+) {
     runCatching {
         Class
             .forName("android.app.StatusBarManager")
-            .getMethod("expandNotificationsPanel")
+            .getMethod(method)
             .invoke(context.getSystemService("statusbar"))
-    }.onFailure { Log.w(TAG, "cannot pull down the notification shade", it) }
+    }.onFailure { Log.w(TAG, "cannot pull down the status bar: $method", it) }
 }
 
 private const val TAG = "gestures"

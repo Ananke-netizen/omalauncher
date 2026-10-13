@@ -52,9 +52,9 @@ internal object BackupFormat {
             // were written here, so they're written again.
             PrefsPart("themes", null, reset = setOf("rendered_by"), exclude = setOf("rendered_by")),
             PrefsPart("feed", setOf("settings")),
-            // The terminal's text size and font before style.toml, and what swiping up on home does
+            // The terminal's text size and font before style.toml, and what swiping up and down on home do
             // (settings > gestures); the rest of these preferences are this install's.
-            PrefsPart("launcher", setOf("terminal_text", "terminal_font", "gesture_swipe_up")),
+            PrefsPart("launcher", setOf("terminal_text", "terminal_font", "gesture_swipe_up", "gesture_swipe_down")),
         )
 
     /**

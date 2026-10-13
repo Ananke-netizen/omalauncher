@@ -1,8 +1,10 @@
 package dev.omalauncher.ui
 
 import dev.omalauncher.ui.GestureAction.Drawer
+import dev.omalauncher.ui.GestureAction.HomeMenu
 import dev.omalauncher.ui.GestureAction.None
 import dev.omalauncher.ui.GestureAction.Notifications
+import dev.omalauncher.ui.GestureAction.QuickSettings
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -11,8 +13,16 @@ class GesturesTest {
     private val upward = -12f
 
     @Test fun swipingDownPullsTheShade() {
-        assertEquals(SwipeTarget.Shade, swipeTarget(0f, downward, up = Drawer, down = Notifications))
-        assertEquals(SwipeTarget.Shade, swipeTarget(0f, downward, up = None, down = Notifications))
+        assertEquals(SwipeTarget.Down, swipeTarget(0f, downward, up = Drawer, down = Notifications))
+        assertEquals(SwipeTarget.Down, swipeTarget(0f, downward, up = None, down = Notifications))
+    }
+
+    @Test fun swipingDownRunsWhateverItIsSetTo() {
+        for (down in listOf(QuickSettings, HomeMenu)) {
+            assertEquals(SwipeTarget.Down, swipeTarget(0f, downward, up = Drawer, down = down))
+            assertEquals(SwipeTarget.Down, swipeTarget(0f, downward, up = None, down = down))
+            assertEquals(SwipeTarget.Drawer, swipeTarget(0f, upward, up = Drawer, down = down))
+        }
     }
 
     @Test fun swipingUpOpensTheDrawer() {
