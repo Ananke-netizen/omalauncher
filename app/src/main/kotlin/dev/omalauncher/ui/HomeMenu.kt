@@ -85,8 +85,7 @@ fun HomeMenu(
                 else -> runtime.terminal(newAppCommand(agent.bin), "New app", agent)
             }
         }
-        // Drawn by the agent picked in settings › icons, which may not be the prompt bar's.
-        MenuItem("new icon pack with ${runtime.icons.agent(runtime.agents)?.name?.lowercase() ?: "an agent"}") {
+        MenuItem("new icon pack with $agentName") {
             state.homeMenuOpen = false
             runIconTask(runtime, state, IconTask.NewPack)
         }

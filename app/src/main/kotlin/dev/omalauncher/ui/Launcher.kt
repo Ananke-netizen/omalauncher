@@ -365,15 +365,15 @@ private fun ThemesOverlay(
 }
 
 /**
- * Starts the agent picked in settings › icons on [task], in a terminal. Without Linux or an agent,
- * the screen that sets them up opens instead.
+ * Starts the launcher's agent, the one the bar asks, on [task], in a terminal. Without Linux or an
+ * agent, the screen that sets them up opens instead.
  */
 internal fun runIconTask(
     runtime: Runtime,
     state: LauncherState,
     task: IconTask,
 ) {
-    val agent = runtime.icons.agent(runtime.agents)
+    val agent = runtime.agents.default
     when {
         !runtime.bootstrap.isInstalled -> state.linuxOpen = true
         agent == null -> state.agentsOpen = true

@@ -27,8 +27,6 @@ import dev.omalauncher.AndroidApp
 import dev.omalauncher.AndroidAppCatalog
 import dev.omalauncher.AppUsage
 import dev.omalauncher.LauncherData
-import dev.omalauncher.linux.Agent
-import dev.omalauncher.linux.AgentStore
 import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.ui.Palette
@@ -108,7 +106,6 @@ class IconStore(
     val packsDir = LauncherData.iconPacksDir(context)
     private val density = context.resources.displayMetrics.densityDpi
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
-    private val prefs = context.getSharedPreferences("icons", Context.MODE_PRIVATE)
 
     /** The icon packs installed as apps, by name. */
     private var appPacks by mutableStateOf<List<IconPackInfo>>(emptyList())
@@ -119,8 +116,6 @@ class IconStore(
     /** Every pack to pick from: the ones agents drew, then the installed ones. */
     val packs get() = folderPacks + appPacks
 
-    /** The agent picked to draw icons and packs, by its command; the prompt bar's own when it's null or gone. */
-    private var agentBin by mutableStateOf(prefs.getString(AGENT, null))
 
     /** The icon pack in use; null for the apps' own icons, or until it's loaded. */
     var pack by mutableStateOf<IconPack?>(null)
@@ -232,15 +227,6 @@ class IconStore(
 
     /** Uses [info] for every app, or the apps' own icons with null; saved in style.toml. */
     fun use(info: IconPackInfo?) = style.update { it.with(Style.ICON_PACK, info?.id) }
-
-    /** The agent that draws icons and packs: the one picked here, else the prompt bar's. */
-    fun agent(agents: AgentStore): Agent? = agents.installed.firstOrNull { it.bin == agentBin } ?: agents.default
-
-    /** Draws icons and packs with [agent] from now on; the prompt bar keeps its own. */
-    fun chooseAgent(agent: Agent) {
-        agentBin = agent.bin
-        prefs.edit().putString(AGENT, agent.bin).apply()
-    }
 
     /** [info] loaded, from the ones loaded before if it hasn't changed since; null if it's gone or broken. */
     suspend fun open(info: IconPackInfo): IconPack? {
@@ -663,9 +649,6 @@ class IconStore(
 
         /** The drawer's apps, for agents to name icon files after. */
         const val APPS = "apps.txt"
-
-        /** Where [prefs] keeps the agent picked to draw. */
-        private const val AGENT = "agent"
 
         /** Icons picked in settings are saved this large: enough for the drawer at any density, and for another phone's. */
         private const val SAVED_PX = 256

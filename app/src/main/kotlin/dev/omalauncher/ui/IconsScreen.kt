@@ -81,7 +81,7 @@ fun iconsStatus(store: IconStore): String {
     ).joinToString(" · ")
 }
 
-/** What an agent is asked to do with icons; the launcher starts it with the agent picked in settings › icons. */
+/** What an agent is asked to do with icons; the launcher starts the agent the bar uses on it. */
 sealed interface IconTask {
     /** A new pack, in a style the user describes. */
     data object NewPack : IconTask
@@ -151,8 +151,9 @@ fun IconsScreen(
                     Heading("drawn by")
                     AgentChoice(runtime, onSetup = { onTask(IconTask.Setup) })
                     BasicText(
-                        "draws new packs, a pack's missing icons and single apps' icons, in the theme's colors; it works in " +
-                            "~/${IconStore.PACKS_GUEST_DIR} and ~/${IconStore.GUEST_DIR}, and what it saves shows within a second",
+                        "the launcher's agent, as in the bar, draws new packs, a pack's missing icons and single apps' icons, in " +
+                            "the theme's colors; it works in ~/${IconStore.PACKS_GUEST_DIR} and ~/${IconStore.GUEST_DIR}, and what it " +
+                            "saves shows within a second",
                         Modifier.padding(top = 6.dp),
                         style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
                     )
@@ -182,8 +183,8 @@ fun IconsScreen(
 }
 
 /**
- * The installed agents to draw with, as chips; the one picked is filled. Without Linux or an agent,
- * what to install first. Picking one here leaves the prompt bar's agent as it is.
+ * The installed agents, as chips; the launcher's agent, the one the bar asks and the home menu names,
+ * is filled, and picking one here picks it there too. Without Linux or an agent, what to install first.
  */
 @Composable
 private fun AgentChoice(
@@ -191,7 +192,7 @@ private fun AgentChoice(
     onSetup: () -> Unit,
 ) {
     val installed = runtime.agents.installed
-    val chosen = runtime.icons.agent(runtime.agents)
+    val chosen = runtime.agents.default
     when {
         !runtime.bootstrap.isInstalled -> BracketAction("install linux to draw with agents", Palette.accent, onSetup)
         installed.isEmpty() -> BracketAction("install a coding agent", Palette.accent, onSetup)
@@ -203,7 +204,7 @@ private fun AgentChoice(
                         agent.name,
                         Modifier
                             .frame(1.dp, Palette.border, if (active) Palette.accent else Color.Transparent, radius = 12.dp)
-                            .clickable { runtime.icons.chooseAgent(agent) }
+                            .clickable { runtime.agents.choose(agent) }
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         style = Mono.copy(color = if (active) Palette.background else Palette.foreground),
                         softWrap = false,
@@ -395,7 +396,7 @@ fun IconPickerScreen(
 ) {
     val store = runtime.icons
     val scope = rememberCoroutineScope()
-    val agentName = store.agent(runtime.agents)?.name?.lowercase() ?: "an agent"
+    val agentName = runtime.agents.default?.name?.lowercase() ?: "an agent"
     val source = store.sourceOf(app)
     // The pack in use first, as that's where an icon matching the others is.
     var browsing by remember { mutableStateOf(store.pack?.info ?: store.packs.firstOrNull()) }
