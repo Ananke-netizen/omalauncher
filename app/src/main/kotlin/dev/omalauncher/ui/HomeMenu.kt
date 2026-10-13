@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.omalauncher.Runtime
+import dev.omalauncher.icons.newIconsCommand
 import dev.omalauncher.linux.newAppCommand
 import dev.omalauncher.widgets.newWidgetCommand
 import kotlinx.coroutines.launch
@@ -83,6 +84,14 @@ fun HomeMenu(
                 !linux -> state.linuxOpen = true
                 agent == null -> state.agentsOpen = true
                 else -> runtime.terminal(newAppCommand(agent.bin), "New app", agent)
+            }
+        }
+        MenuItem("new icons with $agentName") {
+            state.homeMenuOpen = false
+            when {
+                !linux -> state.linuxOpen = true
+                agent == null -> state.agentsOpen = true
+                else -> runtime.terminal(newIconsCommand(agent.bin), "New icons", agent)
             }
         }
         MenuItem("widget store") {

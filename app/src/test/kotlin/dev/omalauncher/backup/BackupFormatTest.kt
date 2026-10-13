@@ -36,6 +36,7 @@ class BackupFormatTest {
             "files/widget-state/clock.owl.json",
             "files/themes/mine/colors.toml",
             "files/backgrounds/tokyo-night/me.png",
+            "files/icons/org.mozilla.firefox.svg",
         )) {
             assertTrue(ok, entryFor(ok) != null)
         }
@@ -45,6 +46,8 @@ class BackupFormatTest {
             "files/widgets/.hidden.owl",
             "files/widgets/a\\b.owl",
             "files/widgets//a.owl",
+            "files/icons/.check/org.mozilla.firefox.svg.txt",
+            "files/icons/.preview/org.mozilla.firefox.svg.png",
             "files/widgets",
             "files/style/defaults.toml",
             "files/style/errors.txt",

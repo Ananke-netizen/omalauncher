@@ -87,6 +87,16 @@ file holds first and keeping what it replaces so the restore can be undone. It
 carries a home screen across an uninstall, a new signing key or a new phone;
 Linux itself isn't in it.
 
+Icons: settings › icons picks an icon pack from the ones installed (icon packs
+from the Play Store and F-Droid work), shows how many of your apps it covers,
+and puts the apps it has no icon for on its backdrop. Tap an app there, or
+long-press it in the drawer or on home, to give it any pack's icon, a picture,
+or one your agent draws; "new icons with …" in the home menu has the agent draw
+a whole set. Your own icons are files in `~/.config/omalauncher/icons`, named
+after each app (`apps.txt` there lists them); SVGs can use the theme's colors as
+`{{ accent }}` and follow it when it changes, and `icon-check` shows an icon as
+the phone draws it. The pack is `icons.pack` in style.toml.
+
 Touch input in Linux windows: tap is a left click, long press is a right
 click, drag scrolls; apps with touch support (foot, GTK) get real touch.
 Hardware keyboard shortcuts: Super+Enter (terminal), Super+Space or

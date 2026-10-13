@@ -41,6 +41,7 @@ fun SettingsScreen(
     onGestures: () -> Unit,
     onFeed: () -> Unit,
     onBackup: () -> Unit,
+    onIcons: () -> Unit,
 ) {
     val context = LocalContext.current
     val linux by runtime.bootstrap.state.collectAsState()
@@ -57,6 +58,7 @@ fun SettingsScreen(
         val rows =
             listOf(
                 Triple("style", runtime.themes.current?.title ?: "theme, background, home screen", onStyle),
+                Triple("icons", iconsStatus(runtime.icons), onIcons),
                 Triple("gestures", "swipe up: ${runtime.gestures.swipeUp.label}", onGestures),
                 Triple("linux", linuxStatus, onLinux),
                 if (installed) {

@@ -264,6 +264,15 @@ fun HomeScreen(
             actions = { item ->
                 EditBar {
                     if (item is WidgetItem) EditAction("edit") { edit(item) }
+                    // A pinned Android app's icon, as from the drawer.
+                    if (item is Shortcut && item.component != null) {
+                        runtime.androidApps.apps.firstOrNull { it.component == item.component && it.profile == item.profile }?.let { app ->
+                            EditAction("icon") {
+                                state.editing = null
+                                state.iconApp = app
+                            }
+                        }
+                    }
                     // As a QR code or link, or (your own) to the store. An agent's tile is a terminal, not a widget to pass on.
                     if (item is WidgetItem && !item.spec.file.name.startsWith("agent-")) {
                         EditAction("share") {

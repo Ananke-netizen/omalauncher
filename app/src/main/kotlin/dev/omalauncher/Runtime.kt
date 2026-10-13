@@ -17,6 +17,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dev.omalauncher.feed.FeedStore
+import dev.omalauncher.icons.IconStore
 import dev.omalauncher.linux.AGENTS
 import dev.omalauncher.linux.Agent
 import dev.omalauncher.linux.AgentStore
@@ -89,6 +90,9 @@ class Runtime(
     val linuxMasks = mutableStateMapOf<String, ImageBitmap>()
     val androidApps = AndroidAppCatalog(context)
     val usage = AppUsage(context)
+
+    /** Where Android apps' icons come from: icon packs and the user's own files. Before [androidApps] starts drawing them. */
+    val icons = IconStore(context, style, androidApps, usage)
     val themes = ThemeStore(context, proot, style, isLinux = { linux }, onConfigChanged = ::syncGuest)
     private val audio = AudioBridge(proot)
     private val openBridge = OpenBridge(context, proot, onOpenFiles = ::openFiles)
@@ -102,7 +106,7 @@ class Runtime(
     val feed = FeedStore(context)
 
     /** The launcher's own provided files (default widgets, their docs); see [Provisioner]. */
-    private val launcherFiles = Provisioner(proot.filesDir, LauncherData.LAUNCHER_MANIFEST, listOf(widgets::managed, style::managed))
+    private val launcherFiles = Provisioner(proot.filesDir, LauncherData.LAUNCHER_MANIFEST, listOf(widgets::managed, style::managed, icons::managed))
 
     /** Every launcher-provided file in the guest; synced only while Linux is installed. */
     private val provisioner: Provisioner =
@@ -117,6 +121,7 @@ class Runtime(
                 agents::managed,
                 themes::managed,
                 widgets::guestManaged,
+                { icons.guestManaged(proot.rootfs) },
             ),
         )
     val bootstrap = Bootstrap(context, proot, agents, pacman, provisioner)

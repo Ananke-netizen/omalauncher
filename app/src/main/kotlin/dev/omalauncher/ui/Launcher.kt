@@ -47,7 +47,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import dev.omalauncher.AndroidApp
 import dev.omalauncher.Runtime
+import dev.omalauncher.icons.drawIconCommand
+import dev.omalauncher.icons.newIconsCommand
 import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.widgets.checkSecretsCommand
@@ -99,6 +102,8 @@ private fun DesktopScreen(
             state.agentsOpen -> state.agentsOpen = false
             state.storeOpen -> state.storeOpen = false
             state.themeBrowserOpen -> state.themeBrowserOpen = false
+            state.iconApp != null -> state.iconApp = null
+            state.iconsOpen -> state.iconsOpen = false
             state.styleOpen -> state.styleOpen = false
             state.packagesOpen -> state.packagesOpen = false
             state.feedSettingsOpen -> state.feedSettingsOpen = false
@@ -168,6 +173,10 @@ private fun DesktopScreen(
                     runtime.androidApps.openInfo(app)
                 },
                 uninstall = { app -> runtime.androidApps.uninstall(app) },
+                icon = { app ->
+                    state.closeNow()
+                    state.iconApp = app
+                },
             )
         }
 
@@ -291,13 +300,16 @@ private fun ThemesOverlay(
             onGestures = { state.gesturesOpen = true },
             onFeed = { state.feedSettingsOpen = true },
             onBackup = { state.backupOpen = true },
+            onIcons = { state.iconsOpen = true },
         )
     }
     if (state.feedSettingsOpen) FeedSettingsScreen(runtime.feed, onDismiss = { state.feedSettingsOpen = false })
     if (state.backupOpen) BackupScreen(onDismiss = { state.backupOpen = false })
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
-    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true })
+    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true }, onIcons = { state.iconsOpen = true })
     if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })
+    if (state.iconsOpen) IconsScreen(runtime, onDismiss = { state.iconsOpen = false }, onPick = { state.iconApp = it }, onDraw = { drawIcons(runtime, state, null) })
+    state.iconApp?.let { app -> IconPickerScreen(runtime, app, onDismiss = { state.iconApp = null }, onDraw = { drawIcons(runtime, state, app) }) }
     if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
     if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
     if (state.gesturesOpen) GesturesScreen(runtime, onDismiss = { state.gesturesOpen = false })
@@ -348,6 +360,24 @@ private fun ThemesOverlay(
                 runtime.terminal(agent.bin, agent.name, agent)
             },
         )
+    }
+}
+
+/**
+ * An agent session that draws icons: [app]'s, or whichever the user asks for. Without Linux or an agent,
+ * the screen that sets them up opens instead.
+ */
+private fun drawIcons(
+    runtime: Runtime,
+    state: LauncherState,
+    app: AndroidApp?,
+) {
+    val agent = runtime.agents.default
+    when {
+        !runtime.bootstrap.isInstalled -> state.linuxOpen = true
+        agent == null -> state.agentsOpen = true
+        app == null -> runtime.terminal(newIconsCommand(agent.bin), "New icons", agent)
+        else -> runtime.terminal(drawIconCommand(agent.bin, runtime.icons.stemFor(app), app.label), "Icon for ${app.label}", agent)
     }
 }
 
