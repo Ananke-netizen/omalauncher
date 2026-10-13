@@ -79,8 +79,12 @@ class BackupFormatTest {
         val o = prefsToJson(mapOf("theme" to "kanagawa", "rendered_by" to "9-123", "mono_icons" to true, "framed_system_bars" to false, "a_later_option" to 2), themes)
         assertEquals(setOf("theme", "mono_icons", "framed_system_bars", "a_later_option"), o.keys().asSequence().toSet())
         val launcher = BackupFormat.PREFS.first { it.name == "launcher" }
-        val l = prefsToJson(mapOf("setup_done" to true, "gpu_wanted" to true, "terminal_font" to "JetBrains Mono", "gesture_swipe_up" to "none"), launcher)
-        assertEquals(setOf("terminal_font", "gesture_swipe_up"), l.keys().asSequence().toSet())
+        val l =
+            prefsToJson(
+                mapOf("setup_done" to true, "gpu_wanted" to true, "terminal_font" to "JetBrains Mono", "gesture_swipe_up" to "none", "gesture_swipe_down" to "quick_settings"),
+                launcher,
+            )
+        assertEquals(setOf("terminal_font", "gesture_swipe_up", "gesture_swipe_down"), l.keys().asSequence().toSet())
     }
 
     @Test fun restoringAWholeFileClearsItFirst() {
@@ -97,6 +101,7 @@ class BackupFormatTest {
         assertEquals(mapOf("terminal_font" to "Hack"), edit.put)
         // A setting that wasn't set when backing up isn't left from before.
         assertTrue("gesture_swipe_up" in edit.remove)
+        assertTrue("gesture_swipe_down" in edit.remove)
         assertFalse("setup_done" in edit.remove)
     }
 
