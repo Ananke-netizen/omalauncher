@@ -427,11 +427,20 @@ class Runtime(
         shortcut: Shortcut,
         mono: Boolean,
     ): ImageBitmap? {
-        (shortcut.component?.let { androidAppKey(it, shortcut.profile) } ?: shortcut.androidShortcut?.let { androidShortcutKey(it, shortcut.profile) })
-            ?.let { return if (mono) androidApps.masks[it] else androidApps.icons[it] }
+        androidKeyOf(shortcut)?.let { return if (mono) androidApps.masks[it] else androidApps.icons[it] }
         val id = shortcut.linux?.id ?: return null
         return if (mono) linuxMasks[id] else linuxIcons[id]
     }
+
+    /**
+     * A pinned app's name as the drawer shows it, so it follows the phone's language and the app's updates; the name
+     * it was pinned with while its app is gone or not listed yet, and for Linux apps.
+     */
+    fun shortcutLabel(shortcut: Shortcut) = androidKeyOf(shortcut)?.let { androidApps.labels[it] } ?: shortcut.label
+
+    /** A pinned Android app's or shortcut's key in [androidApps]; null for a Linux app. */
+    private fun androidKeyOf(shortcut: Shortcut) =
+        shortcut.component?.let { androidAppKey(it, shortcut.profile) } ?: shortcut.androidShortcut?.let { androidShortcutKey(it, shortcut.profile) }
 
     /** Wayland app_id -> name for windows we started, so their Android tasks get a proper label. */
     private val launchedNames = ConcurrentHashMap<String, String>()

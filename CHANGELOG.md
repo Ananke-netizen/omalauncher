@@ -9,6 +9,9 @@ Dates are when the build was uploaded to Play.
 - Websites installed from a browser (Install app, or Add to home screen) show up
   on the home screen and in the app drawer, like other apps' shortcuts to home.
   Browsers didn't offer to install them before.
+- Long-pressing an Android app in the drawer, the recent apps or on home lists its
+  shortcuts, such as Maps' "Navigate home", a chat or Chrome's incognito tab. Tap one
+  to open it, or its [+] to put it on the home screen.
 
 ## 0.7.0 (versionCode 12) – 2026-10-13
 
