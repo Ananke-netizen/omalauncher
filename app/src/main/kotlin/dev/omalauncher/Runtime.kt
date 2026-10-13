@@ -440,7 +440,8 @@ class Runtime(
 
     /** A pinned Android app's or shortcut's key in [androidApps]; null for a Linux app. */
     private fun androidKeyOf(shortcut: Shortcut) =
-        shortcut.component?.let { androidAppKey(it, shortcut.profile) } ?: shortcut.androidShortcut?.let { androidShortcutKey(it, shortcut.profile) }
+        shortcut.component?.let { androidApps.pinned(it, shortcut.profile)?.key ?: androidAppKey(it, shortcut.profile) }
+            ?: shortcut.androidShortcut?.let { androidShortcutKey(it, shortcut.profile) }
 
     /** Wayland app_id -> name for windows we started, so their Android tasks get a proper label. */
     private val launchedNames = ConcurrentHashMap<String, String>()
@@ -483,7 +484,7 @@ class Runtime(
     /** Opens a pinned app from the home screen. A Linux one runs its current desktop entry, which an update may have changed. */
     fun open(shortcut: Shortcut) {
         shortcut.linux?.let { pinned -> launch(linuxApps.firstOrNull { it.id == pinned.id } ?: pinned) }
-        shortcut.component?.let { androidApps.open(it, shortcut.profile) }
+        shortcut.component?.let { c -> androidApps.pinned(c, shortcut.profile)?.let(androidApps::open) ?: androidApps.open(c, shortcut.profile) }
         shortcut.androidShortcut?.let { androidApps.open(it, shortcut.profile) }
     }
 

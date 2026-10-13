@@ -12,6 +12,12 @@ Dates are when the build was uploaded to Play.
 - Long-pressing an Android app in the drawer, the recent apps or on home lists its
   shortcuts, such as Maps' "Navigate home", a chat or Chrome's incognito tab. Tap one
   to open it, or its [+] to put it on the home screen.
+- Apps that change their own icon, like Duolingo or X, no longer leave a blank
+  tile on the home screen that won't open; it shows the new icon and opens the app.
+- The now playing widget's play button works again when it seemed dead: after a
+  long pause (Spotify) it opens the app so playback resumes, and for a player that
+  can't play in the background (YouTube without Premium) it opens the app. Tapping
+  the tile opens the app again on Android 14 and later.
 
 ## 0.7.0 (versionCode 12) – 2026-10-13
 

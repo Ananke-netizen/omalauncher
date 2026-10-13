@@ -1,0 +1,1 @@
+Home tiles keep working when an app switches its icon or renames its launcher activity in an update (Duolingo, X). The now playing widget opens the app when the player won't start, taps in widgets like dice and 2048 respond right away, and the koi pond's koi turn in arcs.
