@@ -23,19 +23,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.toArgb
-import com.caverock.androidsvg.SVG
 import dev.omalauncher.AndroidApp
 import dev.omalauncher.AndroidAppCatalog
 import dev.omalauncher.AppUsage
 import dev.omalauncher.LauncherData
+import dev.omalauncher.linux.Agent
+import dev.omalauncher.linux.AgentStore
 import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleStore
-import dev.omalauncher.theme.Templates
 import dev.omalauncher.ui.Palette
 import dev.omalauncher.ui.bitmapMask
-import dev.omalauncher.ui.decodeSampled
 import dev.omalauncher.ui.iconMask
-import dev.omalauncher.ui.renderSvg
 import dev.omalauncher.upgrade.Managed
 import dev.omalauncher.upgrade.Policy
 import dev.omalauncher.upgrade.writeAtomically
@@ -57,7 +55,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 import java.util.Calendar
@@ -93,7 +90,8 @@ class PackPreview(
  * Where Android apps' icons come from. First a file of the user's in ~/.config/omalauncher/icons,
  * drawn by an agent, picked in settings or put there by hand, which apps.txt there names for each
  * app; then the icon pack style.toml's `icons.pack` names, with its backdrop for apps it has no icon
- * for; then the app's own. Watches the folder, the style and the theme, and has the drawer draw the
+ * for; then the app's own. A pack is an installed app or a folder in ~/.config/omalauncher/icon-packs
+ * that an agent drew. Watches both folders, the style and the theme, and has the drawer draw the
  * icons that changed again. SVG files can take the theme's colors as `{{ accent }}` and redraw when
  * it changes. Main thread.
  */
@@ -105,14 +103,24 @@ class IconStore(
 ) : IconSource {
     /** The guest sees it at ~/[GUEST_DIR]. */
     val dir = LauncherData.iconsDir(context)
-    private val checkDir = File(dir, ".check")
-    private val previewDir = File(dir, ".preview")
+
+    /** Agents' packs, a folder each. The guest sees it at ~/[PACKS_GUEST_DIR]. */
+    val packsDir = LauncherData.iconPacksDir(context)
     private val density = context.resources.displayMetrics.densityDpi
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
+    private val prefs = context.getSharedPreferences("icons", Context.MODE_PRIVATE)
 
-    /** The icon packs installed, by name. */
-    var packs by mutableStateOf<List<IconPackInfo>>(emptyList())
-        private set
+    /** The icon packs installed as apps, by name. */
+    private var appPacks by mutableStateOf<List<IconPackInfo>>(emptyList())
+
+    /** The packs agents drew, by name. */
+    private var folderPacks by mutableStateOf<List<IconPackInfo>>(emptyList())
+
+    /** Every pack to pick from: the ones agents drew, then the installed ones. */
+    val packs get() = folderPacks + appPacks
+
+    /** The agent picked to draw icons and packs, by its command; the prompt bar's own when it's null or gone. */
+    private var agentBin by mutableStateOf(prefs.getString(AGENT, null))
 
     /** The icon pack in use; null for the apps' own icons, or until it's loaded. */
     var pack by mutableStateOf<IconPack?>(null)
@@ -132,13 +140,16 @@ class IconStore(
 
     @Volatile private var sources = Sources(null, true, emptySet(), emptyMap())
 
+    /** The theme's colors as icons take them, for drawing a pack's icons in settings. */
+    val colors get() = sources.colors
+
     /** Until the pack in style.toml is loaded, icons wait rather than show the app's own for a moment. */
     private val ready = CompletableDeferred<Unit>()
 
     /** SVG files that use the theme's colors; they're drawn again when it changes. */
     private val templated = ConcurrentHashMap.newKeySet<String>()
 
-    /** Packs loaded for their cards or the picker, by package; the one in use among them. */
+    /** Packs loaded for their cards or the picker, by [IconPackInfo.key]; the one in use among them. */
     private val loaded = HashMap<String, IconPack>()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -146,6 +157,9 @@ class IconStore(
 
     /** The listing [files] was made from: names to modification time and size. */
     private var listing = emptyMap<String, Pair<Long, Long>>()
+
+    /** The packs folder's, as "<pack>/<file>". */
+    private var packListing = emptyMap<String, Pair<Long, Long>>()
 
     /** The style's pack and backdrop setting that [sources] follows, loaded or not. */
     private var applied: Pair<String?, Boolean>? = null
@@ -156,16 +170,23 @@ class IconStore(
             val name = style.style[Style.ICON_PACK]
             val backdrop = style.style[Style.ICON_PACK_BACKDROP]
             rescan(refresh = false)
+            packListing = withContext(Dispatchers.IO) { listPacks(packsDir) }
+            folderPacks = withContext(Dispatchers.IO) { FolderIconPack.list(packsDir) }
             pack = name?.let { loadPack(it) }
             applied = name to backdrop
             sources = Sources(pack, backdrop, files, themeColors())
             ready.complete(Unit)
-            packs = withContext(Dispatchers.IO) { IconPack.installed(context) }
             watch()
+            // After the package watch is up, so a pack installed while this started isn't missed.
+            syncAppPacks()
             // Files saved while the launcher wasn't running, for icon-check; those checked before are skipped.
             val names = files
+            val packFiles = packListing.keys
             val colors = sources.colors
-            withContext(Dispatchers.IO) { for (n in names) check(n, colors) }
+            withContext(Dispatchers.IO) {
+                for (n in names) check(dir, n, colors)
+                for (path in packFiles) if (IconFiles.isIcon(path.substringAfter('/'))) check(File(packsDir, path.substringBefore('/')), path.substringAfter('/'), colors)
+            }
         }
     }
 
@@ -178,14 +199,15 @@ class IconStore(
         val s = sources
         val component = app.component
         IconFiles.find(s.files, component.packageName, component.className)?.let { name ->
-            drawFile(File(dir, name), size, s.colors).bitmap?.let { return RenderedIcon(it, bitmapMask(it)) }
+            val drawn = drawIconFile(File(dir, name), size, s.colors)
+            if (drawn.templated) templated += name else templated -= name
+            drawn.bitmap?.let { return RenderedIcon(it, bitmapMask(it)) }
         }
         val pack = s.pack ?: return null
-        val key = component.flattenToString()
-        pack.iconFor(key, today(), density)?.let { d -> return RenderedIcon(IconPack.draw(d, size), iconMask(d, size)) }
+        pack.render(component, today(), size, s.colors)?.let { return it }
         if (!s.backdrop) return null
         val own = info.getIcon(0)
-        return pack.backdrop(own, key, size, density)?.let { RenderedIcon(it, iconMask(own, size)) }
+        return pack.backdrop(own, component, size, s.colors)?.let { RenderedIcon(it, iconMask(own, size)) }
     }
 
     /** Where [app]'s icon comes from now, as settings and apps.txt say it. */
@@ -195,8 +217,8 @@ class IconStore(
         return when {
             IconFiles.find(files, c.packageName, c.className) != null -> IconFiles.Source.File
             pack == null -> IconFiles.Source.Own
-            pack.filter.covers(c.flattenToString()) -> IconFiles.Source.Pack
-            pack.filter.hasBackdrop && style.style[Style.ICON_PACK_BACKDROP] -> IconFiles.Source.Backdrop
+            pack.covers(c) -> IconFiles.Source.Pack
+            pack.hasBackdrop && style.style[Style.ICON_PACK_BACKDROP] -> IconFiles.Source.Backdrop
             else -> IconFiles.Source.Own
         }
     }
@@ -209,19 +231,46 @@ class IconStore(
     }
 
     /** Uses [info] for every app, or the apps' own icons with null; saved in style.toml. */
-    fun use(info: IconPackInfo?) = style.update { it.with(Style.ICON_PACK, info?.packageName) }
+    fun use(info: IconPackInfo?) = style.update { it.with(Style.ICON_PACK, info?.id) }
+
+    /** The agent that draws icons and packs: the one picked here, else the prompt bar's. */
+    fun agent(agents: AgentStore): Agent? = agents.installed.firstOrNull { it.bin == agentBin } ?: agents.default
+
+    /** Draws icons and packs with [agent] from now on; the prompt bar keeps its own. */
+    fun chooseAgent(agent: Agent) {
+        agentBin = agent.bin
+        prefs.edit().putString(AGENT, agent.bin).apply()
+    }
 
     /** [info] loaded, from the ones loaded before if it hasn't changed since; null if it's gone or broken. */
     suspend fun open(info: IconPackInfo): IconPack? {
-        loaded[info.packageName]?.takeIf { it.info.updated == info.updated }?.let { return it }
-        val pack = withContext(Dispatchers.IO) { IconPack.load(context, info) } ?: return null
-        loaded[info.packageName] = pack
+        loaded[info.key]?.takeIf { it.info.updated == info.updated }?.let { return it }
+        val pack =
+            withContext(Dispatchers.IO) {
+                when (info.kind) {
+                    PackKind.App -> AppIconPack.load(context, info)
+                    PackKind.Folder -> FolderIconPack.load(packsDir, info)
+                }
+            } ?: return null
+        loaded[info.key] = pack
         return pack
     }
 
     /** Forgets the packs loaded for settings but the one in use: a big pack's list takes megabytes. */
     fun trim() {
-        loaded.keys.retainAll(setOfNotNull(pack?.packageName))
+        loaded.keys.retainAll(setOfNotNull(pack?.info?.key))
+    }
+
+    /** The apps, one per activity, that [pack] has no icon for: what an agent fills in. */
+    fun missing(pack: IconPack): Int = apps.apps.distinctBy { it.component }.count { !pack.covers(it.component) }
+
+    /** Deletes the agent-made pack [info], and goes back to the apps' own icons if it was in use. */
+    suspend fun remove(info: IconPackInfo) {
+        if (info.kind != PackKind.Folder || !PackManifest.isValidId(info.id)) return
+        if (pack?.info?.key == info.key) use(null)
+        withContext(Dispatchers.IO) { File(packsDir, info.id).deleteRecursively() }
+        loaded.remove(info.key)
+        folderPacks = withContext(Dispatchers.IO) { FolderIconPack.list(packsDir) }
     }
 
     /** [info]'s card: the user's most used apps it has icons for, drawn by it. */
@@ -233,14 +282,15 @@ class IconStore(
         val now = System.currentTimeMillis()
         val ranked = all.sortedByDescending { usage.score("a:" + it.key, now) }
         if (info == null) {
-            val samples = withContext(Dispatchers.IO) { ranked.asSequence().mapNotNull { app -> ownIcon(app)?.let { IconPack.draw(it, size) } }.take(SAMPLES).toList() }
+            val samples = withContext(Dispatchers.IO) { ranked.asSequence().mapNotNull { app -> ownIcon(app)?.let { drawSquare(it, size) } }.take(SAMPLES).toList() }
             return PackPreview(samples, all.size, all.size)
         }
         val pack = open(info) ?: return PackPreview(emptyList(), 0, all.size)
+        val colors = sources.colors
         return withContext(Dispatchers.IO) {
-            val covered = all.filter { pack.filter.covers(it.component.flattenToString()) }
-            val samples = ranked.asSequence().mapNotNull { app -> pack.iconFor(app.component.flattenToString(), today(), density)?.let { IconPack.draw(it, size) } }.take(SAMPLES).toList()
-            PackPreview(samples, covered.size, all.size)
+            val covered = all.count { pack.covers(it.component) }
+            val samples = ranked.asSequence().mapNotNull { app -> pack.render(app.component, today(), size, colors)?.icon }.take(SAMPLES).toList()
+            PackPreview(samples, covered, all.size)
         }
     }
 
@@ -248,21 +298,22 @@ class IconStore(
     fun ownIcon(app: AndroidApp): Drawable? =
         runCatching { launcherApps.resolveActivity(Intent(Intent.ACTION_MAIN).setComponent(app.component), app.user)?.getIcon(density) }.getOrNull()
 
-    /** Gives [app] the pack's drawable [name] as its icon file, whichever pack is in use. */
+    /** Gives [app] the pack's icon [name] as its icon file, whichever pack is in use. */
     suspend fun pick(
         app: AndroidApp,
         pack: IconPack,
         name: String,
     ) {
-        val bmp = withContext(Dispatchers.IO) { pack.drawable(name, density)?.let { IconPack.draw(it, SAVED_PX) } } ?: return
-        save(app, bmp)
+        val colors = sources.colors
+        val (ext, bytes) = withContext(Dispatchers.IO) { pack.export(name, SAVED_PX, colors) } ?: return
+        save(app, ext, bytes)
     }
 
     /** Keeps [app]'s own icon whatever the pack does, as a file; without a pack, that's no file at all. */
     suspend fun pickOwn(app: AndroidApp) {
         if (pack == null) return reset(app)
-        val bmp = withContext(Dispatchers.IO) { ownIcon(app)?.let { IconPack.draw(it, SAVED_PX) } } ?: return
-        save(app, bmp)
+        val bytes = withContext(Dispatchers.IO) { ownIcon(app)?.let { png(drawSquare(it, SAVED_PX)) } } ?: return
+        save(app, "png", bytes)
     }
 
     /** Makes [uri], an image the user picked, [app]'s icon: center-cropped to a square. */
@@ -282,10 +333,10 @@ class IconStore(
                     val out = Bitmap.createBitmap(SAVED_PX, SAVED_PX, Bitmap.Config.ARGB_8888)
                     val from = Rect((src.width - side) / 2, (src.height - side) / 2, (src.width + side) / 2, (src.height + side) / 2)
                     Canvas(out).drawBitmap(src, from, Rect(0, 0, SAVED_PX, SAVED_PX), Paint(Paint.FILTER_BITMAP_FLAG))
-                    out
+                    png(out)
                 }.onFailure { Log.w(TAG, "can't read $uri", it) }.getOrNull()
             } ?: return false
-        save(app, bmp)
+        save(app, "png", bmp)
         return true
     }
 
@@ -297,10 +348,11 @@ class IconStore(
         rescan()
     }
 
-    /** Writes [bmp] as [app]'s icon file, replacing the others under its name. */
+    /** Writes [bytes] as [app]'s icon file with extension [ext], replacing the others under its name. */
     private suspend fun save(
         app: AndroidApp,
-        bmp: Bitmap,
+        ext: String,
+        bytes: ByteArray,
     ) {
         val stem = stemFor(app)
         val names = files
@@ -308,26 +360,37 @@ class IconStore(
             runCatching {
                 dir.mkdirs()
                 for (other in IconFiles.sameStem(names, stem)) File(dir, other).delete()
-                val bytes = ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
-                writeAtomically(File(dir, "$stem.png"), bytes)
+                writeAtomically(File(dir, "$stem.$ext"), bytes)
             }.onFailure { Log.w(TAG, "can't save the icon for ${app.component}", it) }
         }
         rescan()
     }
 
-    /** README.md, which tells agents and users how the folder works. */
-    fun managed(): List<Managed> = listOf(Managed(File(dir, "README.md"), Policy.Owned) { context.assets.open("app-icons/README.md").use { it.readBytes() } })
+    /** The READMEs that tell agents and users how the folders work. */
+    fun managed(): List<Managed> =
+        listOf(
+            Managed(File(dir, "README.md"), Policy.Owned) { context.assets.open("app-icons/README.md").use { it.readBytes() } },
+            Managed(File(packsDir, "README.md"), Policy.Owned) { context.assets.open("app-icons/PACKS.md").use { it.readBytes() } },
+        )
 
     /** icon-check, for agents to see an icon as the phone draws it. */
     fun guestManaged(guestRoot: File): List<Managed> =
         listOf(Managed(File(guestRoot, "usr/local/bin/icon-check"), Policy.Owned, executable = true) { context.assets.open("icon-check.sh").use { it.readBytes() } })
 
+    /** The pack style.toml names: a folder of that name in [packsDir], else an installed app. */
     private suspend fun loadPack(name: String): IconPack? {
-        val info = withContext(Dispatchers.IO) { IconPack.infoOf(context, name) }
+        val key = Style.ICON_PACK.key
+        val folder = withContext(Dispatchers.IO) { if (PackManifest.isValidId(name)) FolderIconPack.infoOf(File(packsDir, name)) else null }
+        if (folder != null) {
+            val pack = open(folder) as? FolderIconPack
+            for (problem in pack?.manifest?.problems.orEmpty()) style.report("$key: ~/$PACKS_GUEST_DIR/$name/${PackManifest.FILE}: $problem")
+            return pack
+        }
+        val info = withContext(Dispatchers.IO) { AppIconPack.infoOf(context, name) }
         val pack = info?.let { open(it) }
         when {
-            info == null -> style.report("${Style.ICON_PACK.key}: no app \"$name\" is installed; showing the apps' own icons")
-            pack == null -> style.report("${Style.ICON_PACK.key}: \"$name\" has no appfilter.xml the launcher can read; showing the apps' own icons")
+            info == null -> style.report("$key: no folder \"$name\" in ~/$PACKS_GUEST_DIR and no app by that name is installed; showing the apps' own icons")
+            pack == null -> style.report("$key: \"$name\" has no appfilter.xml the launcher can read; showing the apps' own icons")
         }
         return pack
     }
@@ -357,10 +420,11 @@ class IconStore(
                 val s = sources
                 if (colors == s.colors) return@collect
                 sources = Sources(s.pack, s.backdrop, s.files, colors)
-                refresh(templated.toSet())
+                if ((s.pack as? FolderIconPack)?.followsTheme == true) apps.refreshIcons() else refresh(templated.toSet())
             }
         }
         scope.launch { watchDir(dir).collect { rescan() } }
+        scope.launch { watchPacks(packsDir).collect { takePacks(it) } }
         // The drawer's list changed: apps.txt follows.
         scope.launch { snapshotFlow { apps.apps.toList() }.collect { writeAppList() } }
         // A pack installed, updated or removed; the one in use is read again.
@@ -372,21 +436,7 @@ class IconStore(
                 ) {
                     // An update removes the old version first; the new one's arrival follows.
                     if (intent.action == Intent.ACTION_PACKAGE_REMOVED && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
-                    scope.launch {
-                        packs = withContext(Dispatchers.IO) { IconPack.installed(context) }
-                        // The pack style.toml names: updated, removed, or back after it was missing.
-                        val wanted = applied?.first ?: return@launch
-                        val current = pack
-                        val now = packs.firstOrNull { it.packageName == wanted }
-                        if (current == null && now == null) return@launch
-                        if (current != null && now?.updated == current.info.updated) return@launch
-                        loaded.remove(wanted)
-                        style.clearReports(Style.ICON_PACK)
-                        pack = loadPack(wanted)
-                        sources = Sources(pack, sources.backdrop, sources.files, sources.colors)
-                        writeAppList()
-                        apps.refreshIcons()
-                    }
+                    scope.launch { syncAppPacks() }
                 }
             }
         val packageFilter =
@@ -403,7 +453,7 @@ class IconStore(
                     context: Context,
                     intent: Intent,
                 ) {
-                    val calendars = sources.pack?.filter?.calendars ?: return
+                    val calendars = sources.pack?.calendars ?: return
                     if (calendars.isNotEmpty()) apps.refreshIcons(apps.apps.filter { it.component.flattenToString() in calendars }.map { it.key })
                 }
             }
@@ -423,6 +473,24 @@ class IconStore(
         }
     }
 
+    /** Lists the installed packs again, and reads the one style.toml names again if it was updated, removed, or is back after it was missing. */
+    private suspend fun syncAppPacks() {
+        appPacks = withContext(Dispatchers.IO) { AppIconPack.installed(context) }
+        val wanted = applied?.first ?: return
+        val current = pack
+        // Folders are watched apart.
+        if (current is FolderIconPack) return
+        val now = appPacks.firstOrNull { it.id == wanted }
+        if (current == null && now == null) return
+        if (current != null && now?.updated == current.info.updated) return
+        loaded.remove(IconPackInfo(wanted, wanted, 0).key)
+        style.clearReports(Style.ICON_PACK)
+        pack = loadPack(wanted)
+        sources = Sources(pack, sources.backdrop, sources.files, sources.colors)
+        writeAppList()
+        apps.refreshIcons()
+    }
+
     /**
      * Lists the folder again and takes in what changed: the drawer draws the icons of apps a changed file
      * names again, and icon-check gets each new file as drawn. [refresh] false only takes the listing.
@@ -440,8 +508,37 @@ class IconStore(
             refresh(changed)
             writeAppList()
             val colors = sources.colors
-            withContext(Dispatchers.IO) { for (name in changed) if (name in now) check(name, colors) }
+            withContext(Dispatchers.IO) { for (name in changed) if (name in now) check(dir, name, colors) }
         }
+
+    /**
+     * Takes in a new listing of the packs folder: the list of agents' packs, the pack in use when its
+     * folder changed (all icons when its pack.toml or backdrop did, else the apps whose file changed),
+     * and icon-check's checks of the files that changed.
+     */
+    private suspend fun takePacks(now: Map<String, Pair<Long, Long>>) {
+        val changes = packChanges(packListing, now)
+        packListing = now
+        if (changes.isEmpty()) return
+        folderPacks = withContext(Dispatchers.IO) { FolderIconPack.list(packsDir) }
+        for (id in changes.keys) loaded.remove(IconPackInfo(id, id, 0, PackKind.Folder).key)
+        val wanted = applied?.first
+        val names = wanted?.let { changes[it] }
+        if (wanted != null && names != null) {
+            val before = pack as? FolderIconPack
+            style.clearReports(Style.ICON_PACK)
+            pack = loadPack(wanted)
+            val s = sources
+            sources = Sources(pack, s.backdrop, s.files, s.colors)
+            val layers = before?.manifest?.layers.orEmpty() + (pack as? FolderIconPack)?.manifest?.layers.orEmpty()
+            if (before == null || PackManifest.FILE in names || names.any { it in layers }) apps.refreshIcons() else refresh(names)
+            writeAppList()
+        }
+        val colors = sources.colors
+        withContext(Dispatchers.IO) {
+            for ((id, changed) in changes) for (name in changed) if (IconFiles.isIcon(name) && "$id/$name" in now) check(File(packsDir, id), name, colors)
+        }
+    }
 
     /** Has the drawer draw again the apps whose icon one of [names] gives, or could. */
     private fun refresh(names: Set<String>) {
@@ -455,71 +552,25 @@ class IconStore(
         return dir.listFiles().orEmpty().filter { it.isFile && IconFiles.isIcon(it.name) }.associate { it.name to (it.lastModified() to it.length()) }
     }
 
-    /** What drawing an icon file gave: the bitmap, or null and why not. */
-    private class Drawn(
-        val bitmap: Bitmap?,
-        val problems: List<String>,
-    )
-
-    /** Draws icon [file] at [size] px, an SVG with the theme's [colors] put in. */
-    private fun drawFile(
-        file: File,
-        size: Int,
-        colors: Map<String, String>,
-    ): Drawn {
-        val length = file.length()
-        if (length > IconFiles.MAX_BYTES) return Drawn(null, listOf("it's ${length shr 10} KB; icon files over ${IconFiles.MAX_BYTES shr 20} MB aren't read"))
-        val bmp: Bitmap
-        val problems = ArrayList<String>()
-        if (file.extension == "svg") {
-            val text = runCatching { file.readText() }.getOrElse { return Drawn(null, listOf("can't be read: ${it.message}")) }
-            val filled = if ("{{" in text) Templates.render(text, colors) else text
-            if (filled != text) templated += file.name else templated -= file.name
-            for (token in IconFiles.unfilled(filled)) problems += "$token isn't a theme color (README.md lists them), so it isn't filled in"
-            bmp = runCatching { renderSvg(SVG.getFromString(filled), size) }.getOrElse { return Drawn(null, problems + "isn't SVG androidsvg can draw: ${it.message}") }
-        } else {
-            val decoded = decodeSampled(file, size) ?: return Drawn(null, listOf("isn't an image Android can read"))
-            bmp = fit(decoded, size)
-        }
-        if (!visible(bmp)) problems += "draws nothing visible: check its viewBox, size and colors"
-        return Drawn(bmp, problems)
-    }
-
-    /** [bmp] scaled to fit a [size] px square, centered: an icon that isn't square isn't stretched. */
-    private fun fit(
-        bmp: Bitmap,
-        size: Int,
-    ): Bitmap {
-        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val scale = size.toFloat() / maxOf(bmp.width, bmp.height)
-        val w = (bmp.width * scale).roundToInt()
-        val h = (bmp.height * scale).roundToInt()
-        Canvas(out).drawBitmap(bmp, null, Rect((size - w) / 2, (size - h) / 2, (size + w) / 2, (size + h) / 2), Paint(Paint.FILTER_BITMAP_FLAG))
-        return out
-    }
-
-    private fun visible(bmp: Bitmap): Boolean {
-        val pixels = IntArray(bmp.width * bmp.height)
-        bmp.getPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
-        return pixels.any { (it ushr 24) > 16 }
-    }
-
     /**
-     * Writes .check/<name>.txt and the pictures in .preview, which icon-check waits for and shows: the file
-     * as the drawer draws it, on the theme's background, and as a silhouette in the monochrome style.
-     * Skipped when the check already is of this version of the file. Which apps it's for, icon-check
-     * reads from apps.txt.
+     * Writes .check/<name>.txt and the pictures in .preview next to icon file [name] in [folder] (the
+     * icons folder or a pack's), which icon-check waits for and shows: the file as the drawer draws it,
+     * on the theme's background, and as a silhouette in the monochrome style. Skipped when the check
+     * already is of this version of the file. Which apps it's for, icon-check reads from apps.txt.
      */
     private fun check(
+        folder: File,
         name: String,
         colors: Map<String, String>,
     ) {
         runCatching {
-            val file = File(dir, name)
+            val file = File(folder, name)
+            val checkDir = File(folder, ".check")
+            val previewDir = File(folder, ".preview")
             val hash = sha256(file)
             val checkFile = File(checkDir, "$name.txt")
             if (runCatching { checkFile.readLines().firstOrNull() }.getOrNull() == "sha256 $hash") return
-            val drawn = drawFile(file, PREVIEW_PX, colors)
+            val drawn = drawIconFile(file, PREVIEW_PX, colors)
             val bmp = drawn.bitmap
             if (bmp != null) {
                 previewDir.mkdirs()
@@ -560,7 +611,7 @@ class IconStore(
     private fun writePng(
         file: File,
         bmp: Bitmap,
-    ) = writeAtomically(file, ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray())
+    ) = writeAtomically(file, png(bmp))
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -607,8 +658,14 @@ class IconStore(
         /** The folder, relative to the guest home. */
         const val GUEST_DIR = ".config/omalauncher/icons"
 
+        /** The packs folder, relative to the guest home. */
+        const val PACKS_GUEST_DIR = ".config/omalauncher/icon-packs"
+
         /** The drawer's apps, for agents to name icon files after. */
         const val APPS = "apps.txt"
+
+        /** Where [prefs] keeps the agent picked to draw. */
+        private const val AGENT = "agent"
 
         /** Icons picked in settings are saved this large: enough for the drawer at any density, and for another phone's. */
         private const val SAVED_PX = 256
@@ -652,5 +709,61 @@ private fun watchDir(dir: File): Flow<Map<String, Pair<Long, Long>>> =
         awaitClose {
             loop.cancel()
             observer?.stopWatching()
+        }
+    }.flowOn(Dispatchers.IO).distinctUntilChanged()
+
+/** The packs folder's packs' files that matter, icons and pack.toml, as "<pack>/<file>" to modification time and size. */
+private fun listPacks(root: File): Map<String, Pair<Long, Long>> =
+    root
+        .listFiles()
+        .orEmpty()
+        .filter { it.isDirectory && PackManifest.isValidId(it.name) }
+        .flatMap { pack ->
+            pack.listFiles().orEmpty().filter { it.isFile && (IconFiles.isIcon(it.name) || it.name == PackManifest.FILE) }.map { "${pack.name}/${it.name}" to (it.lastModified() to it.length()) }
+        }.toMap()
+
+/**
+ * [root]'s packs' files, as [listPacks] lists them, now and after every change. inotify on the folder
+ * and on each pack's tells of changes; a listing every few seconds covers what it misses.
+ */
+private fun watchPacks(root: File): Flow<Map<String, Pair<Long, Long>>> =
+    callbackFlow {
+        val changed = Channel<Unit>(Channel.CONFLATED)
+        // By pack, "" for the folder itself; only touched by the loop below and on close.
+        val observers = HashMap<String, FileObserver>()
+        val mask = FileObserver.CLOSE_WRITE or FileObserver.MOVED_TO or FileObserver.MOVED_FROM or FileObserver.CREATE or FileObserver.DELETE
+
+        fun observe(
+            key: String,
+            dir: File,
+        ) {
+            if (key in observers) return
+            observers[key] =
+                object : FileObserver(dir, mask) {
+                    override fun onEvent(
+                        event: Int,
+                        path: String?,
+                    ) {
+                        // icon-check's own .check and .preview in a pack aren't changes to it.
+                        if (path != null && !path.startsWith(".")) changed.trySend(Unit)
+                    }
+                }.also { it.startWatching() }
+        }
+        val loop =
+            launch {
+                while (isActive) {
+                    root.mkdirs()
+                    observe("", root)
+                    val packs = root.listFiles().orEmpty().filter { it.isDirectory && PackManifest.isValidId(it.name) }
+                    for (pack in packs) observe(pack.name, pack)
+                    for (gone in observers.keys.filter { it.isNotEmpty() && packs.none { p -> p.name == it } }) observers.remove(gone)?.stopWatching()
+                    send(listPacks(root))
+                    // A writer may still be at it; look once it's done.
+                    if (withTimeoutOrNull(30_000L) { changed.receive() } != null) delay(150)
+                }
+            }
+        awaitClose {
+            loop.cancel()
+            observers.values.forEach { it.stopWatching() }
         }
     }.flowOn(Dispatchers.IO).distinctUntilChanged()

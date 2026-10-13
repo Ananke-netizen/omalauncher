@@ -4,6 +4,7 @@
 # then prints its problems, which apps it's for and where its pictures are.
 set -u
 dir="$HOME/.config/omalauncher/icons"
+packs="$HOME/.config/omalauncher/icon-packs"
 
 if [ $# -eq 0 ] || [ "$1" = -h ] || [ "$1" = --help ]; then
   cat >&2 <<EOF
@@ -12,7 +13,9 @@ usage: icon-check <icon.svg>...
 Waits for the launcher to draw each icon file as saved, then prints its
 problems, the apps it gives an icon to (from apps.txt), and the paths of two
 PNGs: the icon on the theme's background, and as the monochrome style draws
-it. Exits 1 if an icon can't be drawn, has problems or names no app.
+it. Takes files in ~/.config/omalauncher/icons and in a pack's folder in
+~/.config/omalauncher/icon-packs. Exits 1 if an icon can't be drawn, has
+problems or names no app.
 EOF
   exit 2
 fi
@@ -39,13 +42,15 @@ for arg in "$@"; do
     continue
   fi
   name=$(basename -- "$f")
-  if [ "$(dirname -- "$f")" != "$(realpath -- "$dir")" ] || [[ $name == .* ]] || ! [[ $name =~ \.(svg|png|webp|jpg|jpeg)$ ]]; then
-    echo "$arg: the launcher only reads .svg, .png, .webp and .jpg files directly in $dir"
+  folder=$(dirname -- "$f")
+  if { [ "$folder" != "$(realpath -- "$dir")" ] && [ "$(dirname -- "$folder")" != "$(realpath -- "$packs" 2>/dev/null)" ]; } ||
+    [[ $name == .* ]] || ! [[ $name =~ \.(svg|png|webp|jpg|jpeg)$ ]]; then
+    echo "$arg: the launcher only reads .svg, .png, .webp and .jpg files directly in $dir or in a pack's folder in $packs"
     status=1
     continue
   fi
   hash=$(sha256sum <"$f" | cut -d' ' -f1)
-  check="$dir/.check/$name.txt"
+  check="$folder/.check/$name.txt"
 
   # A file saved a moment ago takes the launcher about a second to pick up.
   if ! wait_for '[ "$(field "$check" sha256)" = "$hash" ]' 100; then
@@ -62,6 +67,8 @@ for arg in "$@"; do
   if [ "$(field "$check" result)" != ok ]; then
     echo "$name: can't be drawn"
     status=1
+  elif grep -qF "\"$name\"" "$folder/pack.toml" 2>/dev/null; then
+    echo "$name: drawn, a layer of the pack's backdrop in pack.toml"
   elif [ -n "$apps" ]; then
     echo "$name: drawn, for $apps"
   else
@@ -73,8 +80,8 @@ for arg in "$@"; do
     status=1
   fi
   if [ "$(field "$check" result)" = ok ]; then
-    echo "  preview: $dir/.preview/$name.png (on the theme's background); look at it"
-    echo "  monochrome: $dir/.preview/$name.mono.png (the monochrome icon style); look at it too"
+    echo "  preview: $folder/.preview/$name.png (on the theme's background); look at it"
+    echo "  monochrome: $folder/.preview/$name.mono.png (the monochrome icon style); look at it too"
   fi
 done
 exit $status

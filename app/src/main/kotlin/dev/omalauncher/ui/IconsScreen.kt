@@ -54,6 +54,7 @@ import dev.omalauncher.icons.IconFiles
 import dev.omalauncher.icons.IconPack
 import dev.omalauncher.icons.IconPackInfo
 import dev.omalauncher.icons.IconStore
+import dev.omalauncher.icons.PackKind
 import dev.omalauncher.icons.searchDrawables
 import dev.omalauncher.theme.Style
 import kotlinx.coroutines.Dispatchers
@@ -80,9 +81,34 @@ fun iconsStatus(store: IconStore): String {
     ).joinToString(" · ")
 }
 
+/** What an agent is asked to do with icons; the launcher starts it with the agent picked in settings › icons. */
+sealed interface IconTask {
+    /** A new pack, in a style the user describes. */
+    data object NewPack : IconTask
+
+    /** The icons [pack] is missing, in its style. */
+    data class Fill(
+        val pack: IconPackInfo,
+    ) : IconTask
+
+    /** A change to [pack] the user describes. */
+    data class Edit(
+        val pack: IconPackInfo,
+    ) : IconTask
+
+    /** One icon, for [app]. */
+    data class Draw(
+        val app: AndroidApp,
+    ) : IconTask
+
+    /** Nothing to draw yet: Linux or an agent to install first. */
+    data object Setup : IconTask
+}
+
 /**
- * Settings › icons: the icon pack every app's icon comes from, what it does with apps it has no
- * icon for, icons drawn by agents, and every app with where its icon comes from; a tap changes it.
+ * Settings › icons: the icon pack every app's icon comes from, the installed ones and the ones agents
+ * drew, a new one drawn by the agent picked here, what a pack does with apps it has no icon for, and
+ * every app with where its icon comes from; a tap changes it.
  */
 @Composable
 fun IconsScreen(
@@ -90,23 +116,30 @@ fun IconsScreen(
     onDismiss: () -> Unit,
     /** Opens one app's icon picker. */
     onPick: (AndroidApp) -> Unit,
-    /** Starts an agent session that draws icons. */
-    onDraw: () -> Unit,
+    /** Starts an agent on icons. */
+    onTask: (IconTask) -> Unit,
 ) {
     val store = runtime.icons
+    val scope = rememberCoroutineScope()
     // A big pack's list takes megabytes: the cards' packs go when the screen does.
     DisposableEffect(store) { onDispose { store.trim() } }
     var query by remember { mutableStateOf("") }
-    val agentName = runtime.agents.default?.name?.lowercase() ?: "an agent"
+    var removing by remember { mutableStateOf<IconPackInfo?>(null) }
     OverlayPanel("icons", onDismiss, contentWidth = ReadingWidth) {
         val apps = runtime.androidApps.apps
         val shown = if (query.isBlank()) apps.toList() else rankMatches(apps.toList(), query, { it.label }, alias = { it.spoken.takeIf { s -> s != it.label } }).map { it.first }
         LazyColumn(Modifier.weight(1f)) {
             item(key = "pack-heading") { Heading("icon pack") { FindPacks() } }
-            item(key = "packs") { PackRow(store) }
+            item(key = "packs") { PackRow(store, onNew = { onTask(IconTask.NewPack) }) }
+            item(key = "pack-actions") {
+                val pack = store.pack
+                if (pack != null && pack.info.kind == PackKind.Folder) {
+                    FolderPackActions(store, pack, onFill = { onTask(IconTask.Fill(pack.info)) }, onEdit = { onTask(IconTask.Edit(pack.info)) }, onRemove = { removing = pack.info })
+                }
+            }
             item(key = "options") {
                 Column {
-                    if (store.pack?.filter?.hasBackdrop == true) {
+                    if (store.pack?.hasBackdrop == true) {
                         Flag("other apps", "on backdrop", "as is", runtime.style, Style.ICON_PACK_BACKDROP)
                         OptionHint("apps the pack has no icon for", Modifier.padding(bottom = 4.dp))
                     }
@@ -115,10 +148,12 @@ fun IconsScreen(
             }
             item(key = "agents") {
                 Column {
-                    Heading("drawn by agents") { BracketAction("draw with $agentName", Palette.accent, onDraw) }
+                    Heading("drawn by")
+                    AgentChoice(runtime, onSetup = { onTask(IconTask.Setup) })
                     BasicText(
-                        "your agent draws icons in the theme's colors, for one app or all of them, into ~/${IconStore.GUEST_DIR}; " +
-                            "they show within a second and change with the theme",
+                        "draws new packs, a pack's missing icons and single apps' icons, in the theme's colors; it works in " +
+                            "~/${IconStore.PACKS_GUEST_DIR} and ~/${IconStore.GUEST_DIR}, and what it saves shows within a second",
+                        Modifier.padding(top = 6.dp),
                         style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
                     )
                 }
@@ -131,6 +166,73 @@ fun IconsScreen(
                 }
             }
             items(shown, key = { it.key }) { app -> AppIconRow(runtime, app, store) { onPick(app) } }
+        }
+        removing?.let { info ->
+            ConfirmDialog(
+                "remove ${info.label}?",
+                "Its folder is deleted, with every icon in it; apps go back to their own icons.",
+                "remove",
+                onDismiss = { removing = null },
+            ) {
+                removing = null
+                scope.launch { store.remove(info) }
+            }
+        }
+    }
+}
+
+/**
+ * The installed agents to draw with, as chips; the one picked is filled. Without Linux or an agent,
+ * what to install first. Picking one here leaves the prompt bar's agent as it is.
+ */
+@Composable
+private fun AgentChoice(
+    runtime: Runtime,
+    onSetup: () -> Unit,
+) {
+    val installed = runtime.agents.installed
+    val chosen = runtime.icons.agent(runtime.agents)
+    when {
+        !runtime.bootstrap.isInstalled -> BracketAction("install linux to draw with agents", Palette.accent, onSetup)
+        installed.isEmpty() -> BracketAction("install a coding agent", Palette.accent, onSetup)
+        else ->
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (agent in installed) {
+                    val active = agent.bin == chosen?.bin
+                    BasicText(
+                        agent.name,
+                        Modifier
+                            .frame(1.dp, Palette.border, if (active) Palette.accent else Color.Transparent, radius = 12.dp)
+                            .clickable { runtime.icons.chooseAgent(agent) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        style = Mono.copy(color = if (active) Palette.background else Palette.foreground),
+                        softWrap = false,
+                    )
+                }
+            }
+    }
+}
+
+/** The agent-made pack in use: where it is, how many apps it's missing, and an agent to fill them in or change it. */
+@Composable
+private fun FolderPackActions(
+    store: IconStore,
+    pack: IconPack,
+    onFill: () -> Unit,
+    onEdit: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val missing = store.missing(pack)
+    Column(Modifier.padding(top = 8.dp)) {
+        pack.info.description?.let { BasicText(it, style = Mono.copy(fontSize = TextSize.Small)) }
+        BasicText(
+            "~/${IconStore.PACKS_GUEST_DIR}/${pack.id} · " + if (missing == 0) "an icon for every app" else "$missing apps without an icon",
+            style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
+        )
+        FlowRow {
+            if (missing > 0) BracketAction("fill in $missing", Palette.accent, onFill)
+            BracketAction("change it", Palette.accent, onEdit)
+            BracketAction("remove", Palette.red, onRemove)
         }
     }
 }
@@ -146,23 +248,39 @@ private fun FindPacks() {
     }
 }
 
-/** The apps' own icons, then each installed pack, as cards; the one in use is outlined. */
+/** The apps' own icons, the packs agents drew, the installed ones, then a new one an agent draws, as cards; the one in use is outlined. */
 @Composable
-private fun PackRow(store: IconStore) {
-    val current = store.pack?.packageName
+private fun PackRow(
+    store: IconStore,
+    onNew: () -> Unit,
+) {
+    val current = store.pack?.info?.key
     LazyRow(
         Modifier.bleed(PanelPadding),
         contentPadding = PaddingValues(horizontal = PanelPadding),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item(key = "own") { PackCard(store, null, selected = current == null) { store.use(null) } }
-        items(store.packs, key = { it.packageName }) { info ->
-            PackCard(store, info, selected = info.packageName == current) { store.use(info) }
+        items(store.packs, key = { it.key }) { info ->
+            PackCard(store, info, selected = info.key == current) { store.use(info) }
+        }
+        // Like the backgrounds' [ + image ]: the agent picked below draws it.
+        item(key = "new") {
+            Box(
+                Modifier
+                    .width(156.dp)
+                    .height(PackCardHeight)
+                    .frame(2.dp, Palette.border, Palette.surface, radius = 12.dp)
+                    .clickable(onClick = onNew),
+                contentAlignment = Alignment.Center,
+            ) {
+                BasicText("[ + new pack ]", style = Mono.copy(color = Palette.accent))
+            }
         }
     }
     if (store.packs.isEmpty()) {
         BasicText(
-            "no icon packs installed: they're apps, on the Play Store and F-Droid; the ones installed show here",
+            "no icon packs yet: an agent draws one with + new pack, and icon packs from the Play Store and F-Droid show here once installed",
             Modifier.padding(top = 6.dp),
             style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
         )
@@ -180,11 +298,18 @@ private fun PackCard(
     val px = with(LocalDensity.current) { SampleSize.roundToPx() }
     val preview by produceState<Pair<List<ImageBitmap>, String>?>(null, info, store.packs) {
         val p = store.preview(info, px)
-        value = p.samples.map { it.asImageBitmap() } to if (info == null) "${p.total} apps" else "${p.covered} of ${p.total} apps"
+        value = p.samples.map { it.asImageBitmap() } to
+            when {
+                info == null -> "${p.total} apps"
+                // Short enough for the card: whose it is matters more than the word apps.
+                info.kind == PackKind.Folder -> "drawn · ${p.covered} of ${p.total}"
+                else -> "${p.covered} of ${p.total} apps"
+            }
     }
     Column(
         Modifier
             .width(156.dp)
+            .height(PackCardHeight)
             .frame(2.dp, if (selected) Palette.accent else Palette.border, Palette.surface, radius = 12.dp)
             .clickable(onClick = onClick)
             .padding(10.dp),
@@ -204,6 +329,9 @@ private fun PackCard(
 }
 
 private val SampleSize = 28.dp
+
+/** Tall enough for its samples, name and count at a large font size. */
+private val PackCardHeight = 108.dp
 
 /** One app in the icons list: its icon as drawn now, its name, and where the icon comes from. */
 @Composable
@@ -262,12 +390,12 @@ fun IconPickerScreen(
     runtime: Runtime,
     app: AndroidApp,
     onDismiss: () -> Unit,
-    /** Starts an agent session that draws [app]'s icon. */
-    onDraw: () -> Unit,
+    /** Starts an agent on icons: drawing [app]'s, or installing what that takes. */
+    onTask: (IconTask) -> Unit,
 ) {
     val store = runtime.icons
     val scope = rememberCoroutineScope()
-    val agentName = runtime.agents.default?.name?.lowercase() ?: "an agent"
+    val agentName = store.agent(runtime.agents)?.name?.lowercase() ?: "an agent"
     val source = store.sourceOf(app)
     // The pack in use first, as that's where an icon matching the others is.
     var browsing by remember { mutableStateOf(store.pack?.info ?: store.packs.firstOrNull()) }
@@ -302,8 +430,10 @@ fun IconPickerScreen(
                 BracketAction("keep its own", Palette.accent) { scope.launch { store.pickOwn(app).also { onDismiss() } } }
             }
             BracketAction("image", Palette.accent) { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-            BracketAction("draw with $agentName", Palette.accent, onDraw)
+            BracketAction("draw with $agentName", Palette.accent) { onTask(IconTask.Draw(app)) }
         }
+        // Which agent draws it, when there's a choice.
+        if (runtime.agents.installed.size > 1) AgentChoice(runtime, onSetup = { onTask(IconTask.Setup) })
         if (failed) BasicText("that image couldn't be read", style = Mono.copy(color = Palette.red, fontSize = TextSize.Small))
         if (store.packs.isEmpty()) {
             Heading("icon packs") { FindPacks() }
@@ -319,8 +449,8 @@ fun IconPickerScreen(
             contentPadding = PaddingValues(horizontal = PanelPadding),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            items(store.packs, key = { it.packageName }) { info ->
-                val active = info.packageName == browsing?.packageName
+            items(store.packs, key = { it.key }) { info ->
+                val active = info.key == browsing?.key
                 BasicText(
                     info.label,
                     Modifier
@@ -343,7 +473,7 @@ fun IconPickerScreen(
         }
         val names =
             remember(p, query) {
-                val suggested = p.filter.drawableFor(app.component.flattenToString(), Calendar.getInstance().get(Calendar.DAY_OF_MONTH))
+                val suggested = p.nameFor(app.component, Calendar.getInstance().get(Calendar.DAY_OF_MONTH))
                 (listOfNotNull(suggested) + searchDrawables(p.names, query)).distinct()
             }
         if (names.isEmpty()) BasicText("no icon in ${p.label} matches", style = Mono.copy(color = Palette.muted))
@@ -354,7 +484,7 @@ fun IconPickerScreen(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             items(names, key = { it }) { name ->
-                PackIconCell(p, name) {
+                PackIconCell(p, name, store.colors) {
                     scope.launch {
                         store.pick(app, p, name)
                         onDismiss()
@@ -370,12 +500,12 @@ fun IconPickerScreen(
 private fun PackIconCell(
     pack: IconPack,
     name: String,
+    colors: Map<String, String>,
     onClick: () -> Unit,
 ) {
-    val density = LocalContext.current.resources.displayMetrics.densityDpi
     val px = with(LocalDensity.current) { 48.dp.roundToPx() }
-    val bmp by produceState<ImageBitmap?>(null, pack, name) {
-        value = withContext(Dispatchers.IO) { pack.thumbnail(name, px, density)?.asImageBitmap() }
+    val bmp by produceState<ImageBitmap?>(null, pack, name, colors) {
+        value = withContext(Dispatchers.IO) { pack.thumbnail(name, px, colors)?.asImageBitmap() }
     }
     Box(
         Modifier

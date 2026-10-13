@@ -1,49 +1,124 @@
 package dev.omalauncher.icons
 
 import android.annotation.SuppressLint
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
 import android.graphics.drawable.Drawable
 import android.util.Log
 import android.util.LruCache
 import android.util.Xml
+import dev.omalauncher.ui.iconMask
 import org.xmlpull.v1.XmlPullParser
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.roundToInt
 
 private const val TAG = "icon-packs"
 
-/** An installed icon pack, before it's loaded. */
+/** Where an icon pack comes from. */
+enum class PackKind {
+    /** An installed app that ships icons; [IconPackInfo.id] is its package name. */
+    App,
+
+    /** A folder in ~/.config/omalauncher/icon-packs, which agents make; [IconPackInfo.id] is its name. */
+    Folder,
+}
+
+/** An icon pack, before it's loaded. */
 data class IconPackInfo(
-    val packageName: String,
+    /** What style.toml's icons.pack names it by: an app's package name, a folder's name. */
+    val id: String,
     val label: String,
-    /** When it was last installed or updated; a loaded copy from before is stale. */
+    /** When it last changed; a loaded copy from before is stale. */
     val updated: Long,
-)
+    val kind: PackKind = PackKind.App,
+    /** What a folder pack's pack.toml says it looks like. */
+    val description: String? = null,
+) {
+    /** Unique across kinds: a folder may share a name with an app. */
+    val key get() = "${kind.name.lowercase()}:$id"
+}
 
 /**
- * An icon pack: an app that ships drawables for other apps' icons, and an appfilter.xml
- * saying which is whose. Its resources are read in place, from its APK, on any thread.
+ * A set of icons for other apps, and maybe a backdrop for the apps it has none for: an installed
+ * pack ([AppIconPack]) or a folder an agent drew ([FolderIconPack]). Read on any thread. [colors]
+ * are the theme's, for icons that take them.
  */
-class IconPack private constructor(
-    val info: IconPackInfo,
+interface IconPack {
+    val info: IconPackInfo
+    val id get() = info.id
+    val label get() = info.label
+
+    /** Whether it dresses up apps it has no icon for. */
+    val hasBackdrop: Boolean
+
+    /** Activities, as ComponentName.flattenToString writes them, whose icon shows the day. */
+    val calendars: Set<String> get() = emptySet()
+
+    /** Every icon in it by name, for the picker. */
+    val names: List<String>
+
+    /** Whether it has an icon for [component]. */
+    fun covers(component: ComponentName): Boolean
+
+    /** The name of its icon for [component] on day [day] of the month, or null. */
+    fun nameFor(
+        component: ComponentName,
+        day: Int,
+    ): String?
+
+    /** Its icon for [component], drawn [size] px, or null. */
+    fun render(
+        component: ComponentName,
+        day: Int,
+        size: Int,
+        colors: Map<String, String>,
+    ): RenderedIcon?
+
+    /** [own] on its backdrop, or null without one. */
+    fun backdrop(
+        own: Drawable,
+        component: ComponentName,
+        size: Int,
+        colors: Map<String, String>,
+    ): Bitmap?
+
+    /** Icon [name] drawn [size] px, for the picker. */
+    fun thumbnail(
+        name: String,
+        size: Int,
+        colors: Map<String, String>,
+    ): Bitmap?
+
+    /** Icon [name] as a file an app's icon can be saved as: its extension and bytes. */
+    fun export(
+        name: String,
+        size: Int,
+        colors: Map<String, String>,
+    ): Pair<String, ByteArray>?
+}
+
+/**
+ * An installed icon pack: an app that ships drawables for other apps' icons, and an appfilter.xml
+ * saying which is whose. Its resources are read in place, from its APK, at [density] dpi.
+ */
+class AppIconPack private constructor(
+    override val info: IconPackInfo,
     private val res: Resources,
     val filter: AppFilter,
     /** Its drawable.xml, for picking an icon by hand; empty if it has none. */
     val categories: List<IconCategory>,
-) {
-    val packageName get() = info.packageName
-    val label get() = info.label
+    private val density: Int,
+) : IconPack {
+    override val hasBackdrop get() = filter.hasBackdrop
+    override val calendars get() = filter.calendars.keys
 
     /** Every icon in the pack, for the picker: drawable.xml's, or what appfilter.xml maps apps to without one. */
-    val names: List<String> by lazy { categories.flatMap { it.drawables }.distinct().ifEmpty { filter.drawables } }
+    override val names: List<String> by lazy { categories.flatMap { it.drawables }.distinct().ifEmpty { filter.drawables } }
 
     private val ids = ConcurrentHashMap<String, Int>()
 
@@ -51,36 +126,47 @@ class IconPack private constructor(
     private val thumbnails = LruCache<String, Bitmap>(THUMBNAILS)
 
     @SuppressLint("DiscouragedApi")
-    private fun id(name: String) = ids.getOrPut(name) { res.getIdentifier(name, "drawable", packageName) }
+    private fun resId(name: String) = ids.getOrPut(name) { res.getIdentifier(name, "drawable", id) }
 
-    /** The drawable called [name], at [density] dpi; null if the pack hasn't got it. */
-    fun drawable(
-        name: String,
-        density: Int,
-    ): Drawable? {
-        val id = id(name).takeIf { it != 0 } ?: return null
-        return runCatching { res.getDrawableForDensity(id, density, null) }.onFailure { Log.w(TAG, "$packageName: can't load $name", it) }.getOrNull()
+    /** The drawable called [name]; null if the pack hasn't got it. */
+    fun drawable(name: String): Drawable? {
+        val resId = resId(name).takeIf { it != 0 } ?: return null
+        return runCatching { res.getDrawableForDensity(resId, density, null) }.onFailure { Log.w(TAG, "${this.id}: can't load $name", it) }.getOrNull()
     }
 
-    /** The pack's icon for activity [component] (as [componentKey] writes it), the calendar one for [day] if it has it. */
-    fun iconFor(
-        component: String,
-        day: Int,
-        density: Int,
-    ): Drawable? =
-        filter.calendars[component]?.let { drawable(it + day, density) }
-            ?: filter.icons[component]?.let { drawable(it, density) }
+    override fun covers(component: ComponentName) = filter.covers(component.flattenToString())
 
-    /** [name] drawn [size] px square, for the picker; null if the pack hasn't got it. */
-    fun thumbnail(
+    override fun nameFor(
+        component: ComponentName,
+        day: Int,
+    ) = filter.drawableFor(component.flattenToString(), day)
+
+    override fun render(
+        component: ComponentName,
+        day: Int,
+        size: Int,
+        colors: Map<String, String>,
+    ): RenderedIcon? {
+        val key = component.flattenToString()
+        val d = filter.calendars[key]?.let { drawable(it + day) } ?: filter.icons[key]?.let { drawable(it) } ?: return null
+        return RenderedIcon(drawSquare(d, size), iconMask(d, size))
+    }
+
+    override fun thumbnail(
         name: String,
         size: Int,
-        density: Int,
+        colors: Map<String, String>,
     ): Bitmap? {
         val key = "$name@$size"
         thumbnails.get(key)?.let { return it }
-        return drawable(name, density)?.let { draw(it, size) }?.also { thumbnails.put(key, it) }
+        return drawable(name)?.let { drawSquare(it, size) }?.also { thumbnails.put(key, it) }
     }
+
+    override fun export(
+        name: String,
+        size: Int,
+        colors: Map<String, String>,
+    ): Pair<String, ByteArray>? = drawable(name)?.let { "png" to png(drawSquare(it, size)) }
 
     /** The backdrop, mask and overlay, drawn at one size; every app without its own icon in the pack shares them. Null for one it hasn't got. */
     private val layers = java.util.Collections.synchronizedMap(HashMap<String, Bitmap?>())
@@ -88,36 +174,21 @@ class IconPack private constructor(
     private fun layer(
         name: String?,
         size: Int,
-        density: Int,
     ): Bitmap? {
         name ?: return null
         val key = "$name@$size"
         if (layers.containsKey(key)) return layers[key]
-        return drawable(name, density)?.let { draw(it, size) }.also { layers[key] = it }
+        return drawable(name)?.let { drawSquare(it, size) }.also { layers[key] = it }
     }
 
-    /**
-     * [own], an app's own icon, dressed the way the pack dresses apps it has no icon for: shrunk by its
-     * scale, cut by its mask, on its backdrop, under its overlay. Null if the pack does none of that.
-     */
-    fun backdrop(
+    override fun backdrop(
         own: Drawable,
-        component: String,
+        component: ComponentName,
         size: Int,
-        density: Int,
+        colors: Map<String, String>,
     ): Bitmap? {
         if (!filter.hasBackdrop) return null
-        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        val inner = (size * filter.scale).roundToInt()
-        val at = (size - inner) / 2
-        own.setBounds(at, at, at + inner, at + inner)
-        own.draw(canvas)
-        // The mask cuts the icon alone: the backdrop goes behind it afterwards.
-        layer(filter.mask, size, density)?.let { canvas.drawBitmap(it, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT) }) }
-        layer(filter.backFor(component), size, density)?.let { canvas.drawBitmap(it, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OVER) }) }
-        layer(filter.upon, size, density)?.let { canvas.drawBitmap(it, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG)) }
-        return out
+        return composeBackdrop(own, size, filter.scale, layer(filter.backFor(component.flattenToString()), size), layer(filter.mask, size), layer(filter.upon, size))
     }
 
     companion object {
@@ -166,17 +237,17 @@ class IconPack private constructor(
         fun load(
             context: Context,
             info: IconPackInfo,
-        ): IconPack? {
+        ): AppIconPack? {
             val res =
                 try {
-                    context.packageManager.getResourcesForApplication(info.packageName)
+                    context.packageManager.getResourcesForApplication(info.id)
                 } catch (e: PackageManager.NameNotFoundException) {
                     return null
                 }
-            val filter = readXml(res, info.packageName, "appfilter") { AppFilter.parse(it) } ?: return null
-            val categories = readXml(res, info.packageName, "drawable") { parseDrawableList(it) }.orEmpty()
-            Log.i(TAG, "${info.packageName}: ${filter.icons.size} icons, ${categories.sumOf { it.drawables.size }} to pick from")
-            return IconPack(info, res, filter, categories)
+            val filter = readXml(res, info.id, "appfilter") { AppFilter.parse(it) } ?: return null
+            val categories = readXml(res, info.id, "drawable") { parseDrawableList(it) }.orEmpty()
+            Log.i(TAG, "${info.id}: ${filter.icons.size} icons, ${categories.sumOf { it.drawables.size }} to pick from")
+            return AppIconPack(info, res, filter, categories, context.resources.displayMetrics.densityDpi)
         }
 
         /** Parses the pack's xml/[name].xml, or assets/[name].xml where packs also put it; null if it has neither or it doesn't parse. */
@@ -210,15 +281,19 @@ class IconPack private constructor(
                 }
             }
 
-        /** [d] drawn [size] px square. */
-        fun draw(
-            d: Drawable,
-            size: Int,
-        ): Bitmap {
-            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-            d.setBounds(0, 0, size, size)
-            d.draw(Canvas(bmp))
-            return bmp
-        }
     }
 }
+
+/** [d] drawn [size] px square. */
+fun drawSquare(
+    d: Drawable,
+    size: Int,
+): Bitmap {
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    d.setBounds(0, 0, size, size)
+    d.draw(Canvas(bmp))
+    return bmp
+}
+
+/** [bmp] as PNG bytes. */
+internal fun png(bmp: Bitmap): ByteArray = ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()

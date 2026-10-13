@@ -8,9 +8,14 @@ phone saves its picks here too, as PNG files.
 Where an app's icon comes from, first match wins:
 
 1. a file here named after the app
-2. the icon pack in `~/.config/omalauncher/style/style.toml` (`icons.pack`)
+2. the icon pack in `~/.config/omalauncher/style/style.toml` (`icons.pack`):
+   a folder in `~/.config/omalauncher/icon-packs`, which agents make (its
+   README.md says how), or an icon pack installed as an app
 3. the app's own icon (on the icon pack's backdrop when the pack has one and
    `icons.pack-backdrop` is true)
+
+This folder is for single apps' icons; a whole set in one style is better as a
+pack, which can be switched as one.
 
 ## Names
 
@@ -71,4 +76,4 @@ detail in light strokes on a dark or clear ground.
 The phone draws an icon with its own SVG renderer. `icon-check <file>` waits
 until the launcher has drawn the file as saved, then prints its problems and the
 paths of two PNGs: the icon on the theme's background, and its monochrome
-silhouette. Look at both.
+silhouette. Look at both. It takes files here and in a pack's folder.

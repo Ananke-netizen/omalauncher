@@ -47,10 +47,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import dev.omalauncher.AndroidApp
 import dev.omalauncher.Runtime
 import dev.omalauncher.icons.drawIconCommand
-import dev.omalauncher.icons.newIconsCommand
+import dev.omalauncher.icons.editPackCommand
+import dev.omalauncher.icons.fillPackCommand
+import dev.omalauncher.icons.newPackCommand
 import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.widgets.checkSecretsCommand
@@ -308,8 +309,8 @@ private fun ThemesOverlay(
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
     if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true }, onIcons = { state.iconsOpen = true })
     if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })
-    if (state.iconsOpen) IconsScreen(runtime, onDismiss = { state.iconsOpen = false }, onPick = { state.iconApp = it }, onDraw = { drawIcons(runtime, state, null) })
-    state.iconApp?.let { app -> IconPickerScreen(runtime, app, onDismiss = { state.iconApp = null }, onDraw = { drawIcons(runtime, state, app) }) }
+    if (state.iconsOpen) IconsScreen(runtime, onDismiss = { state.iconsOpen = false }, onPick = { state.iconApp = it }, onTask = { runIconTask(runtime, state, it) })
+    state.iconApp?.let { app -> IconPickerScreen(runtime, app, onDismiss = { state.iconApp = null }, onTask = { runIconTask(runtime, state, it) }) }
     if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
     if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
     if (state.gesturesOpen) GesturesScreen(runtime, onDismiss = { state.gesturesOpen = false })
@@ -364,20 +365,26 @@ private fun ThemesOverlay(
 }
 
 /**
- * An agent session that draws icons: [app]'s, or whichever the user asks for. Without Linux or an agent,
+ * Starts the agent picked in settings › icons on [task], in a terminal. Without Linux or an agent,
  * the screen that sets them up opens instead.
  */
-private fun drawIcons(
+internal fun runIconTask(
     runtime: Runtime,
     state: LauncherState,
-    app: AndroidApp?,
+    task: IconTask,
 ) {
-    val agent = runtime.agents.default
+    val agent = runtime.icons.agent(runtime.agents)
     when {
         !runtime.bootstrap.isInstalled -> state.linuxOpen = true
         agent == null -> state.agentsOpen = true
-        app == null -> runtime.terminal(newIconsCommand(agent.bin), "New icons", agent)
-        else -> runtime.terminal(drawIconCommand(agent.bin, runtime.icons.stemFor(app), app.label), "Icon for ${app.label}", agent)
+        else ->
+            when (task) {
+                IconTask.NewPack -> runtime.terminal(newPackCommand(agent.bin), "New icon pack", agent)
+                is IconTask.Fill -> runtime.terminal(fillPackCommand(agent.bin, task.pack), "Fill in ${task.pack.label}", agent)
+                is IconTask.Edit -> runtime.terminal(editPackCommand(agent.bin, task.pack), "Change ${task.pack.label}", agent)
+                is IconTask.Draw -> runtime.terminal(drawIconCommand(agent.bin, runtime.icons.stemFor(task.app), task.app.label), "Icon for ${task.app.label}", agent)
+                IconTask.Setup -> state.agentsOpen = true
+            }
     }
 }
 

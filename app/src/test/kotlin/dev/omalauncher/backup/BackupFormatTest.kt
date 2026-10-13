@@ -37,6 +37,7 @@ class BackupFormatTest {
             "files/themes/mine/colors.toml",
             "files/backgrounds/tokyo-night/me.png",
             "files/icons/org.mozilla.firefox.svg",
+            "files/icon-packs/neon/pack.toml",
         )) {
             assertTrue(ok, entryFor(ok) != null)
         }

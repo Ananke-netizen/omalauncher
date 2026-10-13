@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.omalauncher.Runtime
-import dev.omalauncher.icons.newIconsCommand
 import dev.omalauncher.linux.newAppCommand
 import dev.omalauncher.widgets.newWidgetCommand
 import kotlinx.coroutines.launch
@@ -86,13 +85,10 @@ fun HomeMenu(
                 else -> runtime.terminal(newAppCommand(agent.bin), "New app", agent)
             }
         }
-        MenuItem("new icons with $agentName") {
+        // Drawn by the agent picked in settings › icons, which may not be the prompt bar's.
+        MenuItem("new icon pack with ${runtime.icons.agent(runtime.agents)?.name?.lowercase() ?: "an agent"}") {
             state.homeMenuOpen = false
-            when {
-                !linux -> state.linuxOpen = true
-                agent == null -> state.agentsOpen = true
-                else -> runtime.terminal(newIconsCommand(agent.bin), "New icons", agent)
-            }
+            runIconTask(runtime, state, IconTask.NewPack)
         }
         MenuItem("widget store") {
             state.homeMenuOpen = false
