@@ -108,7 +108,7 @@ Put a value into a command (`cmd`, `stream`, `run`, `terminal`, `Terminal`) with
 on its own and outside any quotes. `sh()` single-quotes the value, so it stays one word and
 can't run as code, whatever text it holds (owl 6):
 
-```owl
+```
 onTap: run("notify-send ${sh(title)}")        // right
 onTap: run("notify-send '${title}'")          // wrong: a ' in title ends the quote
 onTap: run("notify-send \"${sh(title)}\"")    // wrong: sh() inside quotes doesn't hold
