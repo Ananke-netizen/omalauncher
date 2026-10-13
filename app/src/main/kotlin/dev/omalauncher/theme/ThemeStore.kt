@@ -127,7 +127,7 @@ class ThemeStore(
      */
 
     /** The theme picked, applied or not; its full version is applied once downloaded. */
-    val picked get() = style.style[Style.THEME] ?: DEFAULT_THEME
+    val picked get() = themeOf(style.style)
 
     /** Recolors the launcher right away and remembers the choice, with its first background, until the theme itself is installed. */
     fun pick(theme: BundledTheme) {
@@ -199,7 +199,7 @@ class ThemeStore(
 
     private suspend fun restoreSaved() {
         themes = withContext(Dispatchers.IO) { scan() }
-        val theme = themes.firstOrNull { it.name == style.style[Style.THEME] } ?: return
+        val theme = themes.firstOrNull { it.name == picked } ?: return
         current = theme
         Palette.apply(theme.colors)
         // Templates and how we render them may have changed with an app update.
@@ -502,10 +502,7 @@ class ThemeStore(
      */
     fun managed() = guest.managed(current ?: savedTheme())
 
-    private fun savedTheme(): OmarchyTheme? {
-        val name = style.style[Style.THEME] ?: return null
-        return runCatching { dirs.load(name) }.getOrNull()
-    }
+    private fun savedTheme(): OmarchyTheme? = runCatching { dirs.load(picked) }.getOrNull()
 
     companion object {
         /** The Omarchy commit themes and configs come from. Changing it updates them on every install. */
@@ -513,6 +510,12 @@ class ThemeStore(
 
         private const val RENDERED_BY = "rendered_by"
         private const val DEFAULT_THEME = "tokyo-night"
+
+        /**
+         * The theme [style] names. Unset is the default one: style.toml leaves out what's at its
+         * default, so a first run that kept the theme it offered never writes it.
+         */
+        fun themeOf(style: Style) = style[Style.THEME] ?: DEFAULT_THEME
 
         /** Called on the main thread after the theme or background changes (the live wallpaper listens). */
         val changeListeners = CopyOnWriteArraySet<() -> Unit>()
@@ -532,8 +535,7 @@ class ThemeStore(
          */
         fun savedSelection(context: Context): Pair<Map<String, String>, File?>? {
             val saved = StyleStore.read(context)
-            val name = saved[Style.THEME] ?: return null
-            val theme = runCatching { themeDirs(context).load(name) }.getOrNull() ?: return null
+            val theme = runCatching { themeDirs(context).load(themeOf(saved)) }.getOrNull() ?: return null
             // Unset, or not one of the theme's: its first, as the launcher shows.
             val bg = theme.backgrounds().let { list -> list.firstOrNull { it.name == saved[Style.BACKGROUND] } ?: list.firstOrNull() }
             return theme.colors to bg

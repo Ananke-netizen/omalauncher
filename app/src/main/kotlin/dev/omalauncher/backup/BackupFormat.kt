@@ -1,7 +1,7 @@
 package dev.omalauncher.backup
 
-import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleFile
+import dev.omalauncher.theme.ThemeStore
 import dev.omalauncher.theme.Toml
 import dev.omalauncher.upgrade.Versioned
 import org.json.JSONArray
@@ -205,7 +205,7 @@ internal fun summarize(
     val widgets = widgetsDir.listFiles { f -> f.isFile && f.name.endsWith(".owl") && !f.name.startsWith(".") }?.size ?: 0
     val theme =
         if (style.isFile) {
-            runCatching { StyleFile.decode(Toml.parse(style.readText()).also(StyleFile::migrate)).style[Style.THEME] }.getOrNull()
+            runCatching { ThemeStore.themeOf(StyleFile.decode(Toml.parse(style.readText()).also(StyleFile::migrate)).style) }.getOrNull()
         } else {
             themes["theme"] as? String
         }
