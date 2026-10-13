@@ -52,6 +52,8 @@ data class Folder(
     override val key: String,
     override val page: Int,
     val apps: List<Shortcut>,
+    /** What the user named it, under its tile and over its apps; null while it has no name. */
+    val name: String? = null,
 ) : HomeItem {
     override val size get() = 1 to 1
     override val minSize get() = 1 to 1
@@ -62,6 +64,7 @@ data class Folder(
 private data class FolderEntry(
     val key: String,
     val page: Int,
+    val name: String? = null,
 )
 
 /**
@@ -83,7 +86,8 @@ class Shortcuts(
             items += array.mapObjects(::parse)
         }
         (Versioned.read(prefs.getString(FOLDERS, null), VERSION) as? JSONArray)?.let { array ->
-            folderEntries += array.mapObjects { FolderEntry(it.getString("key"), it.optInt("page", 1)) }
+            // Folders saved before they had names have no "name".
+            folderEntries += array.mapObjects { FolderEntry(it.getString("key"), it.optInt("page", 1), folderName(it.optString("name"))) }
         }
         // An app whose folder is gone goes back on the grid.
         val known = folderEntries.map { it.key }.toSet()
@@ -93,7 +97,7 @@ class Shortcuts(
     /** Apps and folders on the grid; apps in a folder show inside it instead. */
     fun onGrid(): List<HomeItem> =
         items.filter { it.folder == null } +
-            folderEntries.map { f -> Folder(f.key, f.page, items.filter { it.folder == f.key }) }
+            folderEntries.map { f -> Folder(f.key, f.page, items.filter { it.folder == f.key }, f.name) }
 
     /**
      * Drops [app] on [target]: into it if it's a folder, otherwise both go into a new
@@ -124,6 +128,19 @@ class Shortcuts(
         tidy()
         save()
         return folder
+    }
+
+    /** Names a folder; a blank [name] leaves it without one. */
+    fun rename(
+        key: String,
+        name: String,
+    ) {
+        val i = folderEntries.indexOfFirst { it.key == key }
+        if (i < 0) return
+        val clean = folderName(name)
+        if (clean == folderEntries[i].name) return
+        folderEntries[i] = folderEntries[i].copy(name = clean)
+        save()
     }
 
     /**
@@ -270,7 +287,7 @@ class Shortcuts(
             array.put(o)
         }
         val folders = JSONArray()
-        for (f in folderEntries) folders.put(JSONObject().put("key", f.key).put("page", f.page))
+        for (f in folderEntries) folders.put(JSONObject().put("key", f.key).put("page", f.page).putOpt("name", f.name))
         prefs
             .edit()
             .putString(ITEMS, Versioned.write(VERSION, array))
