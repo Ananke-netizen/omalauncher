@@ -72,37 +72,37 @@ fun HomeMenu(
         MenuItem("new widget with $agentName") {
             state.homeMenuOpen = false
             when {
-                !linux -> state.linuxOpen = true
-                agent == null -> state.agentsOpen = true
+                !linux -> state.show(SettingsPage.Linux)
+                agent == null -> state.show(SettingsPage.Agents)
                 else -> runtime.terminal(newWidgetCommand(agent.bin), "New widget", agent)
             }
         }
         MenuItem("new app with $agentName") {
             state.homeMenuOpen = false
             when {
-                !linux -> state.linuxOpen = true
-                agent == null -> state.agentsOpen = true
+                !linux -> state.show(SettingsPage.Linux)
+                agent == null -> state.show(SettingsPage.Agents)
                 else -> runtime.terminal(newAppCommand(agent.bin), "New app", agent)
             }
         }
         MenuItem("new icon pack with $agentName") {
             state.homeMenuOpen = false
-            runIconTask(runtime, state, IconTask.NewPack)
+            runIconTask(runtime, IconTask.NewPack, state::show)
         }
         MenuItem("widget store") {
             state.homeMenuOpen = false
-            state.storeOpen = true
+            state.show(SettingsPage.Store)
         }
         MenuItem("AUR app store") {
             state.homeMenuOpen = false
-            if (linux) state.packagesOpen = true else state.linuxOpen = true
+            if (linux) state.show(SettingsPage.Packages) else state.show(SettingsPage.Linux)
         }
         // Toggles in place, so the menu shows what it did.
         val feed = runtime.feed.settings.enabled
         MenuItem(if (feed) "[x] feed · swipe right" else "[ ] feed") { runtime.feed.update { it.copy(enabled = !feed) } }
         MenuItem("settings") {
             state.homeMenuOpen = false
-            state.settingsOpen = true
+            state.show()
         }
         Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) { ThemeStrip(
                 runtime.themes,
@@ -110,7 +110,7 @@ fun HomeMenu(
                 onPick = ::pickTheme,
                 onBrowse = {
                     state.homeMenuOpen = false
-                    state.themeBrowserOpen = true
+                    state.show(SettingsPage.Themes)
                 },
             ) }
     }

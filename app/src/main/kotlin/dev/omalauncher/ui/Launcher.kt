@@ -84,32 +84,11 @@ private fun DesktopScreen(
     state: LauncherState,
 ) {
     val context = LocalContext.current
-    // Something that needs Linux was asked for (a terminal, Super+Enter): offer to install it.
-    LaunchedEffect(runtime.linuxWanted) {
-        if (runtime.linuxWanted) {
-            runtime.linuxWanted = false
-            state.close()
-            state.linuxOpen = true
-        }
-    }
     BackHandler {
         when {
-            // Screens opened from settings return to it; settings itself is last.
             state.shared != null -> state.shared = null
             state.sharing != null -> state.sharing = null
-            state.linuxOpen -> state.linuxOpen = false
-            state.licensesOpen -> state.licensesOpen = false
-            state.gesturesOpen -> state.gesturesOpen = false
-            state.agentsOpen -> state.agentsOpen = false
-            state.storeOpen -> state.storeOpen = false
-            state.themeBrowserOpen -> state.themeBrowserOpen = false
             state.iconApp != null -> state.iconApp = null
-            state.iconsOpen -> state.iconsOpen = false
-            state.styleOpen -> state.styleOpen = false
-            state.packagesOpen -> state.packagesOpen = false
-            state.feedSettingsOpen -> state.feedSettingsOpen = false
-            state.backupOpen -> state.backupOpen = false
-            state.settingsOpen -> state.settingsOpen = false
             runtime.widgets.openScreen != null -> runtime.widgets.openScreen = null
             state.feed.isOpen -> state.feed.close()
             else -> state.close()
@@ -226,10 +205,7 @@ private fun DesktopScreen(
                         highlighted = highlighted,
                         handlers = handlers,
                         onAsk = { state.promptRequest = PromptRequest.Send },
-                        onSettings = {
-                            state.closeNow()
-                            state.settingsOpen = true
-                        },
+                        onSettings = { state.show() },
                         modifier =
                             Modifier.graphicsLayer {
                                 val progress = state.drawer.value
@@ -296,34 +272,8 @@ private fun ThemesOverlay(
             WidgetScreenPanel(spec, inst, onDismiss = { runtime.widgets.openScreen = null })
         }
     }
-    // Settings first so the screens it opens draw on top of it.
-    if (state.settingsOpen) {
-        SettingsScreen(
-            runtime,
-            onDismiss = { state.settingsOpen = false },
-            onStyle = { state.styleOpen = true },
-            onAgents = { state.agentsOpen = true },
-            onPackages = { state.packagesOpen = true },
-            onStore = { state.storeOpen = true },
-            onLinux = { state.linuxOpen = true },
-            onLicenses = { state.licensesOpen = true },
-            onGestures = { state.gesturesOpen = true },
-            onFeed = { state.feedSettingsOpen = true },
-            onBackup = { state.backupOpen = true },
-            onIcons = { state.iconsOpen = true },
-        )
-    }
-    if (state.feedSettingsOpen) FeedSettingsScreen(runtime.feed, onDismiss = { state.feedSettingsOpen = false })
-    if (state.backupOpen) BackupScreen(onDismiss = { state.backupOpen = false })
-    if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
-    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true }, onIcons = { state.iconsOpen = true })
-    if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })
-    if (state.iconsOpen) IconsScreen(runtime, onDismiss = { state.iconsOpen = false }, onPick = { state.iconApp = it }, onTask = { runIconTask(runtime, state, it) })
-    state.iconApp?.let { app -> IconPickerScreen(runtime, app, onDismiss = { state.iconApp = null }, onTask = { runIconTask(runtime, state, it) }) }
-    if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
-    if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
-    if (state.gesturesOpen) GesturesScreen(runtime, onDismiss = { state.gesturesOpen = false })
-    if (state.linuxOpen) LinuxScreen(runtime, onDismiss = { state.linuxOpen = false })
+    // An app's icon, picked from the drawer or home; settings › icons has its own (IconsPage).
+    state.iconApp?.let { app -> IconPickerScreen(runtime, app, onDismiss = { state.iconApp = null }, onTask = { runIconTask(runtime, it, state::show) }) }
     state.shared?.let { link ->
         SharedWidgetScreen(
             runtime.widgets,
@@ -332,7 +282,7 @@ private fun ThemesOverlay(
             // Stays open underneath, to add it once the agent has had its say.
             onReview = { path ->
                 val agent = runtime.agents.default
-                if (agent == null) state.agentsOpen = true else runtime.terminal(reviewSharedWidgetCommand(agent.bin, path), "Review widget", agent)
+                if (agent == null) state.show(SettingsPage.Agents) else runtime.terminal(reviewSharedWidgetCommand(agent.bin, path), "Review widget", agent)
             },
             onDismiss = { state.shared = null },
         )
@@ -349,50 +299,40 @@ private fun ThemesOverlay(
                         state.sharing = null
                         // The default agent opens a pull request (or an issue) on the store repo.
                         val agent = runtime.agents.default
-                        if (agent == null) state.agentsOpen = true else runtime.terminal(publishWidgetCommand(agent.bin, spec), "Publish ${spec.name}", agent)
+                        if (agent == null) state.show(SettingsPage.Agents) else runtime.terminal(publishWidgetCommand(agent.bin, spec), "Publish ${spec.name}", agent)
                     }
                 },
             // Closes the screen: what the agent changes would be shared from a fresh one.
             onCheck = {
                 state.sharing = null
                 val agent = runtime.agents.default
-                if (agent == null) state.agentsOpen = true else runtime.terminal(checkSecretsCommand(agent.bin, spec), "Check ${spec.name}", agent)
+                if (agent == null) state.show(SettingsPage.Agents) else runtime.terminal(checkSecretsCommand(agent.bin, spec), "Check ${spec.name}", agent)
             },
             onDismiss = { state.sharing = null },
-        )
-    }
-    if (state.agentsOpen) {
-        AgentsScreen(
-            runtime,
-            onDismiss = { state.agentsOpen = false },
-            onOpen = { agent ->
-                state.agentsOpen = false
-                runtime.terminal(agent.bin, agent.name, agent)
-            },
         )
     }
 }
 
 /**
  * Starts the launcher's agent, the one the bar asks, on [task], in a terminal. Without Linux or an
- * agent, the screen that sets them up opens instead.
+ * agent, [open] shows the settings page that sets them up instead.
  */
 internal fun runIconTask(
     runtime: Runtime,
-    state: LauncherState,
     task: IconTask,
+    open: (SettingsPage) -> Unit,
 ) {
     val agent = runtime.agents.default
     when {
-        !runtime.bootstrap.isInstalled -> state.linuxOpen = true
-        agent == null -> state.agentsOpen = true
+        !runtime.bootstrap.isInstalled -> open(SettingsPage.Linux)
+        agent == null -> open(SettingsPage.Agents)
         else ->
             when (task) {
                 IconTask.NewPack -> runtime.terminal(newPackCommand(agent.bin), "New icon pack", agent)
                 is IconTask.Fill -> runtime.terminal(fillPackCommand(agent.bin, task.pack), "Fill in ${task.pack.label}", agent)
                 is IconTask.Edit -> runtime.terminal(editPackCommand(agent.bin, task.pack), "Change ${task.pack.label}", agent)
                 is IconTask.Draw -> runtime.terminal(drawIconCommand(agent.bin, runtime.icons.stemFor(task.app), task.app.label), "Icon for ${task.app.label}", agent)
-                IconTask.Setup -> state.agentsOpen = true
+                IconTask.Setup -> open(SettingsPage.Agents)
             }
     }
 }
