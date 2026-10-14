@@ -2,6 +2,7 @@ package dev.omalauncher.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -103,6 +104,24 @@ sealed interface IconTask {
 
     /** Nothing to draw yet: Linux or an agent to install first. */
     data object Setup : IconTask
+}
+
+/**
+ * Settings › icons as a page of the settings activity, with an app's picker over it while one is
+ * picked; back closes the picker first. [open] shows another page (Linux or agents to set up).
+ */
+@Composable
+internal fun IconsPage(
+    runtime: Runtime,
+    onDismiss: () -> Unit,
+    open: (SettingsPage) -> Unit,
+) {
+    var picking by remember { mutableStateOf<AndroidApp?>(null) }
+    IconsScreen(runtime, onDismiss = onDismiss, onPick = { picking = it }, onTask = { runIconTask(runtime, it, open) })
+    picking?.let { app ->
+        BackHandler { picking = null }
+        IconPickerScreen(runtime, app, onDismiss = { picking = null }, onTask = { runIconTask(runtime, it, open) })
+    }
 }
 
 /**
