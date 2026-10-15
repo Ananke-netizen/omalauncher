@@ -1,0 +1,1 @@
+Owl apps: small apps that open full screen from the app list, installed from the store's new apps tab or made with an agent from the home menu. Home can hide the status bar (Style). The store marks new widgets and has more categories, and opens from the home menu. App search ignores accents. Linux gets GPU acceleration on Adreno phones too.
