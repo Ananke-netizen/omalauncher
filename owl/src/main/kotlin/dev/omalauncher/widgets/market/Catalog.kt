@@ -49,8 +49,8 @@ data class CatalogEntry(
 
     val supported get() = owl <= Compiler.LEVEL
 
-    /** Runs commands in the guest or installs packages, like [dev.omalauncher.widgets.lang.Program.needsLinux]; http requests don't count. */
-    val needsLinux get() = requires.isNotEmpty() || commands.any { !it.startsWith("http GET ") && !it.startsWith(Compiler.IF_LINUX) }
+    /** Runs commands in the guest or installs packages, like [dev.omalauncher.widgets.lang.Program.needsLinux]; http requests, web images and sounds don't count. */
+    val needsLinux get() = requires.isNotEmpty() || commands.any { !it.startsWith("http GET ") && !it.startsWith("image GET ") && !it.startsWith("sound GET ") && !it.startsWith(Compiler.IF_LINUX) }
 }
 
 object Catalog {
@@ -141,12 +141,14 @@ object Catalog {
         return entries.sortedWith(compareBy(rank, { it.name }))
     }
 
+    /** A catalog of [entries]: index.json lists widgets under `widgets`, apps.json apps under `apps`. */
     fun write(
         entries: List<CatalogEntry>,
         generated: String,
+        list: String = "widgets",
     ): String {
         val sb = StringBuilder()
-        sb.append("{\n  \"format\": $FORMAT,\n  \"generated\": ${q(generated)},\n  \"widgets\": [")
+        sb.append("{\n  \"format\": $FORMAT,\n  \"generated\": ${q(generated)},\n  ${q(list)}: [")
         entries.forEachIndexed { i, e ->
             if (i > 0) sb.append(",")
             sb.append("\n    {")
