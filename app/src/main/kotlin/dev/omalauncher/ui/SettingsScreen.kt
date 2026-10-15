@@ -33,7 +33,6 @@ fun SettingsScreen(
     onStyle: () -> Unit,
     onAgents: () -> Unit,
     onPackages: () -> Unit,
-    onStore: () -> Unit,
     onLinux: () -> Unit,
     onLicenses: () -> Unit,
     onGestures: () -> Unit,
@@ -65,7 +64,6 @@ fun SettingsScreen(
                     Triple("coding agents", "needs linux", onLinux)
                 },
                 Triple("packages", if (installed) "install Linux apps and tools with pacman and the AUR" else "needs linux", if (installed) onPackages else onLinux),
-                Triple("widget store", "add widgets to the home screen", onStore),
                 Triple("feed", feedStatus(runtime.feed.settings), onFeed),
                 Triple("backup & restore", "the home screen, its widgets and folders, to a file", onBackup),
                 Triple("android settings", "the phone's system settings") {
