@@ -454,6 +454,14 @@ class LangTest {
         assertEquals(Str("center"), el.props["align"]!!.const)
     }
 
+    @Test fun enumWordsWinOverNamesTheyShadow() {
+        val p = Compiler.compile("widget {\n  source top = clock every 1m\n  component Stat(label) { Text { text: label; style: label } }\n  Row { align: top; Stat { label: \"cpu\" } }\n}")
+        val row = p.root.single() as WNode.Element
+        assertEquals(Str("top"), row.props["align"]!!.const)
+        val text = (row.children.single() as WNode.Use).body.single() as WNode.Element
+        assertEquals(Str("label"), text.props["style"]!!.const)
+    }
+
     @Test fun colorLiteralsAndHelpers() {
         val p = Compiler.compile("widget { Text { text: \"x\"; color: #ff000080 } }")
         val c = (p.root.single() as WNode.Element).props["color"]!!.const as Col
@@ -527,6 +535,13 @@ class LangTest {
         assertTrue(compileError("widget {\n meta { owl: 6 }\n source m = android.modes\n Text { text: 1 } }").contains("android.modes needs owl 7"))
         assertTrue(compileError("widget {\n meta { owl: 6 }\n Text { text: 1; onTap: haptic() } }").contains("haptic needs owl 7"))
         assertTrue(compileError("widget {\n meta { owl: 6 }\n Text { text: 1; onTap: share(\"x\") } }").contains("share needs owl 7"))
+    }
+
+    @Test fun androidApps() {
+        val p = Compiler.compile("widget {\n meta { owl: 8 }\n source a = android.apps every 1m\n Image { src: a[0].icon; onTap: androidApp(a[0].key) } }")
+        assertEquals(listOf("android.apps"), p.globals.map { (it as Global.Source).kind })
+        assertEquals(listOf("read installed Android apps (names, packages and icons)"), p.commands)
+        assertTrue(compileError("widget {\n meta { owl: 7 }\n source a = android.apps\n Text { text: 1 } }").contains("android.apps needs owl 8"))
     }
 
     @Test fun appsAreScreensOfTheirOwn() {
