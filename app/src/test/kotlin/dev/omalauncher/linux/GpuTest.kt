@@ -34,13 +34,13 @@ class GpuTest {
         assertEquals(GpuKind.MALI, gpuKind(hasMali = true, hasKgsl = true, kgslModel = "Adreno 740"))
     }
 
-    @Test fun softwareEnvDoesNotNameARealDriver() {
+    @Test fun softwareEnvNamesOnlyLavapipe() {
         val icds = listOf(GpuDrivers.of(GpuKind.MALI).icdPath, GpuDrivers.of(GpuKind.TURNIP).icdPath)
         assertEquals(
             listOf(
                 "LIBGL_ALWAYS_SOFTWARE=1",
-                "VK_ICD_FILENAMES=/usr/local/share/vulkan/icd.d/omalauncher-software.json",
-                "VK_DRIVER_FILES=/usr/local/share/vulkan/icd.d/omalauncher-software.json",
+                "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json",
+                "VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json",
             ),
             SOFTWARE_ENV,
         )
@@ -71,8 +71,10 @@ class GpuTest {
         assertTrue(probe.contains("export MESA_VK_WSI_DEBUG='sw';"))
         assertTrue(probe.contains("export GALLIUM_DRIVER='zink';"))
         assertTrue(driver.env.any { it == "GALLIUM_DRIVER=zink" })
-        assertFalse(probe.contains("MESA_LOADER_DRIVER_OVERRIDE"))
-        assertFalse(script.contains("mesa-zink"))
+        // Stock Mesa drops zink on the shm path and shows black windows; Mali uses the patched bundle too.
+        assertTrue(probe.contains("export MESA_LOADER_DRIVER_OVERRIDE='zink';"))
+        assertTrue(probe.contains("export __EGL_VENDOR_LIBRARY_FILENAMES='/usr/local/share/glvnd/egl_vendor.d/50_mesa.json';"))
+        assertTrue(script.contains("tar -xJf '/usr/local/share/omalauncher/mesa-zink.tar.xz' -C / &&"))
     }
 
     @Test fun turnipScriptPinsTheKgslPackageAndTheExtractedLibrary() {
@@ -101,12 +103,15 @@ class GpuTest {
         assertTrue(probe.contains("export LIBGL_DRIVERS_PATH='/usr/local/omalauncher-mesa/lib/dri';"))
         assertTrue(probe.contains("export __EGL_VENDOR_LIBRARY_FILENAMES='/usr/local/share/glvnd/egl_vendor.d/50_mesa.json';"))
         val extractAt = script.indexOf("tar -xJf '/usr/local/share/omalauncher/mesa-zink.tar.xz' -C / &&")
-        val tarHashAt = script.indexOf("104daac072cf1a0148a5928f8f773eab760512ed1bf9b05d02cc670d8150dfe3")
+        val tarHashAt = script.indexOf("2f9a58343997e972bd2c82bb78c6a30fbbda342ac3e0df4ad148732ced541f93")
         assertTrue(tarHashAt >= 0 && extractAt > tarHashAt)
         assertFalse(script.contains("--absolute-names"))
         assertTrue(script.contains("! grep -Ev '^usr/local/omalauncher-mesa/'"))
         assertTrue(script.contains("/usr/local/omalauncher-mesa/lib/libEGL_mesa.so"))
         assertTrue(script.contains("bf9ea007f4babd55c86cfe87e8fd7b0cfa47e78fc34aa89b72fa60c7b84837e9"))
+        // A rebuilt bundle can keep libEGL, so the skip is on the archive's stamp, written after the extract.
+        assertTrue(script.contains("{ grep -qx '2f9a58343997e972bd2c82bb78c6a30fbbda342ac3e0df4ad148732ced541f93' '/usr/local/omalauncher-mesa/bundle.sha256'"))
+        assertTrue(script.indexOf("> '/usr/local/omalauncher-mesa/bundle.sha256'") > extractAt)
         assertEquals("Adreno", driver.label)
     }
 
