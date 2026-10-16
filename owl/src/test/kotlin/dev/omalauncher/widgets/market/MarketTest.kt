@@ -93,6 +93,13 @@ class MarketTest {
         assertTrue(risks("image GET https://x.test").isEmpty())
     }
 
+    @Test fun urlsWithAFixedHostAreNotFlagged() {
+        assertTrue(Review.risks(listOf("http GET https://a.b/c/${Compiler.VALUE}?d=${Compiler.NUMBER}")).isEmpty())
+        assertTrue(Review.risks(listOf("http GET (a URL built from widget values)")).single().contains("send its data anywhere"))
+        assertTrue(Review.risks(listOf("http POST (a URL built from widget values)")).single().contains("send its data anywhere"))
+        assertTrue(Review.risks(listOf("http POST https://a.b/c/${Compiler.VALUE}")).isEmpty())
+    }
+
     @Test fun theStoreTakesValuesInCommandsOnlyQuoted() {
         fun review(cmd: String) =
             Review(

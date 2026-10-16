@@ -9,6 +9,8 @@ import java.util.Base64
  */
 class Compiler private constructor(
     private val ast: WidgetAst,
+    /** The file, to quote a value in a warning. */
+    private val src: String,
 ) {
     companion object {
         const val MAX_NODES = 500
@@ -30,7 +32,7 @@ class Compiler private constructor(
 
         fun compile(src: String): Program =
             try {
-                Compiler(Parser.parse(src)).program()
+                Compiler(Parser.parse(src), src).program()
             } catch (e: StackOverflowError) {
                 // `((((...` or `1+1+1+...` thousands deep: parsing and compiling recurse per level.
                 throw CompileError("too deeply nested", 0)
@@ -110,8 +112,8 @@ class Compiler private constructor(
                 listOf("Input.focus", "sh", "corners").associateWith { 6 } +
                 // owl 7: more of the phone, without new permissions.
                 listOf("android.alarm", "android.modes", "torch", "share", "haptic").associateWith { 7 } +
-                // owl 8: apps, files that aren't tiles; the phone's apps as a list; images and sounds from the web.
-                listOf("app \"…\" { }", "android.apps", WEB_IMAGE, "sound").associateWith { 8 }
+                // owl 8: apps, files that aren't tiles; the phone's apps as a list; images and sounds from the web; values in URLs.
+                listOf("app \"…\" { }", "android.apps", WEB_IMAGE, "sound", "enc", "post").associateWith { 8 }
 
         private const val WEB_IMAGE = "an image from the web"
 
@@ -166,6 +168,9 @@ class Compiler private constructor(
         private val NUMBERS = setOf("int", "round", "floor", "ceil", "abs", "fixed", "len", "count", "sum", "min", "max", "clamp")
 
         private const val MAX_SHAPES = 8
+
+        /** A URL whose scheme and host are fixed text, so no value can send it elsewhere. */
+        private val FIXED_HOST = Regex("""^https?://[A-Za-z0-9.-]+(:[0-9]+)?/""")
 
         /**
          * Whether bash reads every [VALUE] in [shape] as the quoted word sh(...) made it: not inside quotes,
@@ -240,6 +245,7 @@ class Compiler private constructor(
     private val sources = HashSet<String>()
     private val components = HashMap<String, Component>()
     private val commands = LinkedHashSet<String>()
+    private val warnings = LinkedHashSet<String>()
 
     /** The commands that are fixed text, so their programs can be read off them. */
     private val scripts = LinkedHashSet<String>()
@@ -349,6 +355,7 @@ class Compiler private constructor(
             onTap = onTap,
             triggers = triggers,
             commands = commands.toList(),
+            warnings = warnings.toList(),
             requires = requires,
             needsLinux = guest || requires.isNotEmpty(),
             programs = scripts.flatMap(ShellWords::programs).toSortedSet(),
@@ -421,6 +428,7 @@ class Compiler private constructor(
             onTap = null,
             triggers = triggers,
             commands = commands.toList(),
+            warnings = warnings.toList(),
             requires = requires,
             needsLinux = guest || requires.isNotEmpty(),
             programs = scripts.flatMap(ShellWords::programs).toSortedSet(),
@@ -494,18 +502,24 @@ class Compiler private constructor(
     private fun shapes(
         e: Expr,
         s: Scope,
+        value: String = "sh",
     ): List<String>? {
-        ex(e, s).const?.let { c -> return if (c is Str || c is Num) listOf(c.toString()) else null }
+        ex(e, s).const?.let { c ->
+            // A URL that's null pauses its source: no shape.
+            return if (c is Str || c is Num) listOf(c.toString()) else if (c == Null && value == "enc") emptyList() else null
+        }
         fun join(
             a: List<String>,
             b: List<String>,
         ) = a.flatMap { x -> b.map { x + it } }
         val out =
             when (e) {
-                is Expr.Interp -> e.parts.fold(listOf("")) { acc, p -> join(acc, shapes(p, s) ?: return null) }
-                is Expr.Binary -> if (e.op == "+") join(shapes(e.a, s) ?: return null, shapes(e.b, s) ?: return null) else null
-                is Expr.Cond -> (shapes(e.a, s) ?: return null) + (shapes(e.b, s) ?: return null)
-                is Expr.Call -> if (e.name == "sh") listOf(VALUE) else if (e.name in NUMBERS) listOf(NUMBER) else null
+                is Expr.Interp -> e.parts.fold(listOf("")) { acc, p -> join(acc, shapes(p, s, value) ?: return null) }
+                is Expr.Binary -> if (e.op == "+") join(shapes(e.a, s, value) ?: return null, shapes(e.b, s, value) ?: return null) else null
+                is Expr.Cond -> (shapes(e.a, s, value) ?: return null) + (shapes(e.b, s, value) ?: return null)
+                is Expr.Call -> if (e.name == value) listOf(VALUE) else if (e.name in NUMBERS) listOf(NUMBER) else null
+                // A top-level let that is fixed text: `let api = "https://..."` and then "${api}/x".
+                is Expr.Name -> constText(e, s)?.let { listOf(it) }
                 else -> null
             }
         return out?.distinct()?.takeIf { it.size <= MAX_SHAPES }
@@ -591,7 +605,8 @@ class Compiler private constructor(
                 if (e.args.size !in 1..2 || e.named.isNotEmpty()) fail("http(\"https://...\") takes a URL and optionally a map of headers", e.pos)
                 val url = ex(e.args[0], root)
                 (url.const as? Str)?.v?.let { if (!it.startsWith("https://") && !it.startsWith("http://")) fail("http takes an http:// or https:// URL", e.args[0].pos) }
-                commands += "http GET " + ((url.const as? Str)?.v ?: "(a URL built from widget values)")
+                // Like a command's sh(...) values: listed by shape when the host is fixed and each value is enc(...) or a number.
+                listUrl("http GET", e.args[0], url, root)
                 Global.Source(d.name, "http", url, (every ?: 60.0).coerceAtLeast(5.0), d.json, timeout.coerceIn(1, 300), d.status, e.args.getOrNull(1)?.let { ex(it, root) })
             }
             e is Expr.Call && e.name in setOf("cmd", "stream") -> {
@@ -880,12 +895,14 @@ class Compiler private constructor(
                             val run: (Env) -> Unit = { env -> env.host.runInto(command(env).toString(), slot) }
                             return@map run
                         }
+                        if (call?.name == "post") return@map post(call, inner, slot)
                         val v = ex(s.value, inner)
                         val run: (Env) -> Unit = { env -> env.host.write(slot, v(env)) }
                         run
                     }
                     is Stmt.Do -> {
                         val call = s.call as Expr.Call
+                        if (call.name == "post") return@map post(call, inner, null)
                         val arity = Builtins.actions[call.name] ?: fail("'${call.name}' isn't an action (${Builtins.actions.keys.joinToString()})", call.pos)
                         if (call.args.size !in arity) fail("${call.name} takes ${arity.first}-${arity.last} values", call.pos)
                         val args = call.args.map { ex(it, inner) }
@@ -924,6 +941,111 @@ class Compiler private constructor(
                 env.host.report("${h.name}: ${x.message ?: x}")
             }
         }
+    }
+
+    /**
+     * `post(url, body, headers)`, or `x = post(...)` to get the answer into the state [slot]: an HTTP POST
+     * from Android. Its URLs are listed like http(...)'s, as "http POST <url>".
+     */
+    private fun post(
+        call: Expr.Call,
+        scope: Scope,
+        slot: Int?,
+    ): (Env) -> Unit {
+        if (call.args.size !in 1..3 || call.named.isNotEmpty()) fail("post(\"https://...\", body, headers) takes a URL, optionally a body and a map of headers", call.pos)
+        since("post", call.pos)
+        val url = ex(call.args[0], scope)
+        (url.const as? Str)?.v?.let { if (!it.startsWith("https://") && !it.startsWith("http://")) fail("post takes an http:// or https:// URL", call.args[0].pos) }
+        listUrl("http POST", call.args[0], url, scope)
+        val body = call.args.getOrNull(1)?.let { ex(it, scope) }
+        val headers = call.args.getOrNull(2)?.let { ex(it, scope) }
+        return { env ->
+            val target = url(env)
+            // Like any action whose value hasn't loaded: a null URL sends nothing.
+            if (target != Null) {
+                val h = (headers?.invoke(env) as? Obj)?.fields.orEmpty().mapValues { it.value.toString() }
+                env.host.post(target.toString(), body?.invoke(env) ?: Null, h, slot)
+            }
+        }
+    }
+
+    /** Lists an http URL for the reviewer, by shape when the host is fixed and each value in it is enc(...) or a number. */
+    private fun listUrl(
+        what: String,
+        e: Expr,
+        url: Ev,
+        scope: Scope,
+    ) {
+        val shapes = (url.const as? Str)?.let { listOf(it.v) } ?: shapes(e, scope, "enc")?.takeIf { it.isNotEmpty() && it.all { s -> FIXED_HOST.containsMatchIn(s) } }
+        if (shapes == null) {
+            commands += "$what (a URL built from widget values)"
+            urlWarning(e, scope)?.let { (msg, pos) -> warnings += "${Source(src).lineCol(pos).let { "${it.first}:${it.second}" }}: $msg" }
+        } else {
+            shapes.forEach { commands += "$what $it" }
+        }
+    }
+
+    /**
+     * Why [e], an http URL, can't be listed for review, and where: the first value that isn't put
+     * through enc() or a number, with the fix, or a server that comes from a value. Agents read it
+     * from owl-check, so it names the change to make.
+     */
+    private fun urlWarning(
+        e: Expr,
+        s: Scope,
+    ): Pair<String, Int>? {
+        // A value is the whole URL when it's reached through ternaries alone, not inside the text of one.
+        var whole = false
+        fun bad(
+            p: Expr,
+            top: Boolean,
+        ): Expr? =
+            when {
+                constText(p, s) != null -> null
+                p is Expr.Interp -> p.parts.firstNotNullOfOrNull { bad(it, false) }
+                p is Expr.Binary && p.op == "+" -> bad(p.a, false) ?: bad(p.b, false)
+                p is Expr.Cond -> bad(p.a, top) ?: bad(p.b, top)
+                p is Expr.Call && (p.name == "enc" || p.name in NUMBERS) -> null
+                ex(p, s).const == Null -> null
+                else -> p.also { whole = top }
+            }
+        val value = bad(e, true)
+        if (value != null) {
+            val code = snippet(value.pos)
+            if (whole) {
+                return "this URL is all a value ($code), so the store's review can't show where it goes: write it out here, " +
+                    "\"https://host/path?q=\${enc(v)}\", with only its values from state or a source" to value.pos
+            }
+            val inText = e is Expr.Interp && e.parts.any { it === value } || e is Expr.Cond
+            val fix =
+                when {
+                    value is Expr.Call && value.name == "sh" -> "enc(...) instead of sh(...): sh() is for commands"
+                    // Escaped by hand: enc() would escape the % again.
+                    value is Expr.Call && value.name == "replace" && code.contains("%") -> "enc(...) around the value itself and drop the replace(...): enc() does the escaping"
+                    inText -> "\${enc($code)}"
+                    else -> "enc($code)"
+                }
+            return "a value in this URL isn't put through enc(), so the store's review can't show where it goes: write $fix (a number can go through int(n) or fixed(n, 4) instead; a path with / in it can't, so write its fixed parts out and enc() only the values between them)" to value.pos
+        }
+        // Every value is encoded, so the server itself must come from one.
+        return "the server in this URL comes from a value: keep \"https://host/\" fixed text and put values after it" to e.pos
+    }
+
+    /** The code of the expression at [pos], as written: up to where it ends at its own depth. */
+    private fun snippet(pos: Int): String {
+        var depth = 0
+        var i = pos
+        while (i < src.length) {
+            val c = src[i]
+            if (c == '(' || c == '[' || c == '{') depth++
+            if (c == ')' || c == ']' || c == '}') {
+                if (depth == 0) break
+                depth--
+            }
+            if (depth == 0 && (c == ',' || c == ';' || c == '"' || c == '\n' || c == ' ' || c == '?' || c == ':')) break
+            i++
+        }
+        return src.substring(pos, i).ifEmpty { "value" }.take(60)
     }
 
     // Expressions
