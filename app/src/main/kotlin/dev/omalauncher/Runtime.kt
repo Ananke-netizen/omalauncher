@@ -543,7 +543,7 @@ class Runtime(
      */
     fun askHeadless(command: String) {
         if (!linux) {
-            linuxWanted = true
+            openSettings(SettingsPage.Linux)
             return
         }
         scope.launch {
