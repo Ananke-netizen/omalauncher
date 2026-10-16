@@ -38,7 +38,10 @@ fun SettingsScreen(
     onStore: () -> Unit,
     onLinux: () -> Unit,
     onLicenses: () -> Unit,
+    onGestures: () -> Unit,
     onFeed: () -> Unit,
+    onBackup: () -> Unit,
+    onIcons: () -> Unit,
 ) {
     val context = LocalContext.current
     val linux by runtime.bootstrap.state.collectAsState()
@@ -55,6 +58,7 @@ fun SettingsScreen(
         val rows =
             listOf(
                 Triple("style", runtime.themes.current?.title ?: "theme, background, home screen", onStyle),
+                Triple("icons", iconsStatus(runtime.icons), onIcons),
                 Triple("linux", linuxStatus, onLinux),
                 if (installed) {
                     Triple("coding agents", runtime.agents.default?.let { "default: ${it.name}" } ?: "install Claude Code, OpenCode, …", onAgents)
@@ -70,6 +74,7 @@ fun SettingsScreen(
                     { runtime.showAllAgentsInChip(!runtime.chipAll) },
                 ),
                 Triple("feed", feedStatus(runtime.feed.settings), onFeed),
+                Triple("backup & restore", "the home screen, its widgets and folders, to a file", onBackup),
                 Triple("android settings", "the phone's system settings") {
                     context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 },

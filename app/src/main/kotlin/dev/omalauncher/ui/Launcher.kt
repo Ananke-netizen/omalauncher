@@ -1,6 +1,7 @@
 package dev.omalauncher.ui
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.graphics.graphicsLayer
@@ -15,35 +16,49 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import dev.omalauncher.Runtime
+import dev.omalauncher.icons.drawIconCommand
+import dev.omalauncher.icons.editPackCommand
+import dev.omalauncher.icons.fillPackCommand
+import dev.omalauncher.icons.newPackCommand
+import dev.omalauncher.theme.Style
+import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.widgets.checkSecretsCommand
 import dev.omalauncher.widgets.publishWidgetCommand
 import dev.omalauncher.widgets.reviewSharedWidgetCommand
 import dev.omalauncher.widgets.render.LocalHomeCovered
+import dev.omalauncher.widgets.render.LocalInputFocus
 
 @Composable
 fun LauncherRoot(
@@ -84,12 +99,16 @@ private fun DesktopScreen(
             state.sharing != null -> state.sharing = null
             state.linuxOpen -> state.linuxOpen = false
             state.licensesOpen -> state.licensesOpen = false
+            state.gesturesOpen -> state.gesturesOpen = false
             state.agentsOpen -> state.agentsOpen = false
             state.storeOpen -> state.storeOpen = false
             state.themeBrowserOpen -> state.themeBrowserOpen = false
+            state.iconApp != null -> state.iconApp = null
+            state.iconsOpen -> state.iconsOpen = false
             state.styleOpen -> state.styleOpen = false
             state.packagesOpen -> state.packagesOpen = false
             state.feedSettingsOpen -> state.feedSettingsOpen = false
+            state.backupOpen -> state.backupOpen = false
             state.settingsOpen -> state.settingsOpen = false
             runtime.widgets.openScreen != null -> runtime.widgets.openScreen = null
             state.feed.isOpen -> state.feed.close()
@@ -112,6 +131,7 @@ private fun DesktopScreen(
             }
         }
     }
+    SystemBarFrames()
     val covered = remember(state) { { state.homeCovered || runtime.widgets.openScreen != null } }
     CompositionLocalProvider(LocalHomeCovered provides covered) {
         Column(Modifier.fillMaxSize().safePadding()) {
@@ -122,6 +142,8 @@ private fun DesktopScreen(
 
     // Only whether it shows is read here; the animation itself runs in the layer, without recomposing.
     val panelShown by remember(state) { derivedStateOf { state.drawer.value > 0.01f } }
+    // Closing it forgets the search, like stock drawers: the next swipe up shows every app, not the old results.
+    LaunchedEffect(panelShown) { if (!panelShown) state.query = "" }
     val search by remember(runtime, state) { derivedStateOf { searchApps(runtime, state.query) } }
     val highlighted = search.highlighted(state.picked)
 
@@ -131,8 +153,8 @@ private fun DesktopScreen(
         state.closeNow()
         when (hit) {
             is AppHit.Linux -> runtime.launch(hit.app)
-            // A work copy opens in its profile; one uninstalled or disabled since the list was loaded only logs.
-            is AppHit.Android -> runtime.androidApps.open(hit.app, context)
+            is AppHit.Android -> runtime.androidApps.open(hit.app)
+            is AppHit.Shortcut -> runtime.androidApps.open(hit.shortcut)
         }
     }
 
@@ -144,7 +166,8 @@ private fun DesktopScreen(
                 pin = { hit ->
                     when (hit) {
                         is AppHit.Linux -> runtime.widgets.shortcuts.addLinux(hit.app, state.currentPage)
-                        is AppHit.Android -> runtime.widgets.shortcuts.addAndroid(hit.app.label, hit.app.component, state.currentPage, hit.app.profile?.serial)
+                        is AppHit.Android -> runtime.widgets.shortcuts.addAndroid(hit.app, state.currentPage)
+                        is AppHit.Shortcut -> runtime.widgets.shortcuts.addAndroidShortcut(hit.shortcut, state.currentPage)
                     }
                     state.close()
                 },
@@ -153,12 +176,20 @@ private fun DesktopScreen(
                     runtime.androidApps.openInfo(app)
                 },
                 uninstall = { app -> runtime.androidApps.uninstall(app) },
-                canPause = runtime.androidApps::canPause,
-                pause = { profile, paused -> runtime.androidApps.setPaused(profile, paused) },
+                icon = { app ->
+                    state.closeNow()
+                    state.iconApp = app
+                },
+                // Off home too: its tile would only be a name that opens nothing.
+                remove = { shortcut ->
+                    runtime.androidApps.remove(shortcut)
+                    runtime.widgets.shortcuts.removeAndroidShortcut(shortcut)
+                },
+                // Opening one leaves the drawer at once, as opening an app does; pinning one closes it to show the new tile, as pin does.
+                shortcuts = { app -> shortcutMenu(runtime, app, page = { state.currentPage }, onOpen = state::closeNow, onPinned = state::close) },
             )
         }
 
-    val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     if (panelShown) {
         // Near-opaque like stock drawers: home widgets bleeding through made icons hard to read.
         Box(
@@ -167,11 +198,8 @@ private fun DesktopScreen(
                 .graphicsLayer { alpha = state.drawer.value.coerceAtMost(1f) }
                 .background(Palette.background.copy(alpha = 0.97f))
                 .clickable { state.close() }
-                .draggable(
-                    orientation = Orientation.Vertical,
-                    state = rememberDraggableState { dy -> state.dragBy(-dy / screenHeight) },
-                    onDragStopped = { velocity -> state.settle(velocity) },
-                ),
+                .drawerSwipe(state)
+                .swipeTabs(runtime, state),
         )
     }
     // The bar and the panel above it; the keyboard lifts both. Nothing here takes touches while the panel is closed,
@@ -214,9 +242,10 @@ private fun DesktopScreen(
             // Hidden while a terminal tile types: it would sit on the keyboard, over the tile.
             if (runtime.terminals.active == null || runtime.terminals.keyboardLeaving) {
                 // Home only: the open app list has everything.
-                if (LauncherStyle.recentApps && !panelShown) RecentStrip(runtime, handlers)
+                // Swiping up or down from either does what it does on home, as from the dock on stock launchers.
+                if (LauncherStyle.recentApps && !panelShown) RecentStrip(runtime, handlers, Modifier.homeSwipe(runtime, state))
                 // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.
-                PromptBar(runtime, state, search = search, highlighted = highlighted, onLaunch = handlers.launch)
+                PromptBar(runtime, state, search = search, highlighted = highlighted, onLaunch = handlers.launch, modifier = Modifier.homeSwipe(runtime, state))
             }
         }
     }
@@ -225,7 +254,36 @@ private fun DesktopScreen(
     FeedPanel(runtime, state)
     // Full-screen panels draw over the bar.
     ThemesOverlay(runtime, state)
+    StyleErrors(runtime.style)
 }
+
+/**
+ * What style.toml got wrong, at the top over everything, like Hyprland's bar for config errors: errors.txt is out
+ * of sight without a terminal. A tap hides the problems shown; new ones show again.
+ */
+@Composable
+private fun StyleErrors(style: StyleStore) {
+    var hidden by remember { mutableStateOf(emptySet<String>()) }
+    val shown = style.errors.filterNot { it in hidden }
+    if (shown.isEmpty()) return
+    Box(Modifier.fillMaxSize().safePadding().padding(PanelGap), contentAlignment = Alignment.TopCenter) {
+        Column(
+            Modifier
+                .widthIn(max = ReadingWidth)
+                .fillMaxWidth()
+                .frame(2.dp, Palette.red, Palette.background)
+                .clickable { hidden = hidden + shown }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            BasicText("style.toml: ${if (shown.size == 1) "1 problem" else "${shown.size} problems"}", style = Mono.copy(color = Palette.red))
+            for (line in shown.take(MAX_ERRORS)) BasicText(line, style = Mono.copy(fontSize = TextSize.Small))
+            val more = if (shown.size > MAX_ERRORS) "${shown.size - MAX_ERRORS} more in errors.txt · " else ""
+            BasicText("${more}tap to hide", style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
+        }
+    }
+}
+
+private const val MAX_ERRORS = 3
 
 @Composable
 private fun ThemesOverlay(
@@ -233,7 +291,11 @@ private fun ThemesOverlay(
     state: LauncherState,
 ) {
     // A widget's screen first: what it opens (themes, agents) draws on top of it.
-    runtime.widgets.screenInstance()?.let { (spec, inst) -> WidgetScreenPanel(spec, inst, onDismiss = { runtime.widgets.openScreen = null }) }
+    runtime.widgets.screenInstance()?.let { (spec, inst) ->
+        CompositionLocalProvider(LocalInputFocus provides true) {
+            WidgetScreenPanel(spec, inst, onDismiss = { runtime.widgets.openScreen = null })
+        }
+    }
     // Settings first so the screens it opens draw on top of it.
     if (state.settingsOpen) {
         SettingsScreen(
@@ -245,15 +307,22 @@ private fun ThemesOverlay(
             onStore = { state.storeOpen = true },
             onLinux = { state.linuxOpen = true },
             onLicenses = { state.licensesOpen = true },
+            onGestures = { state.gesturesOpen = true },
             onFeed = { state.feedSettingsOpen = true },
+            onBackup = { state.backupOpen = true },
+            onIcons = { state.iconsOpen = true },
         )
     }
     if (state.feedSettingsOpen) FeedSettingsScreen(runtime.feed, onDismiss = { state.feedSettingsOpen = false })
+    if (state.backupOpen) BackupScreen(onDismiss = { state.backupOpen = false })
     if (state.packagesOpen) PackagesScreen(runtime, onDismiss = { state.packagesOpen = false })
-    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true })
+    if (state.styleOpen) StyleScreen(runtime, onDismiss = { state.styleOpen = false }, onBrowse = { state.themeBrowserOpen = true }, onIcons = { state.iconsOpen = true })
     if (state.themeBrowserOpen) ThemeCatalogScreen(runtime.themes, onDismiss = { state.themeBrowserOpen = false })
+    if (state.iconsOpen) IconsScreen(runtime, onDismiss = { state.iconsOpen = false }, onPick = { state.iconApp = it }, onTask = { runIconTask(runtime, state, it) })
+    state.iconApp?.let { app -> IconPickerScreen(runtime, app, onDismiss = { state.iconApp = null }, onTask = { runIconTask(runtime, state, it) }) }
     if (state.storeOpen) StoreScreen(runtime.widgets, runtime.agents.installed.filterNot { it.android }, state.currentPage, runtime.themes.picked, onDismiss = { state.storeOpen = false })
     if (state.licensesOpen) LicensesScreen(onDismiss = { state.licensesOpen = false })
+    if (state.gesturesOpen) GesturesScreen(runtime, onDismiss = { state.gesturesOpen = false })
     if (state.linuxOpen) LinuxScreen(runtime, onDismiss = { state.linuxOpen = false })
     state.shared?.let { link ->
         SharedWidgetScreen(
@@ -304,6 +373,86 @@ private fun ThemesOverlay(
     }
 }
 
+/**
+ * Starts the launcher's agent, the one the bar asks, on [task], in a terminal. Without Linux or an
+ * agent, the screen that sets them up opens instead.
+ */
+internal fun runIconTask(
+    runtime: Runtime,
+    state: LauncherState,
+    task: IconTask,
+) {
+    val agent = runtime.agents.default
+    when {
+        !runtime.bootstrap.isInstalled -> state.linuxOpen = true
+        agent == null -> state.agentsOpen = true
+        else ->
+            when (task) {
+                IconTask.NewPack -> runtime.terminal(newPackCommand(agent.bin), "New icon pack", agent)
+                is IconTask.Fill -> runtime.terminal(fillPackCommand(agent.bin, task.pack), "Fill in ${task.pack.label}", agent)
+                is IconTask.Edit -> runtime.terminal(editPackCommand(agent.bin, task.pack), "Change ${task.pack.label}", agent)
+                is IconTask.Draw -> runtime.terminal(drawIconCommand(agent.bin, runtime.icons.stemFor(task.app), task.app.label), "Icon for ${task.app.label}", agent)
+                IconTask.Setup -> state.agentsOpen = true
+            }
+    }
+}
+
 /** Clear of the system bars and of the camera cutout, which landscape puts at a side. */
 @Composable
 private fun Modifier.safePadding() = windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
+
+/**
+ * Bands behind Android's status bar and navigation bar, so its clock, notification icons and gesture handle sit on
+ * the same glass as home's tiles rather than on the wallpaper. Each fills its bar out to the screen's edges, with the
+ * tiles' border only along the side facing them, a gap away. Under the drawer and full-screen panels, which cover the
+ * bars themselves.
+ */
+@Composable
+private fun SystemBarFrames() {
+    val density = LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    val status = WindowInsets.statusBars
+    val nav = WindowInsets.navigationBars
+    with(density) {
+        val top = status.getTop(density).toDp()
+        val bottom = nav.getBottom(density).toDp()
+        // Three-button navigation stands at a side in a phone's landscape.
+        val left = nav.getLeft(density, direction).toDp()
+        val right = nav.getRight(density, direction).toDp()
+        val status = Style.STATUS_BAR
+        val navigation = Style.NAVIGATION_BAR
+        Box(Modifier.fillMaxSize()) {
+            // Thinner than that leaves no room for a band: a gesture bar hidden in the system's settings, say.
+            fun Dp.band() = takeIf { it >= 8.dp }
+            val across = Modifier.fillMaxWidth()
+            top.band()?.let { Band(across.align(Alignment.TopCenter).height(it), status) { w -> Rect(0f, size.height - w, size.width, size.height) } }
+            bottom.band()?.let { Band(across.align(Alignment.BottomCenter).height(it), navigation) { w -> Rect(0f, 0f, size.width, w) } }
+            // Between the top and bottom ones, a gap from each. Left and right of the screen, whichever way text runs.
+            val between = Modifier.fillMaxSize().padding(top = top + EdgeGap, bottom = bottom + EdgeGap)
+            left.band()?.let { Band(between.wrapContentWidth(AbsoluteAlignment.Left).width(it), navigation) { w -> Rect(size.width - w, 0f, size.width, size.height) } }
+            right.band()?.let { Band(between.wrapContentWidth(AbsoluteAlignment.Right).width(it), navigation) { w -> Rect(0f, 0f, w, size.height) } }
+        }
+    }
+}
+
+/**
+ * [bar]'s band, the tiles' glass unless style.toml says otherwise, and its border only where [line]
+ * says: the side facing the tiles. Nothing when the bar isn't framed.
+ */
+@Composable
+private fun Band(
+    modifier: Modifier,
+    bar: Style.Bar,
+    line: DrawScope.(width: Float) -> Rect,
+) {
+    val fill = LauncherStyle.barFill(bar) ?: return
+    val border = LauncherStyle.barLine(bar)
+    val width = LauncherStyle.barLineWidth(bar)
+    Box(
+        modifier.background(fill).drawBehind {
+            if (border == null || width == 0.dp) return@drawBehind
+            val r = line(width.toPx())
+            drawRect(border, r.topLeft, r.size)
+        },
+    )
+}

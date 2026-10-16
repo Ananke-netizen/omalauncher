@@ -28,6 +28,7 @@ class LauncherState {
     var settingsOpen by mutableStateOf(false)
     var packagesOpen by mutableStateOf(false)
     var licensesOpen by mutableStateOf(false)
+    var gesturesOpen by mutableStateOf(false)
 
     /** The Linux sheet: install, progress, remove. Opened by anything that needs Linux. */
     var linuxOpen by mutableStateOf(false)
@@ -45,11 +46,20 @@ class LauncherState {
     val feed = FeedReveal()
     var feedSettingsOpen by mutableStateOf(false)
 
+    /** Backing the home screen up to a file and restoring it. */
+    var backupOpen by mutableStateOf(false)
+
+    /** Settings › icons: the icon pack, and each app's icon. */
+    var iconsOpen by mutableStateOf(false)
+
+    /** The app whose icon is being picked, from the icons screen, the drawer or home. */
+    var iconApp by mutableStateOf<dev.omalauncher.AndroidApp?>(null)
+
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
         get() =
-            drawer.value > 0.99f || settingsOpen || styleOpen || themeBrowserOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || shared != null ||
-                sharing != null || feed.progress.value > 0.99f || feedSettingsOpen
+            drawer.value > 0.99f || settingsOpen || styleOpen || themeBrowserOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || gesturesOpen || shared != null ||
+                sharing != null || feed.progress.value > 0.99f || feedSettingsOpen || backupOpen || iconsOpen || iconApp != null
 
     /** Closes every overlay screen (settings and what it opens). */
     fun closeScreens() {
@@ -60,11 +70,15 @@ class LauncherState {
         packagesOpen = false
         linuxOpen = false
         licensesOpen = false
+        gesturesOpen = false
         settingsOpen = false
         homeMenuOpen = false
         shared = null
         sharing = null
         feedSettingsOpen = false
+        backupOpen = false
+        iconsOpen = false
+        iconApp = null
         if (feed.isOpen) feed.close()
     }
 
@@ -82,6 +96,9 @@ class LauncherState {
 
     /** Home page currently showing (1-based); the drawer pins apps there. */
     var currentPage by mutableStateOf(1)
+
+    /** The drawer's tab; it stays picked the next time the drawer opens. */
+    var tab by mutableStateOf(DrawerTab.Personal)
 
     private var typed by mutableStateOf("")
 

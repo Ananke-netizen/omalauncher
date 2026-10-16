@@ -1,0 +1,1 @@
+The feed and open folders follow your style.toml: the feed takes the full-screen panels' gaps and outline, like settings and the stores, and a folder opens out of its tile's own outline and stays where the tiles are. At the default style nothing changes.

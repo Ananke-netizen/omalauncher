@@ -1,0 +1,1 @@
+Upstream's 0.6: home frames the status bar and the gesture bar in the tiles' glass (style › system bars turns it off). Widgets can show the next alarm, the phone's modes and app icons, switch the torch, share text and buzz, and commands quote their values safely. Plus this fork's feed, folders that open out of their tile, and backup & restore.

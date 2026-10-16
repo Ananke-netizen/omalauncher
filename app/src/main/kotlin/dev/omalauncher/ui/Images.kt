@@ -34,16 +34,21 @@ fun decodeIcon(
     size: Int,
 ): Bitmap? {
     if (file.extension != "svg") return decodeSampled(file, size)
-    return runCatching {
-        val svg = file.inputStream().use { SVG.getFromInputStream(it) }
-        // Scale to the bitmap through the viewBox, made from width/height when the icon has none.
-        if (svg.documentViewBox == null && svg.documentWidth > 0 && svg.documentHeight > 0) {
-            svg.setDocumentViewBox(0f, 0f, svg.documentWidth, svg.documentHeight)
-        }
-        svg.setDocumentWidth("100%")
-        svg.setDocumentHeight("100%")
-        Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { svg.renderToCanvas(Canvas(it)) }
-    }.getOrNull()
+    return runCatching { renderSvg(file.inputStream().use { SVG.getFromInputStream(it) }, size) }.getOrNull()
+}
+
+/** Draws [svg] at exactly [size] px square. */
+fun renderSvg(
+    svg: SVG,
+    size: Int,
+): Bitmap {
+    // Scale to the bitmap through the viewBox, made from width/height when the icon has none.
+    if (svg.documentViewBox == null && svg.documentWidth > 0 && svg.documentHeight > 0) {
+        svg.setDocumentViewBox(0f, 0f, svg.documentWidth, svg.documentHeight)
+    }
+    svg.setDocumentWidth("100%")
+    svg.setDocumentHeight("100%")
+    return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { svg.renderToCanvas(Canvas(it)) }
 }
 
 /**

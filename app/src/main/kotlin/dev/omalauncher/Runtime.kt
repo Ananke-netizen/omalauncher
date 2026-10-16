@@ -13,9 +13,11 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dev.omalauncher.feed.FeedStore
+import dev.omalauncher.icons.IconStore
 import dev.omalauncher.linux.AGENTS
 import dev.omalauncher.linux.Agent
 import dev.omalauncher.linux.AgentStore
@@ -41,7 +43,10 @@ import dev.omalauncher.linux.matches
 import dev.omalauncher.linux.resolveLinuxIcon
 import dev.omalauncher.linux.run
 import dev.omalauncher.linux.shellQuote
+import dev.omalauncher.theme.Style
+import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.theme.ThemeStore
+import dev.omalauncher.ui.Gestures
 import dev.omalauncher.ui.KeyboardBridge
 import dev.omalauncher.ui.TerminalTiles
 import dev.omalauncher.ui.WindowManager
@@ -59,6 +64,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -76,7 +82,9 @@ class Runtime(
     val server = WaylandServer(proot.waylandSocket.path, wm).also { wm.server = it }
     val keyboard = KeyboardBridge(wm)
     val terminals = TerminalTiles(this)
-    val terminalFont = TerminalFont(context, proot)
+    val style = StyleStore(context)
+    val terminalFont = TerminalFont(proot, style)
+    val gestures = Gestures(context)
     val linuxApps = mutableStateListOf<LinuxApp>()
 
     /** Icons of [linuxApps] by desktop id; apps without a PNG icon have no entry. */
@@ -86,7 +94,10 @@ class Runtime(
     val linuxMasks = mutableStateMapOf<String, ImageBitmap>()
     val androidApps = AndroidAppCatalog(context)
     val usage = AppUsage(context)
-    val themes = ThemeStore(context, proot, isLinux = { linux }, onConfigChanged = ::syncGuest)
+
+    /** Where Android apps' icons come from: icon packs and the user's own files. Before [androidApps] starts drawing them. */
+    val icons = IconStore(context, style, androidApps, usage)
+    val themes = ThemeStore(context, proot, style, isLinux = { linux }, onConfigChanged = ::syncGuest)
     private val audio = AudioBridge(proot)
     private val openBridge = OpenBridge(context, proot, onOpenFiles = ::openFiles)
     val agents = AgentStore(proot, onChanged = ::syncGuest, appInstalled = ::appInstalled)
@@ -99,7 +110,7 @@ class Runtime(
     val feed = FeedStore(context)
 
     /** The launcher's own provided files (default widgets, their docs); see [Provisioner]. */
-    private val launcherFiles = Provisioner(proot.filesDir, LauncherData.LAUNCHER_MANIFEST, listOf(widgets::managed))
+    private val launcherFiles = Provisioner(proot.filesDir, LauncherData.LAUNCHER_MANIFEST, listOf(widgets::managed, style::managed, icons::managed))
 
     /** Every launcher-provided file in the guest; synced only while Linux is installed. */
     private val provisioner: Provisioner =
@@ -114,6 +125,7 @@ class Runtime(
                 agents::managed,
                 themes::managed,
                 widgets::guestManaged,
+                { icons.guestManaged(proot.rootfs) },
             ),
         )
     val bootstrap = Bootstrap(context, proot, agents, pacman, provisioner)
@@ -145,7 +157,16 @@ class Runtime(
     init {
         // Saved, so removing Linux later doesn't bring the first-run screen back.
         if (launcherReady) prefs.edit().putBoolean(SETUP_DONE, true).apply()
-        themes.loadStyle()
+        themes.loadPalette()
+        // An agent or the user edited style.toml; the rest of the style is read where it's drawn.
+        style.onExternalChange = { old, new ->
+            val changed = new.changed(old)
+            if (Style.THEME.key in changed || Style.BACKGROUND.key in changed) scope.launch { themes.followStyle() }
+        }
+        // foot.ini follows the terminal settings, from the Style menu or the file alike.
+        scope.launch {
+            snapshotFlow { style.style[Style.TERMINAL_FONT] to style.style[Style.TERMINAL_TEXT] }.drop(1).collect { terminalFont.write() }
+        }
         androidApps.start()
         // Omarchy's Super bindings inside Linux windows; the home screen handles its own (see MainActivity).
         keyboard.onShortcut = { code ->
@@ -191,6 +212,7 @@ class Runtime(
                 agents.load()
             }
             themes.load()
+            style.start()
             widgets.start()
             // On the first-run screen the download is the screen's job, with progress.
             if (launcherReady) scope.launch { themes.ensureRelease() }
@@ -409,13 +431,21 @@ class Runtime(
         shortcut: Shortcut,
         mono: Boolean,
     ): ImageBitmap? {
-        shortcut.app?.let { return if (mono) androidApps.masks[it] else androidApps.icons[it] }
+        androidKeyOf(shortcut)?.let { return if (mono) androidApps.masks[it] else androidApps.icons[it] }
         val id = shortcut.linux?.id ?: return null
         return if (mono) linuxMasks[id] else linuxIcons[id]
     }
 
-    /** The profile a pinned app is in (work), for its badge and paused look; null for personal apps, or while the profile isn't listed. */
-    fun shortcutProfile(shortcut: Shortcut): AppProfile? = shortcut.serial?.let { androidApps.profiles[it] }
+    /**
+     * A pinned app's name as the drawer shows it, so it follows the phone's language and the app's updates; the name
+     * it was pinned with while its app is gone or not listed yet, and for Linux apps.
+     */
+    fun shortcutLabel(shortcut: Shortcut) = androidKeyOf(shortcut)?.let { androidApps.labels[it] } ?: shortcut.label
+
+    /** A pinned Android app's or shortcut's key in [androidApps]; null for a Linux app. */
+    private fun androidKeyOf(shortcut: Shortcut) =
+        shortcut.component?.let { androidApps.pinned(it, shortcut.profile)?.key ?: androidAppKey(it, shortcut.profile) }
+            ?: shortcut.androidShortcut?.let { androidShortcutKey(it, shortcut.profile) }
 
     /** Wayland app_id -> name for windows we started, so their Android tasks get a proper label. */
     private val launchedNames = ConcurrentHashMap<String, String>()
@@ -523,7 +553,8 @@ class Runtime(
     /** Opens a pinned app from the home screen. A Linux one runs its current desktop entry, which an update may have changed. */
     fun open(shortcut: Shortcut) {
         shortcut.linux?.let { pinned -> launch(linuxApps.firstOrNull { it.id == pinned.id } ?: pinned) }
-        shortcut.component?.let { androidApps.open(it, shortcut.serial) }
+        shortcut.component?.let { c -> androidApps.pinned(c, shortcut.profile)?.let(androidApps::open) ?: androidApps.open(c, shortcut.profile) }
+        shortcut.androidShortcut?.let { androidApps.open(it, shortcut.profile) }
     }
 
     fun launch(app: LinuxApp) {

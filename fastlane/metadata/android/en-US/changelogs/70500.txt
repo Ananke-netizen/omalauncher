@@ -1,0 +1,1 @@
+Long-press an app, in the app list or on home, for the shortcuts it offers, like a new incognito tab or navigating home: tap one to open it, or [+] to put it on home. App names, tiles and widget dates follow a change of the phone's language, and widgets use less battery while their clock isn't shown.

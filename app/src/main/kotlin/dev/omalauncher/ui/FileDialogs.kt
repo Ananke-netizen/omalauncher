@@ -42,7 +42,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
-private fun DialogFrame(
+internal fun DialogFrame(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -63,6 +63,8 @@ internal fun TextDialog(
     initial: String,
     confirm: String,
     hint: String? = null,
+    /** Whether an empty field can be confirmed, as when clearing a name. */
+    allowBlank: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -79,7 +81,7 @@ internal fun TextDialog(
             textStyle = Mono.copy(fontSize = TextSize.Large),
             cursorBrush = SolidColor(Palette.accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) onConfirm(text.trim()) }),
+            keyboardActions = KeyboardActions(onDone = { if (allowBlank || text.isNotBlank()) onConfirm(text.trim()) }),
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -90,7 +92,7 @@ internal fun TextDialog(
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton("cancel", Palette.muted, onDismiss)
-            TextButton(confirm, Palette.accent) { if (text.isNotBlank()) onConfirm(text.trim()) }
+            TextButton(confirm, Palette.accent) { if (allowBlank || text.isNotBlank()) onConfirm(text.trim()) }
         }
     }
 }

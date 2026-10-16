@@ -45,6 +45,9 @@ class Proot(
             "$GUEST_HOME/.local/share/omarchy" to LauncherData.omarchyDir(context),
             "$GUEST_HOME/.config/omalauncher/widgets" to LauncherData.widgetsDir(context),
             GUEST_WRAPPER_DIR to LauncherData.binDir(context),
+            "$GUEST_HOME/.config/omalauncher/style" to LauncherData.styleDir(context),
+            "$GUEST_HOME/.config/omalauncher/icons" to LauncherData.iconsDir(context),
+            "$GUEST_HOME/.config/omalauncher/icon-packs" to LauncherData.iconPacksDir(context),
             "$GUEST_HOME/.config/omarchy/themes" to LauncherData.userThemesDir(context),
             "$GUEST_HOME/.config/omarchy/backgrounds" to LauncherData.userBackgroundsDir(context),
         )

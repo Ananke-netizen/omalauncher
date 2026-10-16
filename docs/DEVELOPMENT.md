@@ -135,6 +135,56 @@ scripts/dev.sh test
 Merge that pull request with a merge commit, not a squash, so the next sync
 knows what's already in.
 
+When upstream releases, the merge conflicts on `versionCode` and `versionName`
+in `app/build.gradle.kts`: keep this fork's (below). Fetch upstream with
+`--no-tags`: its version tags would clash with this fork's own.
+
+## Releasing this fork
+
+Upstream's `.github/workflows/release.yml` builds this fork's releases too: a
+`v*` tag gets a signed APK, its `SHA256SUMS` and a build provenance
+attestation on a GitHub release. Play is upstream's alone (docs/RELEASING.md).
+
+- **Versions**: plain `MAJOR.MINOR.PATCH`, tagged `v0.5.1`. `MAJOR.MINOR`
+  follow upstream's version; `PATCH` counts this fork's releases on it, from 1:
+  `0.5.1`, `0.5.2`, …, then `0.6.1` once upstream is at 0.6. They're this
+  fork's numbers: upstream's own 0.5.1, if it makes one, is a different build.
+- **versionCode**: `MAJOR × 1000000 + MINOR × 10000 + PATCH × 100`, so `0.5.1`
+  is `50100` and `0.6.1` `60100`: every release updates the one before. The
+  first releases were `0.5.0-mhs.1` to `0.5.0-mhs.3` (`10001`–`10003`); the
+  codes only ever go up, and these start above them.
+- **Notes**: the release's description is
+  `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
+- **Signing**: this fork's own key, from the repository's secrets
+  `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`; the
+  workflow stops without them rather than sign with a debug key. Its owner
+  keeps the keystore and its password backed up: without them no release can
+  update an installed one.
+
+To release, bump both in `app/build.gradle.kts`, add the notes, merge, then tag
+`main`:
+
+```sh
+git tag -a v0.5.1 -m "0.5.1" origin/main
+git push origin v0.5.1
+```
+
+To check a downloaded APK: `sha256sum -c SHA256SUMS`, and
+`gh attestation verify omalauncher-0.5.1.apk -R Mhsbrian/omalauncher`.
+
+A change waiting on review gets a signed preview first: push it to a
+`polish/<topic>` branch and `.github/workflows/preview.yml` (from the first
+polish branch on) builds the APK with the same key, the version it would be
+released as, and leaves it as the run's artifact. It installs over the last
+release, and the release over it.
+
+Installs signed with another key, a debug build or Play's, can't update to a
+release: uninstalling first deletes the Linux install and the widgets.
+Release builds don't verify upstream's widget share links
+(`simonschubert.github.io`), whose `assetlinks.json` lists upstream's key, so
+those open in the browser unless they're turned on in App info › Open by
+default.
+
 ## Troubleshooting
 
 - **`Unknown AVD name`**: `avdmanager` puts AVDs under `$XDG_CONFIG_HOME/.android/avd`

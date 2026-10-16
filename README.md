@@ -1,9 +1,38 @@
 # Omalauncher
 
+> **This is a personal fork of [Omalauncher](https://github.com/SimonSchubert/omalauncher),
+> created by [Simon Schubert](https://github.com/SimonSchubert).** The official app is on
+> [Google Play](https://play.google.com/store/apps/details?id=dev.omalauncher).
+>
+> This fork follows upstream and adds its own changes: a feed left of the first home page,
+> folders that open out of their tile, and backup & restore. Its APKs are published on
+> [this repository's releases](https://github.com/Mhsbrian/omalauncher/releases) and signed
+> with a different key, so they are not the Google Play app: one can't be installed over the
+> other, and the original author doesn't support this fork. Please don't report its problems
+> upstream.
+>
+> MIT licensed, like the original ([LICENSE](LICENSE)).
+
+### What this fork adds: the feed
+
+Swipe right on the first home page for Hacker News, recent posts from tech accounts on X,
+and headlines from tech and news sites, in the theme's colors. Settings › feed picks the
+sites, the X accounts, muted words and how often it refreshes ([more](#using-it)).
+
+<p>
+  <img src="docs/fork/screenshots/feed-1.png" width="32%" alt="The feed: Hacker News, posts from X and tech and news headlines, one swipe right from home">
+  <img src="docs/fork/screenshots/feed-2.png" width="32%" alt="The feed's settings: sites, X accounts, muted words and how often it refreshes">
+  <img src="docs/fork/screenshots/feed-3.png" width="32%" alt="The feed in the White, Tokyo Night and Vantablack themes">
+</p>
+
+---
+
 An Android home screen with the look of [Omarchy](https://omarchy.org), and an
 optional Arch Linux ARM system next to your phone apps. Omalauncher runs the
 system under proot, without root, and is its Wayland compositor: every Linux
 window opens as its own Android task, with its own card in Recents.
+
+<a href="https://play.google.com/store/apps/details?id=dev.omalauncher"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80"></a>
 
 ![The home screen in twelve Omarchy themes, each with different widgets](art/collage.png)
 
@@ -13,8 +42,6 @@ window opens as its own Android task, with its own card in Recents.
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03.png" width="24%" alt="Screenshot">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/04.png" width="24%" alt="Screenshot">
 </p>
-
-<a href="https://play.google.com/store/apps/details?id=dev.omalauncher">Get it on Google Play</a>
 
 - **Themes**: all 22 Omarchy themes, with their wallpapers, applied to the
   launcher and to the Linux apps, plus the community themes from
@@ -55,6 +82,27 @@ it back or press Back to close it. Long-press empty home space to turn it on or
 off; settings › feed picks the sources, the X accounts, muted words and how
 often it refreshes. X has no free API for reading, so its posts come through
 FxTwitter's open API (api.fxtwitter.com), which now and then misses an account.
+
+Backup: settings › backup & restore saves the home screen to a file you pick
+(pinned apps and folders, widgets with their data, where everything sits, the
+theme, style and gestures, the feed's settings) and restores it from one, showing what the
+file holds first and keeping what it replaces so the restore can be undone. It
+carries a home screen across an uninstall, a new signing key or a new phone;
+Linux itself isn't in it.
+
+Icons: settings › icons picks an icon pack, from the ones installed (icon packs
+from the Play Store and F-Droid work) or the ones your agents drew, shows how
+many of your apps it covers, and puts the apps it has no icon for on its
+backdrop. "+ new pack" has a coding agent draw a whole pack in the style you
+describe, in your theme's colors, so it changes with the theme; pick which of
+your installed agents draws under "drawn by", and later have it fill in the
+icons for apps you installed since, or change the pack. Tap an app there, or
+long-press it in the drawer or on home, to give it any pack's icon, a picture,
+or one the agent draws. Packs are folders in `~/.config/omalauncher/icon-packs`
+and single apps' icons files in `~/.config/omalauncher/icons` (`apps.txt` there
+lists the name each app's file takes); SVGs use the theme's colors as
+`{{ accent }}`, and `icon-check` shows an icon as the phone draws it. The pack
+is `icons.pack` in style.toml.
 
 Touch input in Linux windows: tap is a left click, long press is a right
 click, drag scrolls; apps with touch support (foot, GTK) get real touch.
