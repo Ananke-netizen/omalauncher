@@ -51,6 +51,15 @@ class LangTest {
             actions += "runInto $slot $command"
         }
 
+        override fun post(
+            url: String,
+            body: Value,
+            headers: Map<String, String>,
+            slot: Int?,
+        ) {
+            actions += "post $slot $url $body $headers"
+        }
+
         override val budget = Budget(10_000)
     }
 
@@ -203,6 +212,27 @@ class LangTest {
         assertTrue(s.headers != null && s.status)
         assertEquals(listOf("http GET https://x.test/a"), p.commands)
         assertTrue(compileError("widget {\nsource w = http(\"file:///etc/passwd\")\nText { text: w }\n}").contains("http:// or https://"))
+    }
+
+    @Test fun postSendsFromHandlers() {
+        val p =
+            Compiler.compile(
+                "app \"t\" {\n meta { owl: 8 }\n state id = \"a b\"\n state tok = null\n state sent = null\n back: true\n" +
+                    " onBack: { tok = post(\"https://x.test/token\", {code: id}, {Authorization: \"Bearer ${'$'}{id}\"}); post(\"https://x.test/s/${'$'}{enc(id)}\") }\n" +
+                    " every 5s { sent = post(tok == null ? null : \"https://x.test/poll\", \"raw\") }\n Text { text: id } }",
+            )
+        val host = TestHost(p)
+        p.onBack!!.run(Env.root(host), emptyList())
+        assertEquals(listOf("post 1 https://x.test/token {code: a b} {Authorization=Bearer a b}", "post null https://x.test/s/a%20b null {}"), host.actions)
+        // A null URL sends nothing, like any action whose value hasn't loaded.
+        host.actions.clear()
+        p.triggers.single().action.run(Env.root(host), emptyList())
+        assertEquals(emptyList<String>(), host.actions)
+        assertEquals(setOf("http POST https://x.test/token", "http POST https://x.test/s/${Compiler.VALUE}", "http POST https://x.test/poll"), p.commands.toSet())
+        assertFalse(p.needsLinux)
+        assertTrue(compileError("widget {\n meta { owl: 7 }\n onTap: post(\"https://x.test/\")\n Text { text: 1 } }").contains("post needs owl 8"))
+        assertTrue(compileError("app \"t\" {\n meta { owl: 8 }\n back: true\n onBack: post(\"file:///x\")\n Text { text: 1 } }").contains("http:// or https://"))
+        assertEquals(listOf("http POST (a URL built from widget values)"), Compiler.compile("app \"t\" {\n meta { owl: 8 }\n state u = \"\"\n back: true\n onBack: post(u)\n Text { text: 1 } }").commands)
     }
 
     @Test fun imagesFromTheWeb() {
@@ -768,6 +798,45 @@ class LangTest {
         assertTrue(Compiler.quotable("a ${Compiler.VALUE} 'b' \"c\" d#e ${Compiler.VALUE}"))
         assertFalse(Compiler.quotable("a ${'$'}'x ${Compiler.VALUE}'"))
         assertEquals(listOf("jq"), Compiler.compile("widget {\n meta { owl: 6 }\n state v = \"x\"\n onTap: run(\"jq -n ${'$'}{sh(v)}\")\n Text { text: v } }").programs.toList())
+    }
+
+    @Test fun encEncodesAValueAsOneUrlComponent() {
+        val owl8 = "meta { owl: 8 }"
+        assertEquals("a%20b%2Fc%3Fd%26e%23f%3Dg", text("enc(\"a b/c?d&e#f=g\")", owl8))
+        assertEquals("%C3%BC", text("enc(\"ü\")", owl8))
+        assertEquals("", text("enc(null)", owl8))
+        assertEquals("3", text("enc(3)", owl8))
+        assertTrue(compileError("widget {\n meta { owl: 7 }\n Text { text: enc(\"x\") } }").contains("enc needs owl 8"))
+    }
+
+    @Test fun urlsWithEncodedValuesAreListedAsTemplates() {
+        fun commands(url: String) = Compiler.compile("widget {\n meta { owl: 8 }\n state v = \"x\"\n state n = 1\n source s = http($url) json\n Text { text: v } }").commands
+        val v = Compiler.VALUE
+        assertEquals(listOf("http GET https://a.b/c/$v?d=${Compiler.NUMBER}"), commands("\"https://a.b/c/${'$'}{enc(v)}?d=${'$'}{int(n)}\""))
+        // A null branch pauses the source: nothing to list for it.
+        assertEquals(listOf("http GET https://a.b/q?x=$v"), commands("n > 1 ? \"https://a.b/q?x=\" + enc(v) : null"))
+        assertEquals(listOf("http GET https://a.b/1", "http GET http://c.d:8080/2"), commands("n > 1 ? \"https://a.b/1\" : \"http://c.d:8080/2\""))
+        // A value in the host, or not through enc(...), could send it anywhere.
+        for (bad in listOf("\"https://${'$'}{enc(v)}/x\"", "\"https://a.b${'$'}{enc(v)}/x\"", "\"https://a.b/${'$'}{v}\"", "\"https://a.b/${'$'}{sh(v)}\"", "\"${'$'}{enc(v)}\"", "n > 1 ? null : null")) {
+            assertEquals(bad, listOf("http GET (a URL built from widget values)"), commands(bad))
+        }
+    }
+
+    @Test fun urlValuesNotThroughEncAreWarnedAboutWithTheFix() {
+        fun warnings(url: String) = Compiler.compile("widget {\n meta { owl: 8 }\n state v = \"x\"\n source s = http($url) json\n Text { text: v } }").warnings
+        assertEquals(listOf("4:35: a value in this URL isn't put through enc(), so the store's review can't show where it goes: write \${enc(lower(v))} (a number can go through int(n) or fixed(n, 4) instead; a path with / in it can't, so write its fixed parts out and enc() only the values between them)"), warnings("\"https://a.b/q=${'$'}{lower(v)}\""))
+        assertTrue(warnings("\"https://a.b/q=\" + v").single().contains("write enc(v)"))
+        assertTrue(warnings("\"https://a.b/${'$'}{sh(v)}\"").single().contains("enc(...) instead of sh(...)"))
+        assertTrue(warnings("\"https://${'$'}{enc(v)}/x\"").single().contains("the server in this URL comes from a value"))
+        assertEquals(emptyList<String>(), warnings("\"https://a.b/${'$'}{enc(v)}\""))
+        // The whole URL from a value: enc() would break it, so the fix is to write it out.
+        assertTrue(warnings("v").single().contains("this URL is all a value (v)"))
+        assertTrue(warnings("v == \"\" ? null : v").single().contains("this URL is all a value"))
+        assertTrue(warnings("\"https://a.b/${'$'}{replace(v, \" \", \"%20\")}\"").single().contains("drop the replace(...)"))
+        // A fixed let is fixed text: listed, nothing to warn about.
+        val p = Compiler.compile("widget {\n meta { owl: 8 }\n let api = \"https://a.b\"\n state v = \"x\"\n source s = http(\"${'$'}{api}/q/${'$'}{enc(v)}\") json\n Text { text: v } }")
+        assertEquals(listOf("http GET https://a.b/q/${Compiler.VALUE}"), p.commands)
+        assertEquals(emptyList<String>(), p.warnings)
     }
 
     @Test fun fmtTimeFollowsLanguageChanges() {

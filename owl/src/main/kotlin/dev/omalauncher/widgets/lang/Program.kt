@@ -37,6 +37,17 @@ interface Host {
         slot: Int,
     ) {}
 
+    /**
+     * `post(url, body, headers)` in a handler: an HTTP POST, with a map or list [body] sent as JSON. With a
+     * [slot] (`x = post(...)`), the answer goes there as `{code, ok, out}` when it arrives.
+     */
+    fun post(
+        url: String,
+        body: Value,
+        headers: Map<String, String>,
+        slot: Int?,
+    ) {}
+
     val budget: Budget
 
     /** A problem at run time, shown to the widget's author; never thrown. */
@@ -313,4 +324,6 @@ class Program(
     val icon: String? = null,
     /** An app's icon, when `icon:` names an `asset` (a PNG or other image) instead. */
     val iconImage: ByteArray? = null,
+    /** What compiles but is likely wrong, one line each with its line:col, for owl-check: a URL value not put through enc(). */
+    val warnings: List<String> = emptyList(),
 )
