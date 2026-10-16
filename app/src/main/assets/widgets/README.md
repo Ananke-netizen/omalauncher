@@ -104,8 +104,8 @@ add `status`: then `x.out` is the output (parsed with `json`), `x.err` is stderr
 source w = cmd("curl -sf wttr.in/?format=j1") every 30m json timeout 20s status
 Text { text: w == null ? "…" : w.ok ? "${w.out.current_condition[0].temp_C}°" : "offline" }
 ``` Keep commands fast. A command
-can depend on state (`cmd("curl wttr.in/${sh(city)}")`) and re-runs with the new
-value at its next interval.
+can depend on state (`cmd("curl wttr.in/${sh(city)}")`) and runs again as soon as the
+value changes (at most once a second), without waiting for its interval or a `refresh()`.
 
 ## Values in commands
 
@@ -369,11 +369,17 @@ app "notes" {
   state text = "" persist
   Column {
     gap: 8
+    padding: [12, 0]           // the view runs to the screen's edges; this is the usual margin
     Input { text: text; placeholder: "write…"; focus: true; onSubmit: text = value }
     Text { text: text }
   }
 }
 ```
+
+**Edges.** An app fills the screen below its title, from edge to edge: there's no window border
+and no margin, so the app decides where its content sits. For text, lists and forms, give the top
+node `padding: [12, 0]`, which lines them up with the title. Leave it off (or pad only the parts
+inside) for what should run to the edges, like a photo, a map, a canvas or a bar along the bottom.
 
 **Going back.** An app with views inside it (a list, then one item) says when Back goes up a
 level with `back`, and how with `onBack`. While `back` is true, the window shows a chevron before
@@ -398,7 +404,8 @@ app "recipes" {
 ```
 
 An app is listed in the app drawer (under apps, and in search) by its name. Tapping it opens
-it in its own window, with its own card in recent apps, its `title` (or name) and a ✕; `close()` closes it.
+it in its own window, with its own card in recent apps and its `title` (or name). Like any Android app,
+Back leaves it and swiping its card away in recent apps closes it; `close()` closes it too.
 Long-press it in the drawer to add it to home, like any app.
 
 **Icon.** `icon` is the app's icon in the drawer, on home and in recent apps. It's fixed in the
