@@ -78,9 +78,8 @@ import dev.omalauncher.AndroidShortcut
 import androidx.compose.runtime.collectAsState
 import dev.omalauncher.Runtime
 import dev.omalauncher.linux.LinuxState
-import androidx.compose.ui.graphics.vector.ImageVector
-import dev.omalauncher.linux.FILES_COMMAND
 import dev.omalauncher.linux.LinuxApp
+import dev.omalauncher.widgets.WidgetSpec
 
 /** One app in the bar's results. */
 internal sealed interface AppHit {
@@ -116,6 +115,14 @@ internal sealed interface AppHit {
         override val alias get() = if (app.profile != null) "${app.label} ${if (app.clone) "clone" else "work"}" else null
 
         override fun paused(runtime: Runtime) = runtime.androidApps.paused(app.profile)
+    }
+
+    /** An owl file that's an app: it opens full screen over home. */
+    data class Owl(
+        val spec: WidgetSpec,
+    ) : AppHit {
+        override val key get() = "o:" + spec.file.name
+        override val label get() = spec.name
     }
 
     /** A shortcut an app put on the home screen, such as a website installed from a browser. */
@@ -201,7 +208,8 @@ internal class BarSearch(
 }
 
 private fun allApps(runtime: Runtime): List<AppHit> =
-    runtime.linuxApps.map { AppHit.Linux(it) } + runtime.androidApps.apps.map { AppHit.Android(it) } + runtime.androidApps.shortcuts.map { AppHit.Shortcut(it) }
+    runtime.widgets.apps().map { AppHit.Owl(it) } + runtime.linuxApps.map { AppHit.Linux(it) } + runtime.androidApps.apps.map { AppHit.Android(it) } +
+        runtime.androidApps.shortcuts.map { AppHit.Shortcut(it) }
 
 internal fun searchApps(
     runtime: Runtime,
@@ -213,7 +221,7 @@ internal fun searchApps(
     return BarSearch(ranked.map { it.first }, ranked.firstOrNull()?.let { isStrongMatch(it.second, query) } == true)
 }
 
-/** What the app cells do: open, pin to home, the Android app's info, uninstall and icon, and removing a shortcut. */
+/** What the app cells do: open, pin to home, the Android app's info, uninstall and icon, removing a shortcut, and an owl app's edit, share and remove. */
 internal class AppHandlers(
     val launch: (AppHit) -> Unit,
     val pin: (AppHit) -> Unit,
@@ -223,15 +231,28 @@ internal class AppHandlers(
     val remove: (AndroidShortcut) -> Unit,
     /** An Android app's shortcuts, for its long-press menu. */
     val shortcuts: (AndroidApp) -> ShortcutMenu,
+    /** Opens the default agent on an owl app's file. */
+    val edit: (WidgetSpec) -> Unit,
+    /** Shares an owl app as a link or QR code, as a widget is shared. */
+    val share: (WidgetSpec) -> Unit,
+    /** Removes an owl app's file, and its icon from home. */
+    val removeOwl: (WidgetSpec) -> Unit,
 )
 
 /** The shortcuts an Android app offers above its menu's actions; null for anything else. */
 private fun AppHit.shortcutMenu(handlers: AppHandlers): ShortcutMenu? = (this as? AppHit.Android)?.let { handlers.shortcuts(it.app) }
 
-/** The long-press menu of an app cell: pin to home, for Android apps their icon, info and uninstall, and for shortcuts removing them. */
+/** The long-press menu of an app cell: pin to home, for owl apps editing, sharing and removing, for Android apps their icon, info and uninstall, and for shortcuts removing them. */
 private fun AppHit.actions(handlers: AppHandlers): List<Pair<String, () -> Unit>> =
     when (this) {
         is AppHit.Linux -> listOf("add to home" to { handlers.pin(this) })
+        is AppHit.Owl ->
+            listOf(
+                "add to home" to { handlers.pin(this) },
+                "edit" to { handlers.edit(spec) },
+                "share" to { handlers.share(spec) },
+                "remove" to { handlers.removeOwl(spec) },
+            )
         is AppHit.Android ->
             listOfNotNull(
                 "add to home" to { handlers.pin(this) },
@@ -246,12 +267,13 @@ private fun AppHit.actions(handlers: AppHandlers): List<Pair<String, () -> Unit>
             )
     }
 
-/** The app's icon and its silhouette (each null until loaded or if it has none), and a glyph for built-in apps (Files). */
-private fun AppHit.icons(runtime: Runtime): Triple<ImageBitmap?, ImageBitmap?, ImageVector?> =
+/** The app's icon and its silhouette, each null until loaded or if it has none. */
+private fun AppHit.icons(runtime: Runtime): Pair<ImageBitmap?, ImageBitmap?> =
     when (this) {
-        is AppHit.Linux -> Triple(runtime.linuxIcons[app.id], runtime.linuxMasks[app.id], if (app.exec == FILES_COMMAND) Icons.Folder else null)
-        is AppHit.Android -> Triple(runtime.androidApps.icons[app.key], runtime.androidApps.masks[app.key], null)
-        is AppHit.Shortcut -> Triple(runtime.androidApps.icons[shortcut.key], runtime.androidApps.masks[shortcut.key], null)
+        is AppHit.Linux -> runtime.linuxIcons[app.id] to runtime.linuxMasks[app.id]
+        is AppHit.Owl -> runtime.owlIcon(spec, mono = false) to runtime.owlIcon(spec, mono = true)
+        is AppHit.Android -> runtime.androidApps.icons[app.key] to runtime.androidApps.masks[app.key]
+        is AppHit.Shortcut -> runtime.androidApps.icons[shortcut.key] to runtime.androidApps.masks[shortcut.key]
     }
 
 @Composable
@@ -261,8 +283,8 @@ private fun HitCell(
     handlers: AppHandlers,
     selected: Boolean = false,
 ) {
-    val (icon, mask, glyph) = hit.icons(runtime)
-    AppCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, shortcuts = { hit.shortcutMenu(handlers) }, glyph = glyph, selected = selected, spoken = hit.spoken, paused = hit.paused(runtime))
+    val (icon, mask) = hit.icons(runtime)
+    AppCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, shortcuts = { hit.shortcutMenu(handlers) }, selected = selected, spoken = hit.spoken, paused = hit.paused(runtime))
 }
 
 /** Height of the recent apps strip; home keeps this much room for it above the bar, even while it's empty. */
@@ -298,8 +320,8 @@ internal fun RecentStrip(
     ) {
         val cells: LazyListScope.() -> Unit = {
             items(apps, key = { it.key }) { hit ->
-                val (icon, mask, glyph) = hit.icons(runtime)
-                StripCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, shortcuts = { hit.shortcutMenu(handlers) }, glyph = glyph, spoken = hit.spoken, paused = hit.paused(runtime))
+                val (icon, mask) = hit.icons(runtime)
+                StripCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, shortcuts = { hit.shortcutMenu(handlers) }, spoken = hit.spoken, paused = hit.paused(runtime))
             }
         }
         if (vertical) {
@@ -321,7 +343,6 @@ private fun StripCell(
     actions: () -> List<Pair<String, () -> Unit>>,
     /** Also built when the menu opens. */
     shortcuts: () -> ShortcutMenu? = { null },
-    glyph: ImageVector? = null,
     /** As in [AppHit.spoken]. */
     spoken: String = label,
     /** As in [AppHit.paused]: drawn dimmed, like stock launchers. */
@@ -348,7 +369,6 @@ private fun StripCell(
     ) {
         val bmp = if (mono) mask else icon
         when {
-            glyph != null -> Image(glyph, label, Modifier.size(size * 0.7f), colorFilter = ColorFilter.tint(Palette.accent))
             // Bare silhouettes and initials sit on a badge, as pinned apps do, so they read on any wallpaper.
             bare && (mono || bmp == null) ->
                 Box(Modifier.size(size).clip(LauncherStyle.shape(size / 2)).background(Palette.surface), contentAlignment = Alignment.Center) {
@@ -532,6 +552,7 @@ internal fun AppPanel(
                                 }
                                 // Clones too, as stock drawers list them: second copies of the owner's apps.
                                 DrawerTab.Personal -> {
+                                    section("apps", runtime.widgets.apps().map { AppHit.Owl(it) })
                                     if (linuxState == LinuxState.Installed) {
                                         section("linux", runtime.linuxApps.map { AppHit.Linux(it) })
                                     } else {
@@ -541,7 +562,7 @@ internal fun AppPanel(
                                                 BasicText("linux apps", Modifier.weight(1f), style = Mono.copy(color = Palette.muted))
                                                 BracketAction(if (linuxState is LinuxState.Installing) "installing…" else "install linux", Palette.accent) {
                                                     state.closeNow()
-                                                    state.linuxOpen = true
+                                                    state.show(SettingsPage.Linux)
                                                 }
                                             }
                                         }
@@ -681,8 +702,6 @@ private fun AppCell(
     actions: () -> List<Pair<String, () -> Unit>>,
     /** As in [StripCell]. */
     shortcuts: () -> ShortcutMenu? = { null },
-    /** Built-in apps (Files) draw a theme-colored glyph instead of a bitmap. */
-    glyph: ImageVector? = null,
     /** What Enter in the bar would open: outlined in the accent color. */
     selected: Boolean = false,
     /** As in [AppHit.spoken]. */
@@ -710,14 +729,7 @@ private fun AppCell(
         val mono = LauncherStyle.monochromeIcons
         // Badges are circles when rounded, squares with Omarchy's sharp edges.
         val badge = LauncherStyle.shape(26.dp)
-        if (glyph != null) {
-            Box(
-                Modifier.size(52.dp).clip(badge).background(if (mono) Palette.surface else Palette.accent),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(glyph, label, Modifier.size(26.dp), colorFilter = ColorFilter.tint(if (mono) Palette.accent else Palette.background))
-            }
-        } else if (mono && mask != null) {
+        if (mono && mask != null) {
             Box(Modifier.size(52.dp).clip(badge).background(Palette.surface), contentAlignment = Alignment.Center) {
                 Image(mask, spoken, Modifier.size(36.dp), colorFilter = ColorFilter.tint(Palette.accent))
             }

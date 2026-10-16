@@ -131,7 +131,7 @@ internal fun PromptBar(
         focusManager.clearFocus()
         keyboard?.hide()
         state.closeNow()
-        state.linuxOpen = true
+        state.show(SettingsPage.Linux)
     }
 
     fun send(prompt: String, headless: Boolean = false) {
@@ -150,7 +150,7 @@ internal fun PromptBar(
             if (!linux) return offerLinux()
             if (target == null) {
                 state.query = p
-                state.agentsOpen = true
+                state.show(SettingsPage.Agents)
                 return
             }
             if (askHeadless(target, headless)) {
@@ -287,7 +287,7 @@ internal fun PromptBar(
                     .padding(start = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AgentPicker(runtime, onManage = { if (linux) state.agentsOpen = true else offerLinux() })
+                AgentPicker(runtime, onManage = { if (linux) state.show(SettingsPage.Agents) else offerLinux() })
                 val shown = if (listening) speech.text else text
                 BasicTextField(
                     value = shown,

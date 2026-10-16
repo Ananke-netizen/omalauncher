@@ -164,6 +164,13 @@ class BackupFormatTest {
         assertEquals("theme = \"nord\"", File(to, "style/style.toml").readText())
     }
 
+    @Test fun aStyleWithoutAThemeHasTheDefaultOne() {
+        val from = tmp.newFolder("from")
+        File(from, "style/style.toml").apply { parentFile.mkdirs() }.writeText("version = 1\n")
+        val zip = ByteArrayOutputStream().also { writeBackup(it, info, emptyMap(), from) }.toByteArray()
+        assertEquals("tokyo-night", readBackup(ByteArrayInputStream(zip), tmp.newFolder("s")).summary().theme)
+    }
+
     @Test fun aBackupFromBeforeStyleTomlHasItsThemeInThePreferences() {
         val from = tmp.newFolder("from")
         File(from, "widgets/a.owl").apply { parentFile.mkdirs() }.writeText("a")

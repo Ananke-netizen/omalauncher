@@ -19,19 +19,12 @@ import kotlinx.coroutines.Dispatchers
 /** App panel position (above the bar): 0 = closed, 1 = open. Follows the finger while dragging. */
 class LauncherState {
     val drawer = Animatable(0f)
-    var styleOpen by mutableStateOf(false)
 
-    /** The community themes, from the home menu's theme strip or over the style screen. */
-    var themeBrowserOpen by mutableStateOf(false)
-    var agentsOpen by mutableStateOf(false)
-    var storeOpen by mutableStateOf(false)
-    var settingsOpen by mutableStateOf(false)
-    var packagesOpen by mutableStateOf(false)
-    var licensesOpen by mutableStateOf(false)
-    var gesturesOpen by mutableStateOf(false)
+    /** Opens a screen of the settings activity, set by the launcher activity; see [show]. */
+    var onSettings: (SettingsPage, Int) -> Unit = { _, _ -> }
 
-    /** The Linux sheet: install, progress, remove. Opened by anything that needs Linux. */
-    var linuxOpen by mutableStateOf(false)
+    /** Opens settings, or one of its screens on its own; the store puts widgets on the page showing now. */
+    fun show(page: SettingsPage = SettingsPage.Settings) = onSettings(page, currentPage)
 
     /** The widget whose share panel is open: a QR code and link, or the store. */
     var sharing by mutableStateOf<dev.omalauncher.widgets.WidgetSpec?>(null)
@@ -42,42 +35,21 @@ class LauncherState {
     /** The menu from long-pressing empty home space. */
     var homeMenuOpen by mutableStateOf(false)
 
-    /** The feed left of the first home page, and its settings. */
+    /** The feed left of the first home page; its settings are a settings page ([SettingsPage.Feed]). */
     val feed = FeedReveal()
-    var feedSettingsOpen by mutableStateOf(false)
 
-    /** Backing the home screen up to a file and restoring it. */
-    var backupOpen by mutableStateOf(false)
-
-    /** Settings › icons: the icon pack, and each app's icon. */
-    var iconsOpen by mutableStateOf(false)
-
-    /** The app whose icon is being picked, from the icons screen, the drawer or home. */
+    /** The app whose icon is being picked from the drawer or home; settings › icons has its own picker. */
     var iconApp by mutableStateOf<dev.omalauncher.AndroidApp?>(null)
 
     /** The open drawer or a full-screen panel hides the home screen; animated widgets stop ticking under it. */
     val homeCovered: Boolean
-        get() =
-            drawer.value > 0.99f || settingsOpen || styleOpen || themeBrowserOpen || agentsOpen || storeOpen || packagesOpen || linuxOpen || licensesOpen || gesturesOpen || shared != null ||
-                sharing != null || feed.progress.value > 0.99f || feedSettingsOpen || backupOpen || iconsOpen || iconApp != null
+        get() = drawer.value > 0.99f || shared != null || sharing != null || feed.progress.value > 0.99f || iconApp != null
 
-    /** Closes every overlay screen (settings and what it opens). */
+    /** Closes every overlay screen (the home menu, widget sharing). */
     fun closeScreens() {
-        styleOpen = false
-        themeBrowserOpen = false
-        agentsOpen = false
-        storeOpen = false
-        packagesOpen = false
-        linuxOpen = false
-        licensesOpen = false
-        gesturesOpen = false
-        settingsOpen = false
         homeMenuOpen = false
         shared = null
         sharing = null
-        feedSettingsOpen = false
-        backupOpen = false
-        iconsOpen = false
         iconApp = null
         if (feed.isOpen) feed.close()
     }

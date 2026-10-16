@@ -13,8 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,7 +33,6 @@ fun SettingsScreen(
     onStyle: () -> Unit,
     onAgents: () -> Unit,
     onPackages: () -> Unit,
-    onStore: () -> Unit,
     onLinux: () -> Unit,
     onLicenses: () -> Unit,
     onGestures: () -> Unit,
@@ -66,7 +63,6 @@ fun SettingsScreen(
                     Triple("coding agents", "needs linux", onLinux)
                 },
                 Triple("packages", if (installed) "install Linux apps and tools with pacman and the AUR" else "needs linux", if (installed) onPackages else onLinux),
-                Triple("widget store", "add widgets to the home screen", onStore),
                 Triple(
                     "agent chip",
                     if (runtime.chipAll) "all installed agents in the bar's chip · tap to show only Hermes and the picked one"
@@ -174,10 +170,8 @@ private fun UpdatesRow(runtime: Runtime) {
             when {
                 working || updates.checking -> {}
                 (pending?.count ?: 0) > 0 -> BracketAction("update all", Palette.accent, runtime::updateSystem)
-                else -> {
-                    val scope = rememberCoroutineScope()
-                    BracketAction("check", Palette.muted) { scope.launch { updates.check(force = true) } }
-                }
+                // Not a composition scope: this branch leaves composition as soon as checking starts, which would cancel the check.
+                else -> BracketAction("check", Palette.muted, runtime::checkUpdates)
             }
         }
         JobLog(job)

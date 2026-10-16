@@ -7,20 +7,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.omalauncher.Runtime
-import dev.omalauncher.linux.newAppCommand
-import dev.omalauncher.widgets.newWidgetCommand
+import dev.omalauncher.widgets.lang.OwlKind
+import dev.omalauncher.widgets.newOwlCommand
 import kotlinx.coroutines.launch
 
 @Composable
@@ -69,50 +68,49 @@ fun HomeMenu(
         scope.launch { if (runtime.themes.complete) runtime.themes.applyPicked() else runtime.themes.fetchPicked() }
     }
     Menu(onDismiss = { state.homeMenuOpen = false }) {
-        MenuItem("new widget with $agentName") {
-            state.homeMenuOpen = false
-            when {
-                !linux -> state.linuxOpen = true
-                agent == null -> state.agentsOpen = true
-                else -> runtime.terminal(newWidgetCommand(agent.bin), "New widget", agent)
-            }
-        }
-        MenuItem("new app with $agentName") {
-            state.homeMenuOpen = false
-            when {
-                !linux -> state.linuxOpen = true
-                agent == null -> state.agentsOpen = true
-                else -> runtime.terminal(newAppCommand(agent.bin), "New app", agent)
+        // What to create sits on the row itself: one tap starts the agent, each kind with its own prompt.
+        Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 10.dp)) {
+            BasicText("create with $agentName", style = Mono.copy(fontSize = TextSize.Item))
+            // Pulled left by the buttons' own padding, so the first bracket lines up with the label.
+            Row(Modifier.offset(x = (-8).dp)) {
+                for ((kind, label) in listOf(OwlKind.Widget to "widget", OwlKind.App to "app")) {
+                    BracketAction(label, Palette.accent) {
+                        state.homeMenuOpen = false
+                        when {
+                            !linux -> state.show(SettingsPage.Linux)
+                            agent == null -> state.show(SettingsPage.Agents)
+                            else -> runtime.terminal(newOwlCommand(agent.bin, kind), "New ${kind.word}", agent)
+                        }
+                    }
+                }
             }
         }
         MenuItem("new icon pack with $agentName") {
             state.homeMenuOpen = false
-            runIconTask(runtime, state, IconTask.NewPack)
+            runIconTask(runtime, IconTask.NewPack, state::show)
         }
-        MenuItem("widget store") {
+        MenuItem("browse store") {
             state.homeMenuOpen = false
-            state.storeOpen = true
-        }
-        MenuItem("AUR app store") {
-            state.homeMenuOpen = false
-            if (linux) state.packagesOpen = true else state.linuxOpen = true
+            state.show(SettingsPage.Store)
         }
         // Toggles in place, so the menu shows what it did.
         val feed = runtime.feed.settings.enabled
         MenuItem(if (feed) "[x] feed · swipe right" else "[ ] feed") { runtime.feed.update { it.copy(enabled = !feed) } }
         MenuItem("settings") {
             state.homeMenuOpen = false
-            state.settingsOpen = true
+            state.show()
         }
-        Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) { ThemeStrip(
+        Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            ThemeStrip(
                 runtime.themes,
                 gutter = 20.dp,
                 onPick = ::pickTheme,
                 onBrowse = {
                     state.homeMenuOpen = false
-                    state.themeBrowserOpen = true
+                    state.show(SettingsPage.Themes)
                 },
-            ) }
+            )
+        }
     }
 }
 

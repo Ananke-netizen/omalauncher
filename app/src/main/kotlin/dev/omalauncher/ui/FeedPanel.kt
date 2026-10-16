@@ -284,7 +284,7 @@ fun FeedPanel(
             FeedWindow(
                 store,
                 open = reveal.progress.targetValue >= 1f,
-                onSettings = { state.feedSettingsOpen = true },
+                onSettings = { state.show(SettingsPage.Feed) },
                 onClose = reveal::close,
             )
         }

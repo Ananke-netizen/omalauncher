@@ -1,0 +1,1 @@
+Fixes the theme and wallpaper going missing after the launcher restarts, on a phone set up with the theme it first offers. Backups name that theme too.
