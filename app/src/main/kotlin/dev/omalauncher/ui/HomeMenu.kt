@@ -101,10 +101,6 @@ fun HomeMenu(
         // Toggles in place, so the menu shows what it did.
         val feed = runtime.feed.settings.enabled
         MenuItem(if (feed) "[x] feed · swipe right" else "[ ] feed") { runtime.feed.update { it.copy(enabled = !feed) } }
-        MenuItem("settings") {
-            state.homeMenuOpen = false
-            state.show()
-        }
         Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             ThemeStrip(
                 runtime.themes,
