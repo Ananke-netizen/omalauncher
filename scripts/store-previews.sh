@@ -102,6 +102,8 @@ seed() {
       [ -n "${NS_API_KEY:-}" ] || return 0
       json=$(printf '{"apiKey":"%s","station":{"uic":"8400058","name":"Amsterdam Centraal","lat":52.3791,"lng":4.9003},"saved":[],"favs":[{"uic":"8400621","name":"Utrecht Centraal","label":"Utrecht"},{"uic":"8400530","name":"Rotterdam Centraal","label":"Rotterdam"}]}' "$NS_API_KEY") ;;
     life) json='{"birthYear":"1990","lifespan":"80"}' ;;
+    # A town in France, so it doesn't fall back to the IP's location.
+    carburant) json='{"city":"Lyon"}' ;;
     # A made-up key: the demo's python3 answers lastfm's helper without calling Last.fm.
     lastfm) json='{"username":"demo","apiKey":"demo"}' ;;
     # A few days into practice: a streak, a level and two sessions done.
