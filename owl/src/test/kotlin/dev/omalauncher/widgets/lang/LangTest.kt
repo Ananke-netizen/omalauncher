@@ -152,6 +152,10 @@ class LangTest {
         assertEquals("3.5", text("lerp(clamp(x, 0, 10), 4, 0.5) + 0", "state x = 3"))
         assertEquals("1.23", text("round(x * 1.2345, 2)", "state x = 1"))
         assertEquals("1.23", text("round(x, 2)", "state x = \"1.2345\""))
+        // Past what a Long holds after scaling, round leaves the number as it is.
+        assertEquals("999998000001", text("round(x * 999999, 8)", "state x = 999999"))
+        assertEquals("999998000001", text("round(x, 8)", "state x = 999998000001"))
+        assertEquals("1e+21", text("round(pow(x, 21))", "state x = 10"))
         // A null stays a null through the steps that turn anything else into a number.
         assertEquals("null", text("x / 0 + 1", "state x = null"))
         assertEquals("null", text("x % 0 + 1", "state x = null"))
