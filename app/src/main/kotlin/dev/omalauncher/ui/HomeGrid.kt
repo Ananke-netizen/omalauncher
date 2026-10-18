@@ -22,7 +22,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.zIndex
 import dev.omalauncher.widgets.Cell
-import dev.omalauncher.widgets.isFeedPage
+import dev.omalauncher.widgets.isFacePage
 import dev.omalauncher.widgets.Folder
 import dev.omalauncher.widgets.Shortcut
 import dev.omalauncher.widgets.HomeItem
@@ -113,11 +113,11 @@ private class Grid(
             rect(c.x, c.y, c.right, c.bottom)
         }
 
-    /** Where [item] shows at [c]: a full-screen page fills its page edge to edge, without the gaps around tiles. */
+    /** Where [item] shows at [c]: a face fills its page edge to edge, without the gaps around tiles. */
     fun rect(
         item: HomeItem,
         c: Cell,
-    ) = if (item.fullPage) IntRect(0, 0, width, height) else rect(c)
+    ) = if (item.isFace) IntRect(0, 0, width, height) else rect(c)
 
     /** Screen cells [x0] to [x1] across and [y0] to [y1] down, less the gap after the last. */
     private fun rect(
@@ -187,7 +187,7 @@ private fun squareRows(
 /** Cells four times as tall as wide: far past any phone's shape (20:9 makes 13 rows of 6 columns). */
 private const val MAX_CELL_ASPECT = 4
 
-/** [items], one page's, with the cells they show at on [g]: a tile its saved cell, the full-screen page that owns the page every cell. */
+/** [items], one page's, with the cells they show at on [g]: a tile its saved cell, the face that owns the page every cell. */
 private fun WidgetLayout.placed(
     items: List<HomeItem>,
     g: Grid,
@@ -319,7 +319,7 @@ internal fun HomeGrid(
     render: @Composable (HomeItem, Modifier, Boolean) -> Unit,
     actions: @Composable (HomeItem) -> Unit,
     onLongPressEmpty: () -> Unit,
-    /** What a page left of the first ([isFeedPage]) shows while no page is there; it gets the page's number. */
+    /** What a page left of the first ([isFacePage]) shows while no face is there; it gets the page's number. */
     feed: @Composable (Int) -> Unit,
     onNoRoom: (HomeItem) -> Unit,
     onMove: (HomeItem, Int) -> Unit,
@@ -344,7 +344,7 @@ internal fun HomeGrid(
         val gap = with(density) { HomeGap.roundToPx() }
         val outer = with(density) { EdgeGap.roundToPx() }
         // The screen's edge on every side but the one the strip and the bar follow, which gets the gap between tiles.
-        // The grid stops [room] short of the bottom; the pages and their gestures go on below it, and a full-screen page
+        // The grid stops [room] short of the bottom; the pages and their gestures go on below it, and a face
         // over all of it.
         val pad =
             GridPad(
@@ -495,15 +495,15 @@ internal fun HomeGrid(
                             val others = placedOn(page, g).filter { it.first.key != item.key }
                             val over = others.lastOrNull { (o, r) -> g.rect(o, r).has(at) }
                             // Apps group with apps and folders; anything else swaps, except an app from a folder, which has no cell to
-                            // trade, and a full-screen page, whose page isn't a cell either: one lands only on an empty page, and nothing on its.
+                            // trade, and a face, whose page isn't a cell either: one lands only on an empty page, and nothing on its.
                             val groups = item is Shortcut && (over?.first is Shortcut || over?.first is Folder)
-                            val target = over?.takeIf { groups || (!inFolder && !item.fullPage && !it.first.fullPage) }
-                            // Left of page 1 only pages go.
-                            val feedRefuses = isFeedPage(page) && !item.fullPage
+                            val target = over?.takeIf { groups || (!inFolder && !item.isFace && !it.first.isFace) }
+                            // Left of page 1 only faces go.
+                            val onlyFaces = isFacePage(page) && !item.isFace
                             arrange.grouping = groups
                             arrange.swapWith = target?.first?.key
                             arrange.preview =
-                                if (feedRefuses) {
+                                if (onlyFaces) {
                                     null
                                 } else if (over != null) {
                                     target?.second
@@ -531,7 +531,7 @@ internal fun HomeGrid(
                                     }
                                 }
                             drop != null && moved -> {
-                                if (!item.fullPage) layout.set(item.key, drop)
+                                if (!item.isFace) layout.set(item.key, drop)
                                 if (page != from || inFolder) onMove(item, page)
                             }
                         }
@@ -644,10 +644,10 @@ internal fun HomeGrid(
                         }
 
                         val hit = placed.lastOrNull { (i, c) -> g.rect(i, c).has(at) }
-                        // A full-screen page's long presses are its own nodes' (onLongPress), which it's not lifted by (it's
+                        // A face's long presses are its own nodes' (onLongPress), which it's not lifted by (it's
                         // arranged in settings › pages). One that none of them takes opens the menu, as empty space does:
                         // they take it as the press times out, so give them a moment to say so.
-                        if (hit?.first?.fullPage == true) {
+                        if (hit?.first?.isFace == true) {
                             if (!awaitLongPress(down.id, start)) return@awaitEachGesture
                             val held = SystemClock.uptimeMillis()
                             withTimeoutOrNull(CLAIM_MS) { while (true) awaitPointerEvent(PointerEventPass.Initial) }
@@ -677,7 +677,7 @@ internal fun HomeGrid(
                     }
                 },
         ) {
-            // A full-screen page's nodes say here when they take a long press, so the menu doesn't open for it too.
+            // A face's nodes say here when they take a long press, so the menu doesn't open for it too.
             CompositionLocalProvider(LocalLongPressClaim provides claims) {
                 HorizontalPager(pager, Modifier.fillMaxSize(), key = { pages.getOrElse(it * grid.per) { -it } }) { slot ->
                     Row(Modifier.fillMaxSize()) {
@@ -755,7 +755,7 @@ private fun DropPreview(
     )
 }
 
-/** How long after a long press times out a full-screen page's node may still take it before home opens its menu. */
+/** How long after a long press times out a face's node may still take it before home opens its menu. */
 private const val CLAIM_MS = 100L
 
 /** How long a carried tile rests against a side edge before the page turns. */
@@ -788,9 +788,9 @@ private fun TiledPage(
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val pageWidth = constraints.maxWidth
-        // A full-screen page selected on its page has no cells to arrange.
-        val pageSelected = items.any { it.key == selected && it.fullPage }
-        if ((selected != null && !pageSelected) || (carried != null && arrange.folder == null)) {
+        // A face selected on its page has no cells to arrange.
+        val faceSelected = items.any { it.key == selected && it.isFace }
+        if ((selected != null && !faceSelected) || (carried != null && arrange.folder == null)) {
             // Grid guides while arranging; not while sorting an open folder, which covers the grid.
             Canvas(Modifier.fillMaxSize()) {
                 for (x in 0 until grid.cols) {
@@ -806,13 +806,13 @@ private fun TiledPage(
                 }
             }
         }
-        if (isFeedPage(page) && carried == null && items.isEmpty()) {
+        if (isFacePage(page) && carried == null && items.isEmpty()) {
             feed(page)
         } else if (items.none { it.key != carried }) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 BasicText(
                     when {
-                        isFeedPage(page) && arrange.carry?.item?.fullPage != true -> "only a page goes here"
+                        isFacePage(page) && arrange.carry?.item?.isFace != true -> "only a face goes here"
                         carried != null -> "drop here"
                         else -> "no widgets on this page · long-press for a new one"
                     },

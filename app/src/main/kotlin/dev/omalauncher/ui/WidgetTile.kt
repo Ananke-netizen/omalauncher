@@ -53,8 +53,8 @@ internal fun WidgetTile(
     waitsForLinux: LinuxState? = null,
     onInstallLinux: () -> Unit = {},
 ) {
-    // A full-screen page draws straight on the wallpaper, without a tile's frame; selected, it still shows the focus border.
-    val bare = spec.fullPage && waitsForLinux == null && instance != null && needs.isEmpty()
+    // A face draws straight on the wallpaper, without a tile's frame; selected, it still shows the focus border.
+    val bare = spec.isFace && waitsForLinux == null && instance != null && needs.isEmpty()
     Box(
         modifier
             .then(
@@ -93,9 +93,9 @@ internal fun WidgetTile(
             }
         } else if (bare) {
             // The whole screen: under the status bar and the navigation bar. The nodes keep clear of the camera cutout and
-            // of the status bar where it stays (statusBar: true); the navigation bar is the page's to mind, through
+            // of the status bar while it stays (statusBar true); the navigation bar is the face's to mind, through
             // screenInset, as an edge app's is.
-            val top = if (instance.program.statusBar) WindowInsets.statusBars.union(WindowInsets.displayCutout) else WindowInsets.displayCutout
+            val top = if (instance.showsStatusBar()) WindowInsets.statusBars.union(WindowInsets.displayCutout) else WindowInsets.displayCutout
             WidgetContent(instance, Modifier.fillMaxSize(), cells, top.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
             ScreenInset(instance)
         } else {

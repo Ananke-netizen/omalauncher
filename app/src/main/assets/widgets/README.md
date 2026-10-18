@@ -2,9 +2,9 @@
 
 Each `*.owl` file in this folder is a widget on the Android home screen,
 written in OWL, a small declarative language in the spirit of QML. Its first
-word says what it is: `widget "name" { }` is a home-screen tile, `page "name" { }` a whole home page,
-left of your first one (see Pages), and `app "name" { }` an app in the app drawer that opens full screen
-(see Apps). Everything below is about widgets unless it says otherwise; pages and apps are written
+word says what it is: `widget "name" { }` is a home-screen tile, `face "name" { }` a face, a whole home page
+left of your first one (see Faces), and `app "name" { }` an app in the app drawer that opens full screen
+(see Apps). Everything below is about widgets unless it says otherwise; faces and apps are written
 the same way. Save a file and it appears within a second. Then run `owl-check <file>`:
 
 ```
@@ -343,13 +343,13 @@ widget "clock" {
 
 ### Fonts
 
-Since owl 11 `font` can also be a font of the widget's own, for a clock in a display face, a heading in a
+Since owl 11 `font` can also be a font of the widget's own, for a clock in a display typeface, a heading in a
 serif with character or a pixel font for a game: a TTF or OTF from an `asset`, an `https://` URL or a file in
 this system (`"~/.local/share/fonts/x.ttf"`, which needs Linux). It shows the launcher's font for the moment
 it takes to load.
 
 ```owl
-page "poster" {
+face "poster" {
   meta { owl: 11 }
   source now = clock every 1m
   asset pixel = base64"AAEAAA=="        // a small font's whole file in base64: the widget stays self-contained
@@ -374,15 +374,15 @@ page "poster" {
 
 ### Gradient backgrounds
 
-Since owl 11 a node's `background`, and a page's or tile's, can be a `linear(...)` or `radial(...)`. There its
+Since owl 11 a node's `background`, and a face's or tile's, can be a `linear(...)` or `radial(...)`. There its
 points are fractions of the node, 0 to 1 across and down, since its size in dp isn't known as you write it:
 `linear(0, 0, 0, 1, [...])` runs top to bottom, `linear(0, 0, 1, 1, [...])` corner to corner, and a radial
 one's radius is a fraction of the longer side, `radial(0.5, 0.5, 0.7, [...])`. The colors are spread evenly.
-A page's background runs under the status bar too, so a veil darker where the text is reads well on any
+A face's background runs under the status bar too, so a veil darker where the text is reads well on any
 wallpaper:
 
 ```owl
-page "dusk" {
+face "dusk" {
   meta { owl: 11 }
   background: linear(0, 0, 0, 1, [alpha(background, 0.85), alpha(background, 0.35), alpha(background, 0.9)])
   Column {
@@ -402,7 +402,7 @@ An animated `background` is a color, as before.
 The node's `background` goes over it, so a translucent one tints the glass and keeps text on it readable:
 
 ```owl
-page "glass" {
+face "glass" {
   meta { owl: 11 }
   Column {
     padding: 16
@@ -586,16 +586,16 @@ widget "weather" {
 Screens are for showing more, not for building apps: there's no navigation between screens, no
 lists that load as they scroll, and only the nodes above (no maps, web pages or video).
 
-## Pages
+## Faces
 
-A file can also be a page: a whole home page, the whole screen. A launcher screen of your own, a
-dashboard to swipe to, a start page with your day on it. Pages sit left of page 1, where a stock
-launcher has its news feed, and you can have as many as you like there. A page is built like a widget,
+A file can also be a face: a whole home page, the whole screen, as a watch face is a watch's. A launcher
+screen of your own, a dashboard to swipe to, a start page with your day on it. Faces sit left of page 1, where a stock
+launcher has its news feed, and you can have as many as you like there. A face is built like a widget,
 with the same declarations, nodes, `onTap` and `screen { }`, and it has a screen's room: up to 1000
-nodes. Pages need owl 10.
+nodes. Faces need owl 10.
 
 ```owl
-page "morning" {
+face "morning" {
   meta { owl: 10 }
   source now = clock every 1m
   source wx = http("https://wttr.in/?format=j1") every 30m json
@@ -615,28 +615,29 @@ page "morning" {
 
 - **Where it goes.** `page: 0` (the default) is the page just left of page 1; `-1`, `-2`, ... go further
   left. Home opens on page 1, and an empty page always waits left of the leftmost one, inviting a new
-  page there: only pages go left of page 1, never tiles. One whose place is taken goes to that empty
-  page instead. A page can also take a page right of page 1 (`page: 3`) if no tiles are there.
+  face there: only faces go left of page 1, never tiles. One whose place is taken goes to that empty
+  page instead. A face can also take a page right of page 1 (`page: 3`) if no tiles are there.
 - **The screen.** It fills the whole screen: the recent apps strip and the bar slide away with the tile
-  pages (swipe up for the app drawer, which brings the bar back). The status bar stays, over the page,
-  and the nodes keep clear of it; `statusBar: false` hides it while the page shows (a swipe down from the
+  pages (swipe up for the app drawer, which brings the bar back). The status bar stays, over the face,
+  and the nodes keep clear of it; `statusBar: false` hides it while the face shows (a swipe down from the
   top brings it back for a moment), and they keep clear of a camera cutout only. The background runs
-  under both. `statusBar` is `true` or `false`, not an expression.
-- **The navigation bar.** The page runs on under it, like an app with `edge: true`: `screenInset` is how
+  under both. `statusBar` can be any expression, and the bar comes and goes as it changes: `statusBar: !playing`
+  keeps it while a game waits and hides it while one runs.
+- **The navigation bar.** The face runs on under it, like an app with `edge: true`: `screenInset` is how
   much of its bottom the navigation bar covers, in dp, so end it with `Spacer { height: screenInset }` or
   pad buttons along the bottom by it.
 - **Looks.** There's no tile frame and no background: it draws straight on the wallpaper. Where text needs
-  one to be readable, give the page `background: alpha(background, 0.7)` or a gradient (owl 11), or just the
+  one to be readable, give the face `background: alpha(background, 0.7)` or a gradient (owl 11), or just the
   nodes that hold it, which can be frosted glass (`frost`, owl 11).
   `padding` (12 by default) is around everything, as on a tile.
 - **Size.** `cols` and `rows` are the whole grid (6 or so by 12), and `tileWidth` and `tileHeight` the
   screen's size in dp: lay it out by those, since phones differ. It takes no `size` or `minSize`.
-- **On the phone.** Long presses are the page's own (`onLongPress`); one that no node takes opens the home
-  menu, as on empty space between tiles. Pages are edited, shared, moved and removed in settings › pages, which lists home's pages left to right: hold one and drag it to move it. Swiping up opens the app drawer and sideways turns the page, so
-  a `scroll: true` Column scrolls up and down, and a page has nothing to swipe sideways.
+- **On the phone.** Long presses are the face's own (`onLongPress`); one that no node takes opens the home
+  menu, as on empty space between tiles. Faces are edited, shared, moved and removed in settings › pages, which lists home's pages left to right, faces and pages of tiles: drag one by its handle to move it. Swiping up opens the app drawer and sideways turns the page, so
+  a `scroll: true` Column scrolls up and down, and a face has nothing to swipe sideways.
 
-owl-check's preview of a page is the page at the phone's size, as home last laid it out. `examples/00-start.owl`
-is a whole start page: the time, the weather, battery, the next alarm, notifications and your most used apps.
+owl-check's preview of a face is the face at the phone's size, as home last laid it out. `examples/00-start.owl`
+is a whole face, a start page: the time, the weather, battery, the next alarm, notifications and your most used apps.
 
 ## Apps
 

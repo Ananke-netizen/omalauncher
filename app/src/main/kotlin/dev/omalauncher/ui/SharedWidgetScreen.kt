@@ -55,7 +55,7 @@ fun SharedWidgetScreen(
             }
     }
     var showSource by remember(link) { mutableStateOf(false) }
-    // An app goes in the drawer rather than on a page, and a page left of page 1; known from its first word, even before it compiles.
+    // An app goes in the drawer rather than on a page, and a face left of page 1; known from its first word, even before it compiles.
     val kind = result?.getOrNull()?.let { OwlKind.of(it.text) } ?: OwlKind.Widget
     val app = kind == OwlKind.App
     OverlayPanel("shared ${kind.word}", onDismiss, contentWidth = ReadingWidth) {
@@ -105,7 +105,7 @@ fun SharedWidgetScreen(
                             BracketAction(
                                 when (kind) {
                                     OwlKind.App -> "add to app drawer"
-                                    OwlKind.Page -> "add as a page"
+                                    OwlKind.Face -> "add as a face"
                                     OwlKind.Widget -> "add to page $page"
                                 },
                                 Palette.accent,

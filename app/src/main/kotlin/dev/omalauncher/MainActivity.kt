@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             LauncherRoot(runtime, state)
             LaunchedEffect(Palette.isLight) { applySystemBars(this@MainActivity, Palette.isLight) }
-            // A page with statusBar: false takes the status bar's room too.
+            // A face whose statusBar is false takes the status bar's room too.
             val fullScreen by remember { derivedStateOf { state.fullScreen && runtime.widgets.openScreen == null } }
             val statusBar = LauncherStyle.style[Style.STATUS_BAR_SHOWN] && !fullScreen
             LaunchedEffect(statusBar) { showStatusBar(this@MainActivity, statusBar) }

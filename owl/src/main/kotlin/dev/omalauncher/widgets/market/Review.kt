@@ -28,7 +28,7 @@ class Review(
     var name = ""
         private set
 
-    /** What the path says it is: under apps/ an app, under pages/ a page, else a widget. */
+    /** What the path says it is: under apps/ an app, under faces/ a face, else a widget. */
     val kind get() = OwlKind.entries.firstOrNull { path.startsWith(it.word + "s/") } ?: OwlKind.Widget
 
     val id get() = "$author/$name"
@@ -42,7 +42,7 @@ class Review(
     private fun run() {
         val m = PATH.matchEntire(path)
         if (m == null) {
-            errors += "widgets go at widgets/<author>/<name>/widget.owl, pages at pages/<author>/<name>/page.owl and apps at apps/<author>/<name>/app.owl, " +
+            errors += "widgets go at widgets/<author>/<name>/widget.owl, faces at faces/<author>/<name>/face.owl and apps at apps/<author>/<name>/app.owl, " +
                 "in lowercase letters, digits and dashes (got $path)"
         } else {
             author = m.groupValues[2]
@@ -146,7 +146,7 @@ class Review(
 
     companion object {
         const val MAX_BYTES = 256 * 1024
-        val PATH = Regex("""(widget|page|app)s/([a-z0-9][a-z0-9-]{0,38})/([a-z0-9][a-z0-9-]{0,38})/\1\.owl""")
+        val PATH = Regex("""(widget|face|app)s/([a-z0-9][a-z0-9-]{0,38})/([a-z0-9][a-z0-9-]{0,38})/\1\.owl""")
         private val VERSION = Regex("""\d+(\.\d+){0,2}""")
 
         /** What in [commands] matches [RISKS], one line each: "command pipes a download into a shell: curl ... | sh". */

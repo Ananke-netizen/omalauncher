@@ -128,7 +128,7 @@ fun WidgetContent(
     modifier: Modifier = Modifier,
     /** The tile's size in grid cells, for `cols` and `rows`. */
     cells: Pair<Int, Int>? = null,
-    /** What the nodes keep clear of, inside the background: a full-screen page's, the camera cutout. */
+    /** What the nodes keep clear of, inside the background: a face's, the camera cutout. */
     insets: WindowInsets? = null,
 ) {
     val program = inst.program
@@ -154,17 +154,17 @@ fun WidgetContent(
             .then(if (insets != null) Modifier.windowInsetsPadding(insets) else Modifier)
             .padding(inset(program.padding)),
     ) {
-        CompositionLocalProvider(LocalLongPress provides program.fullPage) {
+        CompositionLocalProvider(LocalLongPress provides program.isFace) {
             Nodes(program.root, inst.root, inst, this)
         }
     }
 }
 
-/** Whether nodes here take long presses: in screens, apps and pages, not on a tile, where the home screen has them. */
+/** Whether nodes here take long presses: in screens, apps and faces, not on a tile, where the home screen has them. */
 val LocalLongPress = staticCompositionLocalOf { false }
 
 /**
- * Where a node's onLongPress says it took a long press, so the home screen around a page knows not to open its menu
+ * Where a node's onLongPress says it took a long press, so the home screen around a face knows not to open its menu
  * for the same one; see [dev.omalauncher.ui.HomeGrid].
  */
 class LongPressClaim {
@@ -670,7 +670,7 @@ private fun handlers(p: Props): Modifier {
 }
 
 /**
- * A gradient behind a node or a page. Its points are fractions of the size, 0 to 1 across and down, and a
+ * A gradient behind a node or a face. Its points are fractions of the size, 0 to 1 across and down, and a
  * radial one's radius a fraction of the longer side, so it fits whatever size the node turns out to be.
  */
 internal fun backgroundBrush(

@@ -45,9 +45,9 @@ import dev.omalauncher.widgets.WidgetSpec
 import dev.omalauncher.widgets.editWidgetCommand
 
 /**
- * Home's pages, left to right: the pages of tiles and the full-screen pages (`page "…" { }`), whose long presses are
+ * Home's pages, left to right: the pages of tiles and the faces (`face "…" { }`), whose long presses are
  * their own, so they're arranged here. Drag a row by its handle to move the page; letting go numbers home's pages again
- * ([dev.omalauncher.widgets.WidgetEngine.arrangePages]). A full-screen page can be edited with the agent ([onAgent]) or
+ * ([dev.omalauncher.widgets.WidgetEngine.arrangePages]). A face can be edited with the agent ([onAgent]) or
  * shared ([onShare]); any page can be removed, after asking.
  */
 @Composable
@@ -69,7 +69,7 @@ internal fun PagesScreen(
     val gap = with(LocalDensity.current) { RowGap.roundToPx() }
     OverlayPanel("pages", onDismiss, contentWidth = ReadingWidth) {
         BasicText(
-            "Home's pages, left to right. Drag one by ≡ to move it. Home opens on the first with tiles; full-screen pages before it sit left of it.",
+            "Home's pages, left to right. Drag one by ≡ to move it. Home opens on the first with tiles; faces before it sit left of it.",
             style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
         )
         Spacer(Modifier.height(12.dp))
@@ -173,7 +173,7 @@ private fun pageContents(items: List<HomeItem>): String {
     return (widgets + listOfNotNull(apps.takeIf { it > 0 }?.let { if (it == 1) "1 app" else "$it apps" })).joinToString(", ").ifEmpty { "empty" }
 }
 
-/** One page: a full-screen page by its name, a page of tiles by what's on it. */
+/** One page: a face by its name, a page of tiles by what's on it. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PageRow(
@@ -208,7 +208,7 @@ private fun PageRow(
                 BasicText(
                     when {
                         spec?.error != null -> "doesn't compile"
-                        spec != null -> "full screen"
+                        spec != null -> "face"
                         page == 1 -> "home"
                         else -> ""
                     },

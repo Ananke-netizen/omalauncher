@@ -63,8 +63,8 @@ class WidgetSpec(
     /** A home tile or an app in the drawer; known from the first word even when it doesn't compile. */
     val kind: OwlKind = OwlKind.Widget,
 ) {
-    /** A page file: it is its home page; see [WidgetLayout.owner]. Known from the first word, so also while it doesn't compile. */
-    val fullPage get() = kind == OwlKind.Page
+    /** A face file: it is its home page; see [WidgetLayout.owner]. Known from the first word, so also while it doesn't compile. */
+    val isFace get() = kind == OwlKind.Face
 
     fun onPage(page: Int) = WidgetSpec(file, name, page, order, program, error, size, minSize, stamp, kind)
 }
@@ -113,11 +113,11 @@ class WidgetEngine(
 
     /** The store's widgets, and its apps. */
     val market = Market(this, OwlKind.Widget)
-    val pageMarket = Market(this, OwlKind.Page)
+    val faceMarket = Market(this, OwlKind.Face)
     val appMarket = Market(this, OwlKind.App)
 
     /** All three, in the store's order. */
-    val markets get() = listOf(market, pageMarket, appMarket)
+    val markets get() = listOf(market, faceMarket, appMarket)
 
     /** The store for [kind]. */
     fun market(kind: OwlKind) = markets.first { it.kind == kind }
@@ -240,7 +240,7 @@ class WidgetEngine(
     /** App files that compile and can run here, for the app drawer. */
     fun apps(): List<WidgetSpec> = specs.filter { it.kind == OwlKind.App && it.program != null && !waitsForLinux(it) }
 
-    /** On a home page: a widget's tile, or a page; not an app. */
+    /** On a home page: a widget's tile, or a face; not an app. */
     fun onHome(spec: WidgetSpec) = spec.kind != OwlKind.App
 
     /** The running widget whose screen is open, with its spec (for the title fallback). */
@@ -260,13 +260,13 @@ class WidgetEngine(
     ) = layout.setPage(fileName, page)
 
     /**
-     * A widget with no room on its page moves to the next page with room at its size, or a new one after the last. A page
+     * A widget with no room on its page moves to the next page with room at its size, or a new one after the last. A face
      * left of page 1 whose place is taken goes further left instead, to a new one left of the leftmost. Returns the page.
      */
     fun moveToFreePage(item: HomeItem): Int {
         val page =
-            if (item.fullPage && item.page <= FEED_PAGE) {
-                minOf(pages.minOrNull() ?: 1, FEED_PAGE + 1) - 1
+            if (item.isFace && item.page <= FACE_PAGE) {
+                minOf(pages.minOrNull() ?: 1, FACE_PAGE + 1) - 1
             } else {
                 pages.firstOrNull { it > item.page && layout.claim(item, itemsOn(it)) } ?: ((pages.maxOrNull() ?: 1) + 1)
             }
@@ -283,12 +283,12 @@ class WidgetEngine(
         // Before the first load the pages are only partly known, and an order made from an older list (pages came or went
         // since) names pages that aren't these: moving by either would mix them up.
         if (!loaded || order.sorted() != pages) return
-        val first = order.indexOfFirst { p -> itemsOn(p).any { !it.fullPage } }.let { if (it < 0) order.size else it }
+        val first = order.indexOfFirst { p -> itemsOn(p).any { !it.isFace } }.let { if (it < 0) order.size else it }
         val moves = order.mapIndexed { i, p -> itemsOn(p) to i - first + 1 }
         for ((items, to) in moves) for (item in items) if (item.page != to) moveToPage(item, to)
     }
 
-    /** Takes [page] off home: its widgets and pages go to .removed/, its apps and folders come off home (they stay installed). */
+    /** Takes [page] off home: its widgets and faces go to .removed/, its apps and folders come off home (they stay installed). */
     fun removePage(page: Int) {
         if (!loaded) return
         for (item in itemsOn(page)) {
@@ -362,7 +362,7 @@ class WidgetEngine(
 
     /**
      * Adds a widget from a share link, once the user has read what it runs: on [page], its packages installed
-     * right after, as a store install. One shared before under the same name is replaced and keeps its page. A page
+     * right after, as a store install. One shared before under the same name is replaced and keeps its page. A face
      * goes left of page 1 instead, to the empty one waiting there.
      */
     suspend fun addSharedWidget(
@@ -370,7 +370,7 @@ class WidgetEngine(
         page: Int,
     ) = withContext(Dispatchers.IO) {
         val name = shared.fileName
-        if (!File(dir, name).exists() && OwlKind.of(shared.text) != OwlKind.Page) setPage(name, page)
+        if (!File(dir, name).exists() && OwlKind.of(shared.text) != OwlKind.Face) setPage(name, page)
         installDependenciesWhenLoaded(name)
         File(dir, name).writeText(shared.text)
     }
@@ -627,7 +627,7 @@ class WidgetEngine(
         val inst = instance(spec)!!
         if (program.kind == OwlKind.App) return previewView(spec, inst, hash)
         val cells = tileCells(spec)
-        val (w, h) = if (spec.fullPage) layout.pagePx(context.resources.displayMetrics) else layout.tilePx(cells, context.resources.displayMetrics)
+        val (w, h) = if (spec.isFace) layout.pagePx(context.resources.displayMetrics) else layout.tilePx(cells, context.resources.displayMetrics)
         previewing += name
         val loaded = loadedOf(inst)
         var screen: String? = null
@@ -651,8 +651,8 @@ class WidgetEngine(
         writeCheck(spec.file, hash, "ok", listOfNotNull(line, screen).joinToString("\n"))
     }
 
-    /** The tile's cells as it's laid out on home, else as the file sizes it; a full-screen page's are the whole grid. */
-    private fun tileCells(spec: WidgetSpec) = (if (spec.fullPage) layout.grid ?: (layout.columns to 12) else null) ?: layout.cell(spec.file.name)?.let { it.w to it.h } ?: spec.size?.let { (w, h) -> w.coerceIn(1, layout.columns) to h.coerceAtLeast(1) } ?: (3 to 3)
+    /** The tile's cells as it's laid out on home, else as the file sizes it; a face's are the whole grid. */
+    private fun tileCells(spec: WidgetSpec) = (if (spec.isFace) layout.grid ?: (layout.columns to 12) else null) ?: layout.cell(spec.file.name)?.let { it.w to it.h } ?: spec.size?.let { (w, h) -> w.coerceIn(1, layout.columns) to h.coerceAtLeast(1) } ?: (3 to 3)
 
     /** Waits until every source of [inst] has a value; what a preview draws after. */
     private fun loadedOf(inst: WidgetInstance): suspend () -> Unit = { snapshotFlow { inst.loaded() }.first { it } }
@@ -694,7 +694,7 @@ class WidgetEngine(
         val spec = specs.firstOrNull { it.file.name == name } ?: return
         val inst = instance(spec) ?: return
         val cells = tileCells(spec)
-        val (w, h) = if (spec.fullPage) layout.pagePx(context.resources.displayMetrics) else layout.tilePx(cells, context.resources.displayMetrics)
+        val (w, h) = if (spec.isFace) layout.pagePx(context.resources.displayMetrics) else layout.tilePx(cells, context.resources.displayMetrics)
         val themes = withContext(Dispatchers.IO) { runtime.themes.bundled }
         val before = Palette.current
         val dir = File(previewDir, "themes")
@@ -790,7 +790,7 @@ class WidgetEngine(
     ): WidgetSpec {
         writeError(file, error)
         writeCheck(file, hash, "error")
-        return WidgetSpec(file, file.nameWithoutExtension, previous?.page ?: layout.page(file.name) ?: if (kind == OwlKind.Page) FEED_PAGE else 1, previous?.order ?: 999, null, error, previous?.size, previous?.minSize ?: (1 to 1), stamp, kind)
+        return WidgetSpec(file, file.nameWithoutExtension, previous?.page ?: layout.page(file.name) ?: if (kind == OwlKind.Face) FACE_PAGE else 1, previous?.order ?: 999, null, error, previous?.size, previous?.minSize ?: (1 to 1), stamp, kind)
     }
 
     /** Error files are written in order: a clear must never land after the error that follows it. */

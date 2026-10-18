@@ -759,6 +759,9 @@ class WidgetInstance(
         return null
     }
 
+    /** Whether a face keeps the status bar over it now: its `statusBar`, true unless it says otherwise. */
+    fun showsStatusBar() = program.statusBar?.let { eval(it, root, "statusBar").truthy } ?: true
+
     /** Whether an app's Back goes up a level inside it now, because its `back` holds. */
     fun canGoUp() = program.back?.let { eval(it, root, "back").truthy } == true
 

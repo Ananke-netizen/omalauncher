@@ -305,10 +305,10 @@ class Program(
     /** The tile's: an app has none of these. */
     val size: Pair<Int, Int>? = null,
     val minSize: Pair<Int, Int> = 1 to 1,
-    /** A page (`page "…" { }`): it is its home page, the whole screen with no frame, and nothing else goes on it. */
-    val fullPage: Boolean = false,
-    /** A page's `statusBar`: false hides the status bar while it shows. */
-    val statusBar: Boolean = true,
+    /** A face (`face "…" { }`): it is its home page, the whole screen with no frame, and nothing else goes on it. */
+    val isFace: Boolean = false,
+    /** A face's `statusBar`: while false, the status bar hides as the face shows; null keeps it. */
+    val statusBar: Ev? = null,
     val page: Int = 1,
     val order: Int = 0,
     /** Tile padding in dp, and an optional tile background. */

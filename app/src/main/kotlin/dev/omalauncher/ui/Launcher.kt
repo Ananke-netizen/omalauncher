@@ -107,13 +107,13 @@ private fun DesktopScreen(
             }
         }
     }
-    // A full-screen page runs under them, so their bands make way for it.
-    if (!state.pageShowing) SystemBarFrames()
+    // A face runs under them, so their bands make way for it.
+    if (!state.faceShowing) SystemBarFrames()
     val covered = remember(state) { { state.homeCovered || runtime.widgets.openScreen != null } }
     // What frosted nodes blur: the background drawn above, or by our live wallpaper, slid as far as the pages.
     val backdrop = remember(runtime, state) { Backdrop({ runtime.themes.background }, { state.wallpaperOffset }) }
     CompositionLocalProvider(LocalHomeCovered provides covered, LocalBackdrop provides backdrop) {
-        // The whole window: a full-screen page fills it, and tiles keep clear of the system bars and the bar themselves.
+        // The whole window: a face fills it, and tiles keep clear of the system bars and the bar themselves.
         HomeScreen(runtime, state, Modifier.fillMaxSize())
     }
     HomeMenu(runtime, state)
@@ -218,7 +218,7 @@ private fun DesktopScreen(
                 }
             }
             // Hidden while a tile types: it would sit on the keyboard, over the tile. They slide with the tile pages,
-            // out past a full-screen page; swiping up there opens the drawer, which brings them back.
+            // out past a face; swiping up there opens the drawer, which brings them back.
             if (!runtime.terminals.typing || runtime.terminals.keyboardLeaving) {
                 Column(Modifier.graphicsLayer { if (!panelShown) translationX = state.barShift() * size.width }) {
                     // Home only: the open app list has everything.

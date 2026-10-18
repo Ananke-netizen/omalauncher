@@ -7,8 +7,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import android.app.WallpaperManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.snapshotFlow
-import dev.omalauncher.widgets.FEED_PAGE
-import dev.omalauncher.widgets.isFeedPage
+import dev.omalauncher.widgets.FACE_PAGE
+import dev.omalauncher.widgets.isFacePage
 import dev.omalauncher.widgets.lang.OwlKind
 import dev.omalauncher.widgets.Folder
 import dev.omalauncher.widgets.HomeItem
@@ -80,13 +80,13 @@ fun HomeScreen(
     val arrange = remember { Arrange() }
     // One empty page always waits after the last one, to drop tiles on or pin apps to. Pages only exist
     // while they hold something, so it becomes a real page once used and a new empty one follows.
-    // Left of page 1 the same, for pages: like a stock launcher's feed, but the user's own. An empty one waits left of
+    // Left of page 1 the same, for faces: like a stock launcher's feed, but the user's own. An empty one waits left of
     // the leftmost, page 0 at first, then -1, -2, ... as they fill.
     // Unfolded, pages show in pairs: the pager counts pairs, and an odd last page gets an empty partner.
     val per = if (showsTwoPages(windowSize())) 2 else 1
     val pageNumbers =
         engine.pages
-            .let { listOf(minOf(it.first(), FEED_PAGE + 1) - 1) + it }
+            .let { listOf(minOf(it.first(), FACE_PAGE + 1) - 1) + it }
             .let { if (engine.itemsOn(it.last()).isEmpty()) it else it + (it.last() + 1) }
             .let { if (it.size % per == 0) it else it + (it.last() + 1) }
     // Home opens on page 1, not left of it.
@@ -125,9 +125,9 @@ fun HomeScreen(
         shownPer = per
         if (i >= 0) pager.scrollToPage(i / per)
     }
-    // The drawer pins apps to whichever page is showing (the left one of a pair); from the feed, to page 1.
+    // The drawer pins apps to whichever page is showing (the left one of a pair); from a face, to page 1.
     // Pages appearing before the one showing don't move home off it, unless home was just sent to another page. At
-    // start, pinned apps load before widgets, so page 1 may join after the feed and later pages: until widgets have
+    // start, pinned apps load before widgets, so page 1 may join after the faces and later pages: until widgets have
     // loaded, home keeps to page 1 rather than whatever stands at its index.
     val listed = remember { arrayOf(pageNumbers) }
     LaunchedEffect(pager.currentPage, pageNumbers, engine.loaded) {
@@ -143,17 +143,17 @@ fun HomeScreen(
         engine.activePage = pageNumbers.getOrElse(pager.currentPage * per) { 1 }
         state.currentPage = engine.activePage.coerceAtLeast(1)
     }
-    // Only pages on screen, or the empty one waiting left of them: they get it whole, the bar's room too (see
-    // LauncherState.pageShowing), and the status bar's for those that say statusBar: false.
-    fun pageOn(page: Int?) = page?.let { engine.layout.owner(engine.itemsOn(it)) as? WidgetItem }?.takeIf { it.fullPage }
-    fun full(page: Int?) = page != null && (isFeedPage(page) || pageOn(page) != null)
+    // Only faces on screen, or the empty one waiting left of them: they get it whole, the bar's room too (see
+    // LauncherState.faceShowing), and the status bar's while all of them say statusBar: false.
+    fun faceOn(page: Int?) = page?.let { engine.layout.owner(engine.itemsOn(it)) as? WidgetItem }?.takeIf { it.isFace }
+    fun full(page: Int?) = page != null && (isFacePage(page) || faceOn(page) != null)
     val shown = (0 until per).map { pageNumbers.getOrNull(pager.currentPage * per + it) }
-    val pageShowing = shown.all(::full)
-    val statusBarAway = shown.all { pageOn(it)?.spec?.program?.statusBar == false }
+    val faceShowing = shown.all(::full)
+    val statusBarAway = shown.all { faceOn(it)?.let { f -> engine.instance(f.spec) }?.showsStatusBar() == false }
     // Which pager slots are full screen, for the bar to slide with the others.
     val fullSlots = List(pager.pageCount) { slot -> (0 until per).all { full(pageNumbers.getOrNull(slot * per + it)) } }
     SideEffect {
-        state.pageShowing = pageShowing
+        state.faceShowing = faceShowing
         state.statusBarAway = statusBarAway
         state.barShift = { barShift(fullSlots, pager.currentPage + pager.currentPageOffsetFraction) }
     }
@@ -290,8 +290,8 @@ fun HomeScreen(
                 }
             }
     ) {
-        // The pages fill the window, so a full-screen page can; tiles keep clear of the system bars (as if shown, so they
-        // don't move when a full-screen page hides the status bar) and of the bar, which DesktopScreen draws over the pages
+        // The pages fill the window, so a face can; tiles keep clear of the system bars (as if shown, so they
+        // don't move when a face hides the status bar) and of the bar, which DesktopScreen draws over the pages
         // (so the keyboard lifts it without shrinking the grid). Below the grid the strip, a gap, the bar and the gap
         // to the edge: the bar as measured, since a large font makes it taller. In a phone's landscape they stand
         // beside it instead, on the side portrait's bottom turned to.
@@ -354,8 +354,8 @@ fun HomeScreen(
                         WidgetTile(
                             spec = item.spec,
                             instance = engine.instance(item.spec),
-                            // As shown: on its side in landscape. A full-screen page is the whole grid.
-                            cells = (if (item.fullPage) engine.layout.grid else engine.layout.cell(item.key)?.let { it.w to it.h })?.let { (w, h) -> if (turned) h to w else w to h },
+                            // As shown: on its side in landscape. A face is the whole grid.
+                            cells = (if (item.isFace) engine.layout.grid else engine.layout.cell(item.key)?.let { it.w to it.h })?.let { (w, h) -> if (turned) h to w else w to h },
                             // Accent like Hyprland's active border: only while one of its terminals has the keyboard.
                             focused = highlighted || typing,
                             modifier =
@@ -409,9 +409,9 @@ fun HomeScreen(
             per = per,
             onLongPressEmpty = { openMenu(null) },
             feed = { page ->
-                FeedInvite(runtime.agents.default?.name, onBrowse = { state.show(SettingsPage.PageStore) }) {
+                FaceInvite(runtime.agents.default?.name, onBrowse = { state.show(SettingsPage.FaceStore) }) {
                     if (linuxState == LinuxState.Installed) {
-                        state.withAgent(runtime, "New page") { newOwlCommand(it, OwlKind.Page, page) }
+                        state.withAgent(runtime, "New face") { newOwlCommand(it, OwlKind.Face, page) }
                     } else {
                         state.show(SettingsPage.Linux)
                     }
@@ -445,10 +445,10 @@ fun HomeScreen(
 
 /**
  * The page left of the first, while it's empty: where a stock launcher has its news feed, an invitation to have
- * [agent] build a page of the user's own for it.
+ * [agent] build a face of the user's own for it.
  */
 @Composable
-private fun FeedInvite(
+private fun FaceInvite(
     agent: String?,
     onBrowse: () -> Unit,
     onCreate: () -> Unit,
@@ -461,10 +461,10 @@ private fun FeedInvite(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            BasicText("your page", style = Mono.copy(color = Palette.accent, fontSize = TextSize.Item))
+            BasicText("a face of your own", style = Mono.copy(color = Palette.accent, fontSize = TextSize.Item))
             // The theme's own text color: muted is too faint on some themes' card.
             BasicText(
-                "This page is yours to fill: a feed, a dashboard, a start page, a game. Say what you want and " +
+                "This page is yours to fill with a face: a feed, a dashboard, a start page, a game. Say what you want and " +
                     "${agent ?: "an agent"} builds it here, full screen.",
                 style = Mono,
             )
@@ -479,7 +479,7 @@ private fun FeedInvite(
 
 /**
  * Where the strip and the bar stand across at pager [position] (slots, fractional while swiping), in screen widths: 0
- * over a tile page; past a [full] slot (a full-screen page's, or the empty one waiting left of page 1) they slide out with the tile page beside it,
+ * over a tile page; past a [full] slot (a face's, or the empty one waiting left of page 1) they slide out with the tile page beside it,
  * as its tiles do, and they're a whole width away between two full ones.
  */
 internal fun barShift(
@@ -494,7 +494,7 @@ internal fun barShift(
         !leftFull && !rightFull -> 0f
         // Going right from a tile page: the bar leaves to the left with it.
         !leftFull -> -f
-        // Coming from a full page on the left: the bar comes in from the right with the tile page.
+        // Coming from a face on the left: the bar comes in from the right with the tile page.
         !rightFull -> 1f - f
         else -> 1f
     }

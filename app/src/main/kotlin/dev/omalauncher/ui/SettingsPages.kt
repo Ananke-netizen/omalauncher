@@ -32,8 +32,8 @@ enum class SettingsPage {
     Agents,
     Store,
 
-    /** The store on its pages, from the empty page left of page 1. */
-    PageStore,
+    /** The store on its faces, from the empty page left of page 1. */
+    FaceStore,
     Packages,
 
     /** Install, progress, remove; opened by anything that needs Linux. */
@@ -147,7 +147,7 @@ private fun SettingsPage(
                 },
             )
         SettingsPage.Store -> StoreScreen(runtime.widgets, runtime.agents.installed, homePage, runtime.themes.picked, onDismiss = close)
-        SettingsPage.PageStore -> StoreScreen(runtime.widgets, runtime.agents.installed, homePage, runtime.themes.picked, onDismiss = close, initialKind = OwlKind.Page)
+        SettingsPage.FaceStore -> StoreScreen(runtime.widgets, runtime.agents.installed, homePage, runtime.themes.picked, onDismiss = close, initialKind = OwlKind.Face)
         SettingsPage.Packages -> PackagesScreen(runtime, onDismiss = close)
         SettingsPage.Linux -> LinuxScreen(runtime, onDismiss = close)
         SettingsPage.Licenses -> LicensesScreen(onDismiss = close)

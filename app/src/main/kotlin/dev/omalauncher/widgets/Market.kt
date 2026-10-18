@@ -25,8 +25,8 @@ import org.json.JSONObject
 
 /**
  * The marketplace for one [kind]: a reviewed catalog published from a GitHub repo to
- * GitHub Pages, widgets in index.json, pages in pages.json and apps in apps.json. Installs
- * are checked against the catalog's SHA-256, land on the current page (a page left of page
+ * GitHub Pages, widgets in index.json, faces in faces.json and apps in apps.json. Installs
+ * are checked against the catalog's SHA-256, land on the current page (a face left of page
  * 1, an app in the drawer), and remember which version and commands were approved, so an
  * update that changes them asks again.
  */
@@ -38,7 +38,7 @@ class Market(
         /** The marketplace repo: widgets are submitted there as pull requests. */
         const val REPO = "SimonSchubert/omarchy-widgets"
 
-        /** Where its CI publishes index.json, pages.json, apps.json and the reviewed files. */
+        /** Where its CI publishes index.json, faces.json, apps.json and the reviewed files. */
         const val BASE = "https://simonschubert.github.io/omarchy-widgets/"
 
         private const val VERSION = 1
@@ -83,7 +83,7 @@ class Market(
             entries = withContext(Dispatchers.IO) { Catalog.parse(String(httpGet(BASE + catalog)), "${kind.word}s") }
             refreshedAt = System.currentTimeMillis()
         } catch (e: Exception) {
-            // A catalog the store doesn't publish yet (pages.json, before the first page) is an empty one.
+            // A catalog the store doesn't publish yet (faces.json, before the first face) is an empty one.
             if (e.message?.startsWith("HTTP 404") == true) {
                 entries = emptyList()
                 refreshedAt = System.currentTimeMillis()
@@ -125,7 +125,7 @@ class Market(
             if (Review.sha256(bytes) != e.sha256) return "the download doesn't match the reviewed version; try again later"
             val name = installedVersion(e)?.file ?: fileFor(e)
             withContext(Dispatchers.IO) {
-                // An update keeps its page; a new install goes where the user is. Apps go in the drawer, on no page, and a page
+                // An update keeps its page; a new install goes where the user is. Apps go in the drawer, on no page, and a face
                 // left of page 1, to the empty one waiting there.
                 if (kind == OwlKind.Widget && installedVersion(e) == null) engine.setPage(name, page)
                 engine.installDependenciesWhenLoaded(name)

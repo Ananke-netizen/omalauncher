@@ -1,4 +1,4 @@
-page "start" {
+face "start" {
   // Left of page 1, where a stock launcher has its news feed (page: 0, the default).
 
   meta { owl: 11; description: "A start page: the time, the weather and the sun's path today, what's playing, the latest notifications and your most used apps"; version: "1.1"; license: "MIT"; category: "productivity" }

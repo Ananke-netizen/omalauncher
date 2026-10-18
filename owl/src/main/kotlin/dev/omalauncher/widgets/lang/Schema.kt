@@ -106,16 +106,16 @@ internal val SINCE =
         listOf("set", "remove", "merge", "reduce", "scan", "groupBy", "toJson", "capitalize", "asin", "acos", FLATTEN_DEPTH, ON_FIRST).associateWith { 9 } +
         // owl 9: handlers that choose, and name values on the way.
         listOf(HANDLER_IF, HANDLER_LET).associateWith { 9 } +
-        // owl 10: pages, files that are a whole home page; long-press where it isn't the home screen's.
-        mapOf(PAGE_FILE to 10, "onLongPress" to 10) +
+        // owl 10: faces, files that are a whole home page; long-press where it isn't the home screen's.
+        mapOf(FACE_FILE to 10, "onLongPress" to 10) +
         // owl 11: text styled in pieces, by weight and spacing; gradients and frosted glass behind any node; Text in a Row as wide as its text.
         listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 11 } +
-        // owl 11: the coding agents in Linux and the recent strip's apps, for a page with its own prompt bar.
+        // owl 11: the coding agents in Linux and the recent strip's apps, for a face with its own prompt bar.
         listOf("android.agents", "android.recent", "open", "ask", "Popup", "Input.underline").associateWith { 11 } +
         // owl 11: fonts of the widget's own, and Canvas text styled like a Text.
         listOf(FONT_FILE, CANVAS_TEXT_STYLE).associateWith { 11 }
 
-internal const val PAGE_FILE = "page \"…\" { }"
+internal const val FACE_FILE = "face \"…\" { }"
 
 internal const val GRADIENT_BACKGROUND = "a gradient background"
 
@@ -187,5 +187,5 @@ internal val NUMBERS = setOf("int", "round", "floor", "ceil", "abs", "fixed", "l
 
 internal val WIDGET_PROPS = setOf("size", "minSize", "page", "order", "padding", "background")
 
-/** A page has no tile's size; it says where it goes and whether the status bar stays over it. */
-internal val PAGE_PROPS = setOf("page", "order", "padding", "background", "statusBar")
+/** A face has no tile's size; it says where it goes and whether the status bar stays over it. */
+internal val FACE_PROPS = setOf("page", "order", "padding", "background", "statusBar")

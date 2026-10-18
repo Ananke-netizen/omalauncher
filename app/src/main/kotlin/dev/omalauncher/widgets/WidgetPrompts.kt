@@ -23,11 +23,11 @@ private fun agentCommand(
 private fun OwlKind.what() =
     when (this) {
         OwlKind.Widget -> "a home-screen widget (widget \"name\" { }, a tile on my home screen)"
-        OwlKind.Page -> "a home page (page \"name\" { }: it fills a page of my home screen, the whole screen, as README.md's Pages section says)"
+        OwlKind.Face -> "a face (face \"name\" { }: a whole page of my home screen, the whole screen, as README.md's Faces section says)"
         OwlKind.App -> "an app (app \"name\" { }: it shows up in my app drawer and opens full screen; give it an icon: as README.md's Apps section says)"
     }
 
-/** A session in the widgets dir that creates an owl file of [kind]; a page for the empty [page] left of page 1, if given. */
+/** A session in the widgets dir that creates an owl file of [kind]; a face for the empty [page] left of page 1, if given. */
 fun newOwlCommand(
     agentBin: String,
     kind: OwlKind,
@@ -49,7 +49,7 @@ fun editWidgetCommand(
     val what =
         when (spec.kind) {
             OwlKind.Widget -> "home-screen widget"
-            OwlKind.Page -> "home page"
+            OwlKind.Face -> "face"
             OwlKind.App -> "app"
         }
     val prompt =
@@ -73,7 +73,7 @@ fun publishWidgetCommand(
     val (what, place) =
         when (spec.kind) {
             OwlKind.Widget -> "home-screen widget" to "the widget as widgets/<my GitHub username in lowercase>/<a short name>/widget.owl, with the preview.png owl-check points to next to it"
-            OwlKind.Page -> "home page" to "the page as pages/<my GitHub username in lowercase>/<a short name>/page.owl, with the preview.png owl-check points to next to it"
+            OwlKind.Face -> "face" to "the face as faces/<my GitHub username in lowercase>/<a short name>/face.owl, with the preview.png owl-check points to next to it"
             OwlKind.App ->
                 "app" to "the app as apps/<my GitHub username in lowercase>/<a short name>/app.owl (not a name a widget there has), " +
                     "with the screen picture owl-check points to next to it as preview.png. It needs an icon: (see README.md's Apps section)"
