@@ -27,6 +27,9 @@ class Compiler private constructor(
         const val LEVEL = 10
         private const val MAX_ASSET_BYTES = 2 shl 20
 
+        /** Pages as far out as a file can ask for; past Int's range, the pages either side of them would wrap. */
+        private const val MAX_PAGE = 1000
+
         /** An app icon is a shape or two drawn in SVG, not a picture. */
         private const val MAX_ICON_CHARS = 16 * 1024
 
@@ -213,7 +216,7 @@ class Compiler private constructor(
             kind = ast.kind,
             minSize = props["minSize"]?.let { cells(it) } ?: (1 to 1),
             // A face goes left of page 1 by default: 0, and -1, -2, ... further left. A tile never does.
-            page = props["page"]?.let { constInt(it) }?.let { if (isFace) it else it.coerceAtLeast(1) } ?: if (isFace) 0 else 1,
+            page = props["page"]?.let { constInt(it) }?.let { if (isFace) it.coerceIn(-MAX_PAGE, MAX_PAGE) else it.coerceIn(1, MAX_PAGE) } ?: if (isFace) 0 else 1,
             order = props["order"]?.let { constInt(it) } ?: 0,
             padding = props["padding"]?.let { constant(it.value, "padding").num() } ?: 12.0,
             background = background,

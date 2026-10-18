@@ -56,6 +56,10 @@ class Review(
             } catch (e: CompileError) {
                 errors += "doesn't compile: " + Source(text).format(e)
                 return
+            } catch (e: RuntimeException) {
+                // A compiler bug, not the file's: turned down all the same rather than taking the share screen or CI with it.
+                errors += "doesn't compile: $e"
+                return
             }
         program = p
         if (p.kind != kind) errors += "this is ${if (p.kind == OwlKind.App) "an app" else "a ${p.kind.word}"}: it goes at ${p.kind.word}s/<author>/<name>/${p.kind.word}.owl"

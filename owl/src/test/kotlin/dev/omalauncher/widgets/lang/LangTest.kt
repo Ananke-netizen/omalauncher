@@ -769,6 +769,11 @@ class LangTest {
         assertEquals(false, Compiler.compile("face {\n meta { owl: 10 }\n statusBar: false\n Text { text: 1 } }").statusBar?.const?.truthy)
         // A tile can't go left of page 1.
         assertEquals(1, Compiler.compile("widget {\n size: 2x2\n page: 0\n Text { text: 1 } }").page)
+        // Nor so far out that the pages beside it wrap around Int.
+        assertEquals(-1000, Compiler.compile("face {\n meta { owl: 10 }\n page: -2147483648\n Text { text: 1 } }").page)
+        assertEquals(1000, Compiler.compile("widget {\n page: 2147483647\n Text { text: 1 } }").page)
+        // A bare / as the command compiles rather than throwing past the compile error.
+        Compiler.compile("widget {\n source s = cmd(\"/\")\n Text { text: s } }")
         assertFalse(Compiler.compile("widget {\n Text { text: 1 } }").isFace)
 
         assertTrue(compileError("face {\n Text { text: 1 } }").contains("needs owl 10"))
