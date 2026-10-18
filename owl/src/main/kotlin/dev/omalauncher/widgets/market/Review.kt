@@ -181,6 +181,9 @@ class Review(
                 // What the compiler lists for a command that isn't fixed text (Compiler's `commands`): it could be
                 // anything, a download for one, and can change after anyone read the widget.
                 UNQUOTED to "is put together while the widget runs, so what it runs can't be shown here",
+                // The compiler's line for ask(...) with text that isn't fixed: the agent acts on whatever it is, a download's
+                // text for one.
+                Regex("""\bask the agent something built from widget values$""") to "gives the agent text made while the widget runs, which could come from the web",
                 // sh(...) keeps a value one word, but not one that is the program, or code for one.
                 Regex("""(^|[;&|(`\n]|\$\()\s*${Compiler.VALUE}""") to "runs a program a widget value names",
                 Regex("""\b(eval|source|$INTERPRETERS)\s+(-\S+\s+)*${Compiler.VALUE}""") to "runs a widget value as code",
