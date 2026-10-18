@@ -675,6 +675,7 @@ class Compiler private constructor(
             if (p.name == "focus" && inScreen == false) fail("focus only works in a screen { }", p.pos)
             since("${n.type}.${p.name}", p.pos)
             if (p.name == "background" && gradient(p.value)) since(GRADIENT_BACKGROUND, p.pos)
+            if (p.name == "frost") since("frost", p.pos)
             props[p.name] = prop(p, scope)
         }
         val handlers =
@@ -731,6 +732,7 @@ class Compiler private constructor(
                 given[name]?.let { ex(it.value, scope) } ?: c.defaults[i] ?: fail("${n.type} needs '$name'", n.pos)
             }
         val wrapper = body.props.filter { it.name !in c.params }.associate { it.name to prop(it, scope) }
+        body.props.firstOrNull { it.name == "frost" && it.name !in c.params }?.let { since("frost", it.pos) }
         return WNode.Use(n.type, args, wrapper, c.body, n.pos)
     }
 

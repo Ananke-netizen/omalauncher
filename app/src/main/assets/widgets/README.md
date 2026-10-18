@@ -84,7 +84,7 @@ that read it redraw. Properties are separated by newlines or `;`.
 | `asset logo = base64"iVBOR..."` | an embedded image (under 2 MB) for `Image { src: logo }`, so the widget is one self-contained file |
 | `requires { pacman: ["jq", "curl"] }` | packages the widget's commands need; see Dependencies |
 | `meta { description: "..."; version: "1.0"; license: "MIT"; category: "news" }` | needed to publish to the widget store (see Sharing) |
-| `meta { owl: 10 }` | the language version the widget needs (this launcher has 11; the default is 1). Older launchers say "update the launcher" instead of failing on what they don't know. `Terminal` needs 2, `sprite` 3, triggers, `file`, `Slider`, `Input`, `android.notifications`, `android.volume`, `volume` and `notification` need 4, and `screen { }`, `screen()`, `close()`, `screenWidth` and `screenHeight` need 5, `Input`'s `focus`, `sh()` and `corners` 6, and `android.alarm`, `android.modes`, `torch`, `share` and `haptic` 7, and `app "…" { }` files, `android.apps`, `enc`, `post`, images from the web, `sound` and `screenInset` 8, and `parseTime`, `fmtAgo`, `fmtNum`, `random`, `shuffle`, `hash`, `fmtTime`'s zone and language, `set`, `remove`, `merge`, `reduce`, `scan`, `groupBy`, `toJson`, `capitalize`, `asin`, `acos`, `flatten`'s depth, `on … first`, and `if` and `let` in handlers 9, and `page "…" { }` files and `onLongPress` 10, and Text's `spans`, `fontWeight` and `letterSpacing` and gradient backgrounds 11; using them without declaring it is an error |
+| `meta { owl: 10 }` | the language version the widget needs (this launcher has 11; the default is 1). Older launchers say "update the launcher" instead of failing on what they don't know. `Terminal` needs 2, `sprite` 3, triggers, `file`, `Slider`, `Input`, `android.notifications`, `android.volume`, `volume` and `notification` need 4, and `screen { }`, `screen()`, `close()`, `screenWidth` and `screenHeight` need 5, `Input`'s `focus`, `sh()` and `corners` 6, and `android.alarm`, `android.modes`, `torch`, `share` and `haptic` 7, and `app "…" { }` files, `android.apps`, `enc`, `post`, images from the web, `sound` and `screenInset` 8, and `parseTime`, `fmtAgo`, `fmtNum`, `random`, `shuffle`, `hash`, `fmtTime`'s zone and language, `set`, `remove`, `merge`, `reduce`, `scan`, `groupBy`, `toJson`, `capitalize`, `asin`, `acos`, `flatten`'s depth, `on … first`, and `if` and `let` in handlers 9, and `page "…" { }` files and `onLongPress` 10, and Text's `spans`, `fontWeight` and `letterSpacing`, gradient backgrounds and `frost` 11; using them without declaring it is an error |
 | `onTap: ...` | runs when the tile (not a button inside it) is tapped |
 | `screen { ... }` | a full-screen view of the widget, opened with `screen()`; see Screens (owl 5) |
 | `every 10s { ... }`, `at t { ... }`, `when c { ... }`, `on x { ... }` | statements that run without a tap; see Triggers |
@@ -308,6 +308,7 @@ Every node also takes:
 - `width height size` (dp), `fill: true/width/height`, `weight` (share of the
   space left in a Row or Column), `padding` (`8`, `[h, v]` or `[l, t, r, b]`)
 - `background` (a color, or since owl 11 a gradient, see Gradient backgrounds), `border` (dp), `borderColor`, `radius`, `clip: true`
+- `frost` (owl 11): frosted glass, the wallpaper behind the node blurred by that many dp; see Frosted glass
   (without `radius`, bordered elements follow the launcher's corner style: 0 for edge, 4 for soft, 8 for round;
   anything else matches it with `radius: 8 * corners`)
 - `opacity`, `rotation` (degrees), `scale`, `offset: [x, y]` (dp), `visible`
@@ -360,6 +361,28 @@ page "dusk" {
 ```
 
 An animated `background` is a color, as before.
+
+### Frosted glass
+
+`frost: 24` (owl 11) draws the wallpaper behind a node blurred, by about that many dp, within its `radius`.
+The node's `background` goes over it, so a translucent one tints the glass and keeps text on it readable:
+
+```owl
+page "glass" {
+  meta { owl: 11 }
+  Column {
+    padding: 16
+    frost: 24
+    background: alpha(background, 0.5)
+    radius: 18 * corners
+    Text { text: "on frosted glass" }
+  }
+}
+```
+
+It blurs the home screen's wallpaper only, not other nodes or a page's own background, and follows it as
+the pages slide. Where no launcher wallpaper is behind, as in an app's window, a widget's screen or
+owl-check's preview, there's nothing to blur and only the `background` shows, so give one that works alone.
 
 ### Text in a Row
 
@@ -568,7 +591,7 @@ page "morning" {
   pad buttons along the bottom by it.
 - **Looks.** There's no tile frame and no background: it draws straight on the wallpaper. Where text needs
   one to be readable, give the page `background: alpha(background, 0.7)` or a gradient (owl 11), or just the
-  nodes that hold it.
+  nodes that hold it, which can be frosted glass (`frost`, owl 11).
   `padding` (12 by default) is around everything, as on a tile.
 - **Size.** `cols` and `rows` are the whole grid (6 or so by 12), and `tileWidth` and `tileHeight` the
   screen's size in dp: lay it out by those, since phones differ. It takes no `size` or `minSize`.

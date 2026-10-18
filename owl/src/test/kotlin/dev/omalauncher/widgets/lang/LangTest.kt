@@ -759,6 +759,9 @@ class LangTest {
         assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { text: 1; fontWeight: 300 } }").contains("Text.fontWeight needs owl 11"))
         assertTrue(compileError("widget {\n meta { owl: 10 }\n Column { background: linear(0, 0, 1, 0, [red, blue]) } }").contains("a gradient background needs owl 11"))
         assertTrue(compileError("page {\n meta { owl: 10 }\n background: linear(0, 0, 1, 0, [red, blue])\n Text { text: 1 } }").contains("a gradient background needs owl 11"))
+        Compiler.compile("page {\n meta { owl: 11 }\n Column { frost: 24; background: alpha(surface, 0.4) } }")
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Column { frost: 24 } }").contains("frost needs owl 11"))
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n component Card() { Column { } }\n Card { frost: 24 } }").contains("frost needs owl 11"))
         // A color background is as old as backgrounds.
         Compiler.compile("widget {\n Column { background: alpha(surface, 0.5) } }")
     }

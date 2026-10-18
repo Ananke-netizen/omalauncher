@@ -576,6 +576,8 @@ private fun common(
                 }
             }
     }
+    // Under the background, which tints it.
+    if (p.has("frost")) m = m.frost(p, p.float("radius", if (p.has("border")) 8f * LauncherStyle.cornerScale else 0f))
     if (p.has("background") || p.has("border")) {
         val bg = p.color("background") { Color.Transparent }
         val borderColor = p.color("borderColor") { Palette.border }

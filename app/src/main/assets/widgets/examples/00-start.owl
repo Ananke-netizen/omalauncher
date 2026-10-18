@@ -34,7 +34,7 @@ page "start" {
   }))).filter(s => s.hr > hour - 3).take(6)
   let playing = m != null && m.available != false && m.title != null
   let top = (apps ?? []).filter(a => !a.system || a.score > 0).sortBy(a => -a.score).take(8)
-  let glass = linear(0, 0, 1, 1, [alpha(surface, 0.8), alpha(surface, 0.55)])
+  let glass = linear(0, 0, 1, 1, [alpha(background, 0.6), alpha(background, 0.4)])
 
   // The page draws on the wallpaper: a veil, darker at the top and bottom where the text is, and glass cards.
   background: linear(0, 0, 0, 1, [alpha(background, 0.85), alpha(background, 0.35), alpha(background, 0.4), alpha(background, 0.9)])
@@ -49,7 +49,7 @@ page "start" {
   }
 
   component Pill(label, tint = foreground) {
-    Text { text: label; style: small; color: tint; maxLines: 1; padding: [12, 7]; background: alpha(surface, 0.7); radius: 14 * corners }
+    Text { text: label; style: small; color: tint; maxLines: 1; padding: [12, 7]; frost: 24; background: alpha(surface, 0.45); radius: 14 * corners }
   }
 
   Box {
@@ -80,6 +80,7 @@ page "start" {
         Column {
           gap: 12
           padding: 16
+          frost: 24
           background: glass
           radius: 18 * corners
           onTap: url("https://www.yr.no/en/forecast/daily-table/${wx.nearest_area[0].latitude},${wx.nearest_area[0].longitude}")
@@ -139,6 +140,7 @@ page "start" {
           gap: 12
           align: center
           padding: 12
+          frost: 24
           background: glass
           radius: 18 * corners
           onTap: media("open")
@@ -200,6 +202,7 @@ page "start" {
               gap: 12
               align: center
               padding: [12, 10]
+              frost: 24
               background: glass
               radius: 14 * corners
               onTap: notification("open", item.key)
@@ -240,6 +243,7 @@ page "start" {
       Column {
         gap: 12
         padding: [12, 14]
+        frost: 24
         background: glass
         radius: 22 * corners
         Grid {

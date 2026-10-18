@@ -45,7 +45,7 @@ internal val KINDS: Map<String, Kind> =
 internal val COMMON =
     setOf(
         "width", "height", "size", "fill", "weight", "padding", "background", "border", "borderColor",
-        "radius", "opacity", "rotation", "scale", "offset", "clip", "visible",
+        "radius", "opacity", "rotation", "scale", "offset", "clip", "visible", "frost",
     )
 
 internal val ANIMATABLE = setOf("opacity", "rotation", "scale", "value", "color", "background")
@@ -102,8 +102,8 @@ internal val SINCE =
         listOf(HANDLER_IF, HANDLER_LET).associateWith { 9 } +
         // owl 10: pages, files that are a whole home page; long-press where it isn't the home screen's.
         mapOf(PAGE_FILE to 10, "onLongPress" to 10) +
-        // owl 11: text styled in pieces, by weight and spacing; gradients behind any node; Text in a Row as wide as its text.
-        listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND).associateWith { 11 }
+        // owl 11: text styled in pieces, by weight and spacing; gradients and frosted glass behind any node; Text in a Row as wide as its text.
+        listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 11 }
 
 internal const val PAGE_FILE = "page \"…\" { }"
 
