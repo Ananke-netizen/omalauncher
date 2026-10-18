@@ -1,7 +1,7 @@
 face "pixel" {
   // An 8-bit landscape that follows the day, with your phone as a game's HUD below it.
 
-  meta { owl: 10; description: "An 8-bit landscape that follows the day and the weather, with the battery as hearts, notifications as coins and your apps as an inventory"; version: "1.0"; license: "MIT"; category: "fun" }
+  meta { owl: 10; description: "An 8-bit landscape that follows the day and the weather, with the battery as hearts, notifications as coins and your apps as an inventory"; version: "1.1"; license: "MIT"; category: "fun" }
 
   statusBar: false
 
@@ -26,15 +26,16 @@ face "pixel" {
   let msgs = (apps ?? []).find(a => a.profile == null && contains(["com.google.android.apps.messaging", "com.samsung.android.messaging", "com.android.mms", "com.android.messaging", "org.fossify.messages"], a.package))
   let missed = n.available && phone != null ? len(n.items.filter(i => i.package == phone.package)) : 0
   let unread = n.available && msgs != null ? len(n.items.filter(i => i.package == msgs.package)) : 0
-  let top = (apps ?? []).filter(a => (!a.system || a.score > 0) && a.package != phone.package && a.package != msgs.package).sortBy(a => -a.score).take(8)
+  // In landscape and unfolded the scene runs across the whole screen, and the HUD floats over its right half as a
+  // game's menu window would; a phone on its side has room for one row of apps there.
+  let wide = (tileWidth ?? 0) > (tileHeight ?? 1)
+  let top = (apps ?? []).filter(a => (!a.system || a.score > 0) && a.package != phone.package && a.package != msgs.package).sortBy(a => -a.score).take(wide && (tileHeight ?? 900) < 600 ? 4 : 8)
   let coins = n.available ? n.count : 0
   let low = bat != null && bat.level < 20 && !bat.charging
 
   // The scene, in art pixels of 4 dp.
   let px = 4
-  // In landscape the scene is the left half and runs from top to bottom; the HUD stands beside it.
-  let wide = (tileWidth ?? 0) > (tileHeight ?? 1)
-  let sceneW = wide ? floor((tileWidth ?? 900) * 0.5) : tileWidth ?? 412
+  let sceneW = tileWidth ?? 412
   let W = floor(sceneW / px) + 1
   let H = wide ? floor((tileHeight ?? 412) / px) + 1 : floor((tileHeight ?? 900) * 0.6 / px)
   let horizon = floor(H * 0.64)
@@ -47,9 +48,10 @@ face "pixel" {
   let farColor = mix(mix(mix(color0, blue, 0.3), sky[6], 0.45), color0, (1 - day) * 0.4)
   let hill = mix(green, color0, 0.3 + (1 - day) * 0.45)
   let ground = mix(green, color0, 0.55 + (1 - day) * 0.3)
-  let hx = floor(W * 0.66)
+  // Wide, the house and most trees stand on the left half, clear of the HUD's window.
+  let hx = floor(W * (wide ? 0.27 : 0.66))
   let hy = min(near[hx], near[hx + 11]) - 10
-  let trees = [floor(W * 0.14), floor(W * 0.3), floor(W * 0.88)]
+  let trees = (wide ? [0.05, 0.13, 0.4, 0.47, 0.62, 0.9] : [0.14, 0.3, 0.88]).map(t => floor(W * t))
   let sunT = (h - 6) / 14
   let moonT = ((h + 4) % 24) / 10
 
@@ -66,7 +68,7 @@ face "pixel" {
     Text { text: label; font: press; fontSize: size; color: tint; maxLines: 1 }
   }
 
-  // The landscape: in portrait whatever height the HUD leaves, in landscape the screen's. The art keeps its size and
+  // The landscape: in portrait whatever height the HUD leaves, wide the whole screen. The art keeps its size and
   // stands on the bottom edge, so a shorter scene shows less sky rather than pushing the HUD under the navigation bar.
   component Scene() {
     Box {
@@ -170,9 +172,13 @@ face "pixel" {
         }
       }
 
-      // The time, with a hard shadow as on a title screen.
-      Column {
+      // The time, with a hard shadow as on a title screen; wide, over the left half, beside the HUD.
+      Row {
         fill: true
+        gap: 0
+      Column {
+        weight: 1
+        fill: height
         gap: 10
         align: center
         padding: [0, 48]
@@ -189,16 +195,23 @@ face "pixel" {
           Text { text: upper(fmtTime(now, "EEE d MMM")); font: press; fontSize: 10; color: foreground; align: center }
         }
       }
+        if wide {
+          Spacer { weight: 1 }
+        }
+      }
     }
   }
 
-  // Below ground, or beside it in landscape: the HUD and the inventory.
+  // Below ground, or wide a framed window over the scene: the HUD and the inventory.
   component Panel() {
     Column {
-      fill: wide ? true : "width"
+      fill: width
       gap: wide ? 10 : 14
       padding: [16, 16]
-      background: mix(ground, color0, 0.55)
+      background: wide ? alpha(mix(ground, color0, 0.55), 0.9) : mix(ground, color0, 0.55)
+      border: wide ? 4 : 0
+      borderColor: foreground
+      radius: 0
 
       Row {
         gap: 10
@@ -277,10 +290,6 @@ face "pixel" {
         }
       }
 
-      if wide {
-        Spacer { weight: 1 }
-      }
-
       // Calls and messages on either side of the menu, with a badge for what's missed.
       Row {
         gap: 12
@@ -345,12 +354,29 @@ face "pixel" {
           }
         }
       }
-      Spacer { height: screenInset }
+      if !wide {
+        Spacer { height: screenInset }
+      }
     }
   }
 
   if wide {
-    Row { fill: true; gap: 0; Scene { }  Panel { weight: 1 } }
+    Box {
+      fill: true
+      Scene { }
+      Row {
+        fill: true
+        gap: 0
+        Spacer { weight: 1 }
+        Column {
+          weight: 1
+          fill: height
+          justify: center
+          padding: [32, 24, 32, 24 + screenInset]
+          Panel { }
+        }
+      }
+    }
   } else {
     Column { fill: true; gap: 0; Scene { weight: 1 }  Panel { } }
   }
