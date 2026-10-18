@@ -638,6 +638,9 @@ face "morning" {
 
 owl-check's preview of a face is the face at the phone's size, as home last laid it out. `examples/00-start.owl`
 is a whole face, a start page: the time, the weather, battery, the next alarm, notifications and your most used apps.
+Three more show other ways to draw one: `01-minimal` (a thin clock and your apps as words, in a font of its own),
+`02-pixel` (an 8-bit landscape that follows the day and the weather, drawn with sprites, over a game HUD) and
+`03-terminal` (a shell session over digital rain, worked out once and drawn every frame in a Canvas).
 
 ## Apps
 
