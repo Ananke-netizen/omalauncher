@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.union
@@ -51,10 +53,17 @@ internal fun WidgetTile(
     waitsForLinux: LinuxState? = null,
     onInstallLinux: () -> Unit = {},
 ) {
+    // A full-screen page draws straight on the wallpaper, without a tile's frame; selected, it still shows the focus border.
+    val bare = spec.fullPage && waitsForLinux == null && instance != null && needs.isEmpty()
     Box(
         modifier
-            .tile(focused)
-            .pointerInput(spec) { detectTapGestures(onTap = { onTap() }) },
+            .then(
+                when {
+                    !bare -> Modifier.tile(focused)
+                    focused -> Modifier.frame(LauncherStyle.focusWidth, LauncherStyle.focusBorder)
+                    else -> Modifier
+                },
+            ).pointerInput(spec) { detectTapGestures(onTap = { onTap() }) },
     ) {
         if (waitsForLinux != null) {
             // While an installed Linux starts up the tile stays empty; it only offers an install when there's none.
@@ -82,6 +91,13 @@ internal fun WidgetTile(
                 BasicText(spec.file.name, style = Mono.copy(color = Palette.red))
                 BasicText(spec.error.orEmpty(), style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
             }
+        } else if (bare) {
+            // The whole screen: under the status bar and the navigation bar. The nodes keep clear of the camera cutout and
+            // of the status bar where it stays (statusBar: true); the navigation bar is the page's to mind, through
+            // screenInset, as an edge app's is.
+            val top = if (instance.program.statusBar) WindowInsets.statusBars.union(WindowInsets.displayCutout) else WindowInsets.displayCutout
+            WidgetContent(instance, Modifier.fillMaxSize(), cells, top.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+            ScreenInset(instance)
         } else {
             WidgetContent(instance, Modifier.fillMaxSize(), cells)
         }

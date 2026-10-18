@@ -1,5 +1,10 @@
 package dev.omalauncher.widgets.render
 
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -108,6 +113,8 @@ fun WidgetContent(
     modifier: Modifier = Modifier,
     /** The tile's size in grid cells, for `cols` and `rows`. */
     cells: Pair<Int, Int>? = null,
+    /** What the nodes keep clear of, inside the background: a full-screen page's, the camera cutout. */
+    insets: WindowInsets? = null,
 ) {
     val program = inst.program
     SideEffect { inst.setTile(cells?.first, cells?.second, null, null) }
@@ -118,11 +125,17 @@ fun WidgetContent(
         modifier
             .onSizeChanged { inst.setTile(null, null, (it.width / density).toDouble(), (it.height / density).toDouble()) }
             .then(if (bg != null) Modifier.drawBehind { Builtins.argb(inst.eval(bg, inst.root, "background"), inst)?.let { drawRect(Color(it)) } } else Modifier)
+            .then(if (insets != null) Modifier.windowInsetsPadding(insets) else Modifier)
             .padding(inset(program.padding)),
     ) {
-        Nodes(program.root, inst.root, inst, this)
+        CompositionLocalProvider(LocalLongPress provides program.fullPage) {
+            Nodes(program.root, inst.root, inst, this)
+        }
     }
 }
+
+/** Whether nodes here take long presses: in screens, apps and pages, not on a tile, where the home screen has them. */
+val LocalLongPress = staticCompositionLocalOf { false }
 
 /** Widget text, 13sp as widgets were made for, whatever size the launcher's own text is. */
 internal val WidgetMono get() = Mono.copy(fontSize = 13.sp)
@@ -139,7 +152,9 @@ fun WidgetScreen(
         // Set before the nodes compose, so the first frame already has the size instead of null.
         inst.setScreen(maxWidth.value.toDouble(), maxHeight.value.toDouble())
         Column(Modifier.fillMaxSize()) {
-            Nodes(nodes, inst.root, inst, this)
+            CompositionLocalProvider(LocalLongPress provides true) {
+                Nodes(nodes, inst.root, inst, this)
+            }
         }
     }
 }
@@ -570,8 +585,24 @@ private fun handlers(p: Props): Modifier {
         a: Action,
         vararg v: Float,
     ) = a.run(p.env, v.map { Num((it / density).toDouble()) })
-    el.handlers["onTap"]?.let { a ->
-        m = m.pointerInput(el, p.env) { detectTapGestures { o -> fire(a, o.x, o.y) } }
+    // One detector for both, so a long press isn't also a tap. Not on a tile, where long-press is the home screen's.
+    val tap = el.handlers["onTap"]
+    val long = el.handlers["onLongPress"]?.takeIf { LocalLongPress.current }
+    val haptics = LocalHapticFeedback.current
+    if (tap != null || long != null) {
+        m =
+            m.pointerInput(el, p.env, long != null) {
+                detectTapGestures(
+                    onLongPress =
+                        long?.let { a ->
+                            { o ->
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                fire(a, o.x, o.y)
+                            }
+                        },
+                    onTap = tap?.let { a -> { o -> fire(a, o.x, o.y) } },
+                )
+            }
     }
     el.handlers["onDrag"]?.let { a ->
         m = m.pointerInput(el, p.env) { detectDragGestures { change, drag -> change.consume(); fire(a, drag.x, drag.y, change.position.x, change.position.y) } }

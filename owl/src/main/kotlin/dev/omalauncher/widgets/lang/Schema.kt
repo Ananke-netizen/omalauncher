@@ -99,7 +99,11 @@ internal val SINCE =
         // owl 9: lists and maps changed in place of rebuilding them; a trigger for a first value.
         listOf("set", "remove", "merge", "reduce", "scan", "groupBy", "toJson", "capitalize", "asin", "acos", FLATTEN_DEPTH, ON_FIRST).associateWith { 9 } +
         // owl 9: handlers that choose, and name values on the way.
-        listOf(HANDLER_IF, HANDLER_LET).associateWith { 9 }
+        listOf(HANDLER_IF, HANDLER_LET).associateWith { 9 } +
+        // owl 10: pages, files that are a whole home page; long-press where it isn't the home screen's.
+        mapOf(PAGE_FILE to 10, "onLongPress" to 10)
+
+internal const val PAGE_FILE = "page \"…\" { }"
 
 internal const val WEB_IMAGE = "an image from the web"
 
@@ -120,9 +124,15 @@ internal const val HANDLER_LET = "let in a handler"
  */
 internal val MANAGERS = mapOf("pacman" to Regex("[a-z0-9@_+][a-z0-9@._+-]*"))
 
-// No onLongPress: long-press belongs to the home screen, which lifts the tile to move it.
+// onLongPress only off the home grid: on a tile, long-press belongs to the home screen, which lifts the tile to move it.
 internal val HANDLER_PARAMS =
-    mapOf("onTap" to listOf("x", "y"), "onDrag" to listOf("dx", "dy", "x", "y"), "onChange" to listOf("value"), "onSubmit" to listOf("value"))
+    mapOf(
+        "onTap" to listOf("x", "y"),
+        "onLongPress" to listOf("x", "y"),
+        "onDrag" to listOf("dx", "dy", "x", "y"),
+        "onChange" to listOf("value"),
+        "onSubmit" to listOf("value"),
+    )
 
 /** Handlers only some nodes have. */
 internal val HANDLER_KINDS = mapOf("onChange" to setOf("Slider", "Input"), "onSubmit" to setOf("Input"))
@@ -157,3 +167,6 @@ internal val TILE = setOf("cols", "rows", "tileWidth", "tileHeight", "screenWidt
 internal val NUMBERS = setOf("int", "round", "floor", "ceil", "abs", "fixed", "len", "count", "sum", "min", "max", "clamp")
 
 internal val WIDGET_PROPS = setOf("size", "minSize", "page", "order", "padding", "background")
+
+/** A page has no tile's size; it says where it goes and whether the status bar stays over it. */
+internal val PAGE_PROPS = setOf("page", "order", "padding", "background", "statusBar")

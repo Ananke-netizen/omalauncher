@@ -2,9 +2,9 @@
 
 Each `*.owl` file in this folder is a widget on the Android home screen,
 written in OWL, a small declarative language in the spirit of QML. Its first
-word says what it is: `widget "name" { }` is a home-screen tile, and
-`app "name" { }` an app in the app drawer that opens full screen (see Apps).
-Everything below is about widgets unless it says otherwise; apps are written
+word says what it is: `widget "name" { }` is a home-screen tile, `page "name" { }` a whole home page,
+left of your first one (see Pages), and `app "name" { }` an app in the app drawer that opens full screen
+(see Apps). Everything below is about widgets unless it says otherwise; pages and apps are written
 the same way. Save a file and it appears within a second. Then run `owl-check <file>`:
 
 ```
@@ -84,7 +84,7 @@ that read it redraw. Properties are separated by newlines or `;`.
 | `asset logo = base64"iVBOR..."` | an embedded image (under 2 MB) for `Image { src: logo }`, so the widget is one self-contained file |
 | `requires { pacman: ["jq", "curl"] }` | packages the widget's commands need; see Dependencies |
 | `meta { description: "..."; version: "1.0"; license: "MIT"; category: "news" }` | needed to publish to the widget store (see Sharing) |
-| `meta { owl: 9 }` | the language version the widget needs (this launcher has 9; the default is 1). Older launchers say "update the launcher" instead of failing on what they don't know. `Terminal` needs 2, `sprite` 3, triggers, `file`, `Slider`, `Input`, `android.notifications`, `android.volume`, `volume` and `notification` need 4, and `screen { }`, `screen()`, `close()`, `screenWidth` and `screenHeight` need 5, `Input`'s `focus`, `sh()` and `corners` 6, and `android.alarm`, `android.modes`, `torch`, `share` and `haptic` 7, and `app "…" { }` files, `android.apps`, `enc`, `post`, images from the web, `sound` and `screenInset` 8, and `parseTime`, `fmtAgo`, `fmtNum`, `random`, `shuffle`, `hash`, `fmtTime`'s zone and language, `set`, `remove`, `merge`, `reduce`, `scan`, `groupBy`, `toJson`, `capitalize`, `asin`, `acos`, `flatten`'s depth, `on … first`, and `if` and `let` in handlers 9; using them without declaring it is an error |
+| `meta { owl: 10 }` | the language version the widget needs (this launcher has 10; the default is 1). Older launchers say "update the launcher" instead of failing on what they don't know. `Terminal` needs 2, `sprite` 3, triggers, `file`, `Slider`, `Input`, `android.notifications`, `android.volume`, `volume` and `notification` need 4, and `screen { }`, `screen()`, `close()`, `screenWidth` and `screenHeight` need 5, `Input`'s `focus`, `sh()` and `corners` 6, and `android.alarm`, `android.modes`, `torch`, `share` and `haptic` 7, and `app "…" { }` files, `android.apps`, `enc`, `post`, images from the web, `sound` and `screenInset` 8, and `parseTime`, `fmtAgo`, `fmtNum`, `random`, `shuffle`, `hash`, `fmtTime`'s zone and language, `set`, `remove`, `merge`, `reduce`, `scan`, `groupBy`, `toJson`, `capitalize`, `asin`, `acos`, `flatten`'s depth, `on … first`, and `if` and `let` in handlers 9, and `page "…" { }` files and `onLongPress` 10; using them without declaring it is an error |
 | `onTap: ...` | runs when the tile (not a button inside it) is tapped |
 | `screen { ... }` | a full-screen view of the widget, opened with `screen()`; see Screens (owl 5) |
 | `every 10s { ... }`, `at t { ... }`, `when c { ... }`, `on x { ... }` | statements that run without a tap; see Triggers |
@@ -312,8 +312,9 @@ Every node also takes:
   anything else matches it with `radius: 8 * corners`)
 - `opacity`, `rotation` (degrees), `scale`, `offset: [x, y]` (dp), `visible`
 - handlers: `onTap` (with `x`, `y`) and `onDrag` (with `dx`, `dy`, `x`, `y`); `Slider` and `Input` also take
-  `onChange`, and `Input` `onSubmit`, both with `value`. Long-press
-  belongs to the home screen, which uses it to move and resize tiles
+  `onChange`, and `Input` `onSubmit`, both with `value`. In pages, apps and a widget's `screen { }`,
+  `onLongPress` (with `x`, `y`, owl 10); on a tile, long-press belongs to the home screen, which uses it
+  to move and resize tiles
 - `animate prop: spring()` or `tween(300ms, "linear"/"in"/"out"/"ease")`, for `value`,
   `opacity`, `rotation`, `scale`, `color` or `background`. For springs:
   `spring(damping, stiffness)`
@@ -478,6 +479,57 @@ widget "weather" {
 Screens are for showing more, not for building apps: there's no navigation between screens, no
 lists that load as they scroll, and only the nodes above (no maps, web pages or video).
 
+## Pages
+
+A file can also be a page: a whole home page, the whole screen. A launcher screen of your own, a
+dashboard to swipe to, a start page with your day on it. Pages sit left of page 1, where a stock
+launcher has its news feed, and you can have as many as you like there. A page is built like a widget,
+with the same declarations, nodes, `onTap` and `screen { }`, and it has a screen's room: up to 1000
+nodes. Pages need owl 10.
+
+```owl
+page "morning" {
+  meta { owl: 10 }
+  source now = clock every 1m
+  source wx = http("https://wttr.in/?format=j1") every 30m json
+  let cur = wx.current_condition[0]
+  Column {
+    gap: 16
+    padding: [24, 32]
+    Spacer { weight: 1 }
+    Text { text: fmtTime(now, "HH:mm"); style: huge }
+    Text { text: fmtTime(now, "EEEE d MMMM"); style: muted }
+    Text { text: cur ? "${cur.temp_C}°  ${cur.weatherDesc[0].value}" : "" }
+    Spacer { weight: 1 }
+    Spacer { height: screenInset }
+  }
+}
+```
+
+- **Where it goes.** `page: 0` (the default) is the page just left of page 1; `-1`, `-2`, ... go further
+  left. Home opens on page 1, and an empty page always waits left of the leftmost one, inviting a new
+  page there: only pages go left of page 1, never tiles. One whose place is taken goes to that empty
+  page instead. A page can also take a page right of page 1 (`page: 3`) if no tiles are there.
+- **The screen.** It fills the whole screen: the recent apps strip and the bar slide away with the tile
+  pages (swipe up for the app drawer, which brings the bar back). The status bar stays, over the page,
+  and the nodes keep clear of it; `statusBar: false` hides it while the page shows (a swipe down from the
+  top brings it back for a moment), and they keep clear of a camera cutout only. The background runs
+  under both. `statusBar` is `true` or `false`, not an expression.
+- **The navigation bar.** The page runs on under it, like an app with `edge: true`: `screenInset` is how
+  much of its bottom the navigation bar covers, in dp, so end it with `Spacer { height: screenInset }` or
+  pad buttons along the bottom by it.
+- **Looks.** There's no tile frame and no background: it draws straight on the wallpaper. Where text needs
+  one to be readable, give the page `background: alpha(background, 0.7)`, or just the nodes that hold it.
+  `padding` (12 by default) is around everything, as on a tile.
+- **Size.** `cols` and `rows` are the whole grid (6 or so by 12), and `tileWidth` and `tileHeight` the
+  screen's size in dp: lay it out by those, since phones differ. It takes no `size` or `minSize`.
+- **On the phone.** Long presses are the page's own (`onLongPress`), so pages are edited, shared, moved and
+  removed in settings › pages, which lists home's pages left to right: hold one and drag it to move it. Swiping up opens the app drawer and sideways turns the page, so
+  a `scroll: true` Column scrolls up and down, and a page has nothing to swipe sideways.
+
+owl-check's preview of a page is the page at the phone's size, as home last laid it out. `examples/00-start.owl`
+is a whole start page: the time, the weather, battery, the next alarm, notifications and your most used apps.
+
 ## Apps
 
 A file can also be an app instead of a widget: a screen of its own, listed in the app drawer.
@@ -513,7 +565,7 @@ inside) for what should run to the edges, like a photo, a map, a canvas or a bar
 **Under the navigation bar.** An app ends above Android's navigation bar (the gesture handle or the
 three buttons). With `edge: true` it runs on under it, like a list that scrolls behind the bar:
 `screenHeight` then reaches the screen's bottom, and `screenInset` is how much of it the bar covers,
-in dp (0 without `edge`, and while the keyboard is up; only apps have it, since a widget's screen ends above the bar). Taps there go to Android, so keep buttons
+in dp (0 without `edge`, and while the keyboard is up; only apps and pages have it, since a widget's screen ends above the bar). Taps there go to Android, so keep buttons
 and the last row of a list above it: end a scrolling list with `Spacer { height: screenInset }`, and
 pad a view with buttons along its bottom by `screenInset`. `edge` is `true` or `false`, not an expression.
 
@@ -789,7 +841,7 @@ links.
 
 ## Limits
 
-A widget has at most 500 nodes, 2000 drawing calls per frame, lists of 1000
+A widget has at most 500 nodes (a page 1000), 2000 drawing calls per frame, lists of 1000
 items, 32 images and 128 SVGs on show at once (a view with more keeps loading them
 again and shows none for long), and a step budget per update. A widget that draws slowly animates at
 half rate. Errors never take the home screen down: the failing value shows `…`
@@ -800,7 +852,7 @@ and the message goes to `.errors/`.
 - One small, focused widget per file; name files `NN-name.owl` to order them.
 - Test commands in a terminal first. For several values, print JSON and use `json`.
 - The phone is portrait: 6 columns, ~12 rows. A full-width widget is `6xN`,
-  half-width `3xN`. Set `minSize` to what the layout still fits in.
+  half-width `3xN`. Set `minSize` to what the layout still fits in. For the whole screen, write a page.
 - Use `weight: 1` to fill leftover space and `fill: width` to stretch across.
 - A `Text` without `width`, `weight` or `fill` takes the full width. In a `Row`, give the Texts
   next to a `weight: 1` one a `width`, or the weighted one is squeezed to nothing.

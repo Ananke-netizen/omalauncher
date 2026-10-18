@@ -24,7 +24,7 @@ class Compiler private constructor(
          * instead of failing on what they don't know. Bump it with every
          * addition a widget could depend on: nodes, properties, builtins.
          */
-        const val LEVEL = 9
+        const val LEVEL = 10
         private const val MAX_ASSET_BYTES = 2 shl 20
 
         /** An app icon is a shape or two drawn in SVG, not a picture. */
@@ -93,6 +93,9 @@ class Compiler private constructor(
 
     /** Whether nodes being compiled are the screen's (true) or the tile's (false); null in components, which can go in either. */
     private var inScreen: Boolean? = null
+
+    /** A page: it runs under the navigation bar, so its nodes may read `screenInset`. */
+    private var fullPage = false
 
     /** Where a handler calls screen() or close(), which need a screen { } block. */
     private var screenAction: Int? = null
@@ -176,9 +179,22 @@ class Compiler private constructor(
         val meta = body.decls.filterIsInstance<Decl.Meta>().flatMap { it.fields }.associate { it.name to constant(it.value, "meta values") }
         val requires = requires(body.decls.filterIsInstance<Decl.Requires>().flatMap { it.fields })
         if (ast.kind == OwlKind.App) return app(body, meta, level, requires, globals.map { it!! }, triggers)
-        for (p in body.props) if (p.name !in WIDGET_PROPS) fail("unknown widget property '${p.name}' (${WIDGET_PROPS.joinToString()})", p.pos)
+        // A page is a widget that fills a home page of its own, the whole screen: it gets a screen's room, and
+        // has no tile's size.
+        fullPage = ast.kind == OwlKind.Page
+        val allowed = if (fullPage) PAGE_PROPS else WIDGET_PROPS
+        for (p in body.props) {
+            if (p.name !in allowed) fail("unknown ${ast.kind.word} property '${p.name}' (${allowed.joinToString()})", p.pos)
+        }
+        if (fullPage) {
+            since(PAGE_FILE, 0)
+            maxNodes = MAX_SCREEN_NODES
+        }
+        // Whether the status bar stays over a page: fixed in the file, like an app's edge.
+        val statusBar =
+            props["statusBar"]?.let { p -> ((p.value as? Expr.Lit)?.value as? Bool)?.v ?: fail("statusBar is true or false, not an expression", p.pos) } ?: true
         val screens = body.items.filter { it is Item.Node && it.type == "screen" }.map { it as Item.Node }
-        if (screens.size > 1) fail("a widget has one screen { }", screens[1].pos)
+        if (screens.size > 1) fail("a ${ast.kind.word} has one screen { }", screens[1].pos)
         inScreen = false
         val rootNodes = items(body.items - screens.toSet(), root, Children.UI)
         if (rootNodes.isEmpty()) fail("a widget needs at least one node, like Text { text: \"hi\" }", 0)
@@ -193,8 +209,12 @@ class Compiler private constructor(
             meta = meta,
             level = level,
             size = props["size"]?.let { cells(it) },
+            fullPage = fullPage,
+            statusBar = statusBar,
+            kind = ast.kind,
             minSize = props["minSize"]?.let { cells(it) } ?: (1 to 1),
-            page = props["page"]?.let { constInt(it) }?.coerceAtLeast(1) ?: 1,
+            // A page goes left of page 1 by default: 0, and -1, -2, ... further left. A tile never does.
+            page = props["page"]?.let { constInt(it) }?.let { if (fullPage) it else it.coerceAtLeast(1) } ?: if (fullPage) 0 else 1,
             order = props["order"]?.let { constInt(it) } ?: 0,
             padding = props["padding"]?.let { constant(it.value, "padding").num() } ?: 12.0,
             background = props["background"]?.let { ex(it.value, root) },
@@ -639,7 +659,7 @@ class Compiler private constructor(
         n: Item.Node,
         scope: Scope,
     ): WNode {
-        if (++nodes > maxNodes) fail("more than $maxNodes nodes; ${if (maxNodes == MAX_NODES) "widgets" else "screens"} should stay small", n.pos)
+        if (++nodes > maxNodes) fail("more than $maxNodes nodes; ${if (maxNodes == MAX_NODES) "widgets" else "screens and pages"} should stay small", n.pos)
         if (n.type == "screen") fail("screen { } goes at the top of the widget, next to its nodes", n.pos)
         val body = n.body
         body.decls.firstOrNull()?.let { fail("declarations belong at the top of the widget", it.pos) }
@@ -659,6 +679,10 @@ class Compiler private constructor(
             body.handlers.associate { h ->
                 if (h.name !in HANDLER_PARAMS) fail("unknown handler '${h.name}' (${HANDLER_PARAMS.keys.joinToString()})", h.pos)
                 HANDLER_KINDS[h.name]?.let { kinds -> if (n.type !in kinds) fail("${h.name} only works on ${kinds.joinToString(" and ")}", h.pos) }
+                if (h.name == "onLongPress" && inScreen == false && !fullPage) {
+                    fail("long-press on a tile belongs to the home screen, which lifts it to move and resize it; onLongPress works in pages, apps and a screen { }", h.pos)
+                }
+                since(h.name, h.pos)
                 h.name to handler(h, scope)
             }
         val animations =
@@ -1072,7 +1096,9 @@ class Compiler private constructor(
             return Ev(null, { env -> Num(env.host.time()) }, Fast { env -> env.host.time() })
         }
         // A widget's screen always ends above the navigation bar; only an app with `edge` runs under it.
-        if (e.name == "screenInset" && ast.kind != OwlKind.App) fail("screenInset is for apps with edge: true; a widget's screen ends above the navigation bar", e.pos)
+        if (e.name == "screenInset" && ast.kind != OwlKind.App && !(fullPage && inScreen != true)) {
+            fail("screenInset is for apps with edge: true and pages; a widget's screen ends above the navigation bar", e.pos)
+        }
         // Not reserved: widgets that already declare `rows` or `cols` keep their own.
         if (e.name in TILE || e.name == LINUX) {
             since(e.name, e.pos)

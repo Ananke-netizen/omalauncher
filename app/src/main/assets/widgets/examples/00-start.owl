@@ -1,0 +1,129 @@
+page "start" {
+  // Left of page 1, where a stock launcher has its news feed (page: 0, the default).
+
+  meta { owl: 10; description: "A start page: the time, the weather, battery, your next alarm, your most used apps and the latest notifications"; version: "1.0"; license: "MIT"; category: "productivity" }
+
+  source now = clock every 1m
+  source wx = http("https://wttr.in/?format=j1") every 30m timeout 10s json
+  source bat = android.battery
+  source alarm = android.alarm
+  source n = android.notifications
+  // Ranked as the drawer's search ranks them: opened often and lately first.
+  source apps = android.apps every 5m
+
+  let hour = num(fmtTime(now, "H"))
+  let greeting = hour < 5 ? "good night" : hour < 12 ? "good morning" : hour < 18 ? "good afternoon" : "good evening"
+  let cur = wx.current_condition[0]
+  let day = wx.weather[0]
+  let place = wx.nearest_area[0].areaName[0].value
+  let top = (apps ?? []).filter(a => !a.system || a.score > 0).sortBy(a => -a.score).take(8)
+
+  // The page draws on the wallpaper: a veil keeps the text readable on any of them.
+  background: alpha(background, 0.6)
+  padding: [20, 24]
+
+  component Chip(label, value, tint = foreground) {
+    Column {
+      gap: 2
+      padding: [12, 10]
+      border: 1
+      borderColor: alpha(muted, 0.35)
+      Text { text: label; style: label; color: muted; maxLines: 1 }
+      Text { text: value; style: title; color: tint; maxLines: 1 }
+    }
+  }
+
+  component Heading(label) {
+    Text { text: label; style: label; color: accent }
+  }
+
+  Column {
+    gap: 20
+    fill: true
+
+    // The time, big, with the day under it.
+    Column {
+      gap: 0
+      Text { text: greeting; style: muted }
+      Text { text: fmtTime(now, "HH:mm"); style: huge; fontSize: 72 }
+      Text { text: lower(fmtTime(now, "EEEE d MMMM")); style: body }
+    }
+
+    if cur {
+      Row {
+        gap: 12
+        align: center
+        Text { text: "${cur.temp_C}°"; style: title; fontSize: 32; width: 72 }
+        Column {
+          gap: 0
+          weight: 1
+          Text { text: lower(cur.weatherDesc[0].value); maxLines: 1 }
+          Text { text: "${lower(place ?? "")} · ↑${day.maxtempC}° ↓${day.mintempC}°"; style: small; color: muted; maxLines: 1 }
+        }
+      }
+    }
+
+    Row {
+      gap: 10
+      Chip { label: bat.charging ? "charging" : "battery"; value: "${bat.level}%"; tint: bat.level < 20 ? red : foreground; weight: 1 }
+      Chip { label: "alarm"; value: alarm.set ? lower(fmtTime(alarm.time, "EEE HH:mm")) : "none"; weight: 1 }
+      Chip { label: "alerts"; value: n.available ? "${n.count}" : "off"; tint: n.count > 0 ? accent : foreground; weight: 1 }
+    }
+
+    Column {
+      gap: 8
+      weight: 1
+      Heading { label: "latest" }
+      if !n.available {
+        Text { text: "allow notification access to see them here"; style: small; color: muted }
+        Button { text: "allow"; onTap: notification("open", "") }
+      } else if n.count == 0 {
+        Text { text: "all clear"; style: small; color: muted }
+      } else {
+        Column {
+          gap: 10
+          weight: 1
+          scroll: true
+          for item in n.items.take(5) key item.key {
+            Row {
+              gap: 10
+              align: top
+              onTap: notification("open", item.key)
+              Image { src: item.icon; size: 20 }
+              Column {
+                gap: 0
+                weight: 1
+                Text { text: "${lower(item.app)} · ${fmtAgo(item.time, now)}"; style: label; color: muted; maxLines: 1 }
+                Text { text: item.title; bold: true; maxLines: 1 }
+                if item.text != "" {
+                  Text { text: item.text; style: small; maxLines: 1 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // At the bottom, where the thumb reaches.
+    Column {
+      gap: 10
+      Heading { label: "your apps" }
+      Grid {
+        columns: 4
+        gap: 12
+        for a in top key a.key {
+          Column {
+            gap: 4
+            align: center
+            onTap: androidApp(a.key)
+            Image { src: a.icon; size: 48 }
+            Text { text: lower(a.name); style: small; align: center; maxLines: 1 }
+          }
+        }
+      }
+      // The page runs under the navigation bar; the apps stay above it.
+      Spacer { height: screenInset }
+    }
+  }
+}

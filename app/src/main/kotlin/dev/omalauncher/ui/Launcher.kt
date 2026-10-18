@@ -105,12 +105,12 @@ private fun DesktopScreen(
             }
         }
     }
-    SystemBarFrames()
+    // A full-screen page runs under them, so their bands make way for it.
+    if (!state.pageShowing) SystemBarFrames()
     val covered = remember(state) { { state.homeCovered || runtime.widgets.openScreen != null } }
     CompositionLocalProvider(LocalHomeCovered provides covered) {
-        Column(Modifier.fillMaxSize().safePadding()) {
-            HomeScreen(runtime, state, Modifier.weight(1f))
-        }
+        // The whole window: a full-screen page fills it, and tiles keep clear of the system bars and the bar themselves.
+        HomeScreen(runtime, state, Modifier.fillMaxSize())
     }
     HomeMenu(runtime, state)
 
@@ -190,7 +190,7 @@ private fun DesktopScreen(
     val side = homeSide()
     if (side != null && !panelShown) {
         if (!runtime.terminals.typing) {
-            SideRail(runtime, state, handlers, side, Modifier.fillMaxSize().safePadding())
+            SideRail(runtime, state, handlers, side, Modifier.fillMaxSize().graphicsLayer { translationX = state.barShift() * size.width }.safePadding())
         }
     } else {
         Column(
@@ -219,13 +219,16 @@ private fun DesktopScreen(
                     )
                 }
             }
-            // Hidden while a tile types: it would sit on the keyboard, over the tile.
+            // Hidden while a tile types: it would sit on the keyboard, over the tile. They slide with the tile pages,
+            // out past a full-screen page; swiping up there opens the drawer, which brings them back.
             if (!runtime.terminals.typing || runtime.terminals.keyboardLeaving) {
-                // Home only: the open app list has everything.
-                // Swiping up from either does what it does on home, as from the dock on stock launchers.
-                if (LauncherStyle.recentApps && !panelShown) RecentStrip(runtime, handlers, Modifier.homeSwipe(runtime, state))
-                // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.
-                PromptBar(runtime, state, search = search, highlighted = highlighted, onLaunch = handlers.launch, modifier = Modifier.homeSwipe(runtime, state))
+                Column(Modifier.graphicsLayer { if (!panelShown) translationX = state.barShift() * size.width }) {
+                    // Home only: the open app list has everything.
+                    // Swiping up from either does what it does on home, as from the dock on stock launchers.
+                    if (LauncherStyle.recentApps && !panelShown) RecentStrip(runtime, handlers, Modifier.homeSwipe(runtime, state))
+                    // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.
+                    PromptBar(runtime, state, search = search, highlighted = highlighted, onLaunch = handlers.launch, modifier = Modifier.homeSwipe(runtime, state))
+                }
             }
         }
     }

@@ -712,6 +712,46 @@ class LangTest {
         Compiler.compile("widget {\n let screenInset = 0\n Text { text: screenInset } }")
     }
 
+    @Test fun longPressIsForPagesAppsAndScreens() {
+        Compiler.compile("page {\n meta { owl: 10 }\n Text { text: 1; onLongPress: close() }\n screen { Text { text: 2 } } }")
+        Compiler.compile("app {\n meta { owl: 10 }\n state n = 0\n Text { text: n; onLongPress: n = x } }")
+        Compiler.compile("widget {\n meta { owl: 10 }\n Text { text: 1; onTap: screen() }\n screen { Text { text: 2; onLongPress: close() } } }")
+        // A component can go anywhere: on a tile the launcher leaves its long presses to the home screen.
+        Compiler.compile("widget {\n meta { owl: 10 }\n component Hold() { Text { text: 1; onLongPress: run(\"true\") } }\n Hold { } }")
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { text: 1; onLongPress: run(\"true\") } }").contains("long-press on a tile belongs to the home screen"))
+        assertTrue(compileError("app {\n meta { owl: 9 }\n Text { text: 1; onLongPress: close() } }").contains("onLongPress needs owl 10"))
+    }
+
+    @Test fun pagesAreWholeHomePages() {
+        val page = Compiler.compile("page \"start\" {\n meta { owl: 10 }\n Text { text: 1 } }")
+        assertEquals(OwlKind.Page, page.kind)
+        assertEquals("start", page.name)
+        assertTrue(page.fullPage)
+        assertNull(page.size)
+        assertTrue(page.statusBar)
+        // Left of page 1 unless it says: 0, then -1, -2, ... further left.
+        assertEquals(0, page.page)
+        assertEquals(-2, Compiler.compile("page {\n meta { owl: 10 }\n page: -2\n Text { text: 1 } }").page)
+        assertEquals(3, Compiler.compile("page {\n meta { owl: 10 }\n page: 3\n Text { text: 1 } }").page)
+        assertFalse(Compiler.compile("page {\n meta { owl: 10 }\n statusBar: false\n Text { text: 1 } }").statusBar)
+        // A tile can't go left of page 1.
+        assertEquals(1, Compiler.compile("widget {\n size: 2x2\n page: 0\n Text { text: 1 } }").page)
+        assertFalse(Compiler.compile("widget {\n Text { text: 1 } }").fullPage)
+
+        assertTrue(compileError("page {\n Text { text: 1 } }").contains("needs owl 10"))
+        assertTrue(compileError("page {\n meta { owl: 10 }\n size: 2x2\n Text { text: 1 } }").contains("unknown page property 'size'"))
+        assertTrue(compileError("page {\n meta { owl: 10 }\n state s = true\n statusBar: s\n Text { text: 1 } }").contains("statusBar is true or false"))
+        assertTrue(compileError("widget {\n statusBar: false\n Text { text: 1 } }").contains("unknown widget property"))
+        assertEquals(OwlKind.Page, OwlKind.of("// mine\npage \"x\" {"))
+        // A page runs under the navigation bar, like an edge app; its screen { } doesn't.
+        Compiler.compile("page {\n meta { owl: 10 }\n Spacer { height: screenInset } }")
+        assertTrue(compileError("page {\n meta { owl: 10 }\n Text { text: 1; onTap: screen() }\n screen { Text { text: screenInset } } }").contains("screenInset is for apps"))
+        // A page has a screen's room: more nodes than a tile.
+        val many = (1..600).joinToString("\n") { "Text { text: $it }" }
+        Compiler.compile("page {\n meta { owl: 10 }\n Column {\n$many\n } }")
+        assertTrue(compileError("widget {\n Column {\n$many\n } }").contains("more than 500 nodes"))
+    }
+
     @Test fun appsAreScreensOfTheirOwn() {
         val app = Compiler.compile("app \"Notes\" {\n meta { owl: 8 }\n title: \"My notes\"\n state n = 0\n Column { Text { text: n }\n Button { text: \"x\"; onTap: close() } } }")
         assertEquals(OwlKind.App, app.kind)
