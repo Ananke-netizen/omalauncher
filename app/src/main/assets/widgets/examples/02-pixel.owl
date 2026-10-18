@@ -36,7 +36,7 @@ face "pixel" {
   let wide = (tileWidth ?? 0) > (tileHeight ?? 1)
   let sceneW = wide ? floor((tileWidth ?? 900) * 0.5) : tileWidth ?? 412
   let W = floor(sceneW / px) + 1
-  let H = wide ? floor((tileHeight ?? 412) / px) + 1 : floor((tileHeight ?? 900) * 0.58 / px)
+  let H = wide ? floor((tileHeight ?? 412) / px) + 1 : floor((tileHeight ?? 900) * 0.6 / px)
   let horizon = floor(H * 0.64)
   let sky = range(7).map(i => mix(mix(mix(color0, blue, 0.04 + i * 0.05), mix(mix(blue, cyan, i / 8), foreground, 0.08 + i * 0.05), day), mix(magenta, orange, i / 6), min(glow, 1) * (0.1 + i * 0.12)))
   let band = ceil(horizon / 7)
@@ -57,24 +57,28 @@ face "pixel" {
   let cloud = [".....wwww.......", "...wwwwwwwwwww..", "..wwwwwwwwwwwww.", ".wwwwwwwwwwwwwww", "ssssssssssssssss", ".ssssssssssssss."]
   let cloudW = mix(mix(foreground, color0, rain ? 0.5 : 0.25), color0, (1 - day) * 0.55)
 
-  // Shows only beside a camera cutout, where the nodes keep clear: the sky down to the ground, as the scene runs.
-  background: linear(0, 0, 0, 1, [sky[0], sky[3], sky[6], farColor, hill, ground])
+  // Shows only where the nodes keep clear: under the status bar in portrait, which is the top of the sky, and beside
+  // the camera cutout in landscape, where it runs from the sky down to the ground as the scene does.
+  background: wide ? linear(0, 0, 0, 1, [sky[0], sky[3], sky[6], farColor, hill, ground]) : sky[0]
   padding: 0
 
   component Label(label, size = 8, tint = foreground) {
     Text { text: label; font: press; fontSize: size; color: tint; maxLines: 1 }
   }
 
-  // The landscape, as tall as the screen in landscape.
+  // The landscape: in portrait whatever height the HUD leaves, in landscape the screen's. The art keeps its size and
+  // stands on the bottom edge, so a shorter scene shows less sky rather than pushing the HUD under the navigation bar.
   component Scene() {
     Box {
       width: sceneW
-      height: H * px
+      fill: height
       clip: true
+      align: bottom
 
       // What moves only with the hour: the sky, the sun or moon, the hills and the houses.
       Canvas {
-        fill: true
+        width: sceneW
+        height: H * px
         for b in range(7) {
           rect(0, b * band * px, W * px, band * px + px, fill: sky[b])
           // A checkered row where two bands meet, as old games shaded a sky.
@@ -121,7 +125,8 @@ face "pixel" {
 
       // What moves all the time: stars, clouds, birds, smoke, fireflies, rain and snow.
       Canvas {
-        fill: true
+        width: sceneW
+        height: H * px
         if day < 1 {
           for i in range(36) {
             let a = (0.35 + 0.65 * abs(sin(time * (0.4 + hash(i, 3) * 1.6) + i))) * (1 - day)
@@ -167,7 +172,7 @@ face "pixel" {
 
       // The time, with a hard shadow as on a title screen.
       Column {
-        fill: width
+        fill: true
         gap: 10
         align: center
         padding: [0, 48]
@@ -191,7 +196,7 @@ face "pixel" {
   // inset is the navigation bar's, passed in: a face's components can't read screenInset themselves yet.
   component Panel(inset = 0) {
     Column {
-      fill: true
+      fill: wide ? true : "width"
       gap: wide ? 10 : 14
       padding: [16, 16]
       background: mix(ground, color0, 0.55)
@@ -273,7 +278,9 @@ face "pixel" {
         }
       }
 
-      Spacer { weight: 1 }
+      if wide {
+        Spacer { weight: 1 }
+      }
 
       // Calls and messages on either side of the menu, with a badge for what's missed.
       Row {
@@ -346,6 +353,6 @@ face "pixel" {
   if wide {
     Row { fill: true; gap: 0; Scene { }  Panel { inset: screenInset; weight: 1 } }
   } else {
-    Column { fill: true; gap: 0; Scene { }  Panel { inset: screenInset; weight: 1 } }
+    Column { fill: true; gap: 0; Scene { weight: 1 }  Panel { inset: screenInset } }
   }
 }

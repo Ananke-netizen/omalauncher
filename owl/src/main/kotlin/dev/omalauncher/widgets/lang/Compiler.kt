@@ -418,14 +418,22 @@ class Compiler private constructor(
         commands += "$what GET " + (whole ?: "$start…")
     }
 
-    /** A `font` that isn't one of the words names a font file: an asset, a file in this system or a URL (owl 10). */
+    /**
+     * A `font` that isn't one of the words names a font file: an asset, a file in this system or a URL (owl 10).
+     * One only known at run time, a state's or a source's, needs no level: widgets from before owl 10 pick a
+     * word that way, and below 10 one that turns out to be a file draws in the launcher's font.
+     */
     private fun font(
         e: Expr,
         s: Scope,
     ) {
+        if (e is Expr.Cond) return listOf(e.a, e.b).forEach { font(it, s) }
         val words = ENUMS.getValue("font")
-        if (e is Expr.Name && e.name in words || constText(e, s) in words) return
-        since(FONT_FILE, e.pos)
+        if (e is Expr.Name && e.name in words) return
+        val text = constText(e, s)
+        if (text in words) return
+        val asset = e is Expr.Name && globals.any { it is Global.Asset && it.name == e.name }
+        if (text != null || asset || e is Expr.Interp) since(FONT_FILE, e.pos)
         webFile(e, s, "font")
     }
 

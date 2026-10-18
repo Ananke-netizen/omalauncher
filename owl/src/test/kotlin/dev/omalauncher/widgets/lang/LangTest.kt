@@ -810,6 +810,9 @@ class LangTest {
         assertTrue(!p.needsLinux)
         // The words are as old as fonts, written as a word or as text.
         Compiler.compile("widget {\n Text { text: 1; font: serif }\n Text { text: 2; font: \"sans\" } }")
+        // So is one picked at run time, as store widgets from before owl 10 do.
+        Compiler.compile("widget {\n meta { owl: 8 }\n state f = \"mono\" persist\n Text { text: 1; font: f }\n Text { text: 2; font: f == \"mono\" ? \"mono\" : \"sans\" } }")
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n Text { text: 1; font: true ? \"mono\" : \"https://x.test/a.ttf\" } }").contains("a font of its own needs owl 10"))
         assertTrue(compileError("widget {\n meta { owl: 9 }\n asset f = base64\"AAEAAA==\"\n Text { text: 1; font: f } }").contains("a font of its own needs owl 10"))
         assertTrue(compileError("widget {\n meta { owl: 9 }\n Canvas { text(\"a\", 0, 0, fontWeight: 300) } }").contains("text(...) with font, fontWeight, italic or letterSpacing needs owl 10"))
         assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { text: 1; font: \"http://x.test/a.ttf\" } }").contains("https only"))
