@@ -81,10 +81,10 @@ that read it redraw. Properties are separated by newlines or `;`.
 | `let h = history(x, 60)` | the last 60 values of `x`, sampled whenever a source updates (for Sparkline). With `persist` it survives restarts, unless it's older than it would take to fill |
 | `let p = prev(x)` | the previous value of `x`, for rates: `let rate = (bytes - p) / 5` |
 | `component Name(a, b = 1) { ... }` | a reusable node; use it as `Name { a: 1 }` |
-| `asset logo = base64"iVBOR..."` | an embedded image (under 2 MB) for `Image { src: logo }`, so the widget is one self-contained file |
+| `asset logo = base64"iVBOR..."` | an embedded image (under 2 MB) for `Image { src: logo }`, or a font for `font: logo` (owl 11, see Fonts), so the widget is one self-contained file |
 | `requires { pacman: ["jq", "curl"] }` | packages the widget's commands need; see Dependencies |
 | `meta { description: "..."; version: "1.0"; license: "MIT"; category: "news" }` | needed to publish to the widget store (see Sharing) |
-| `meta { owl: 10 }` | the language version the widget needs (this launcher has 11; the default is 1). Older launchers say "update the launcher" instead of failing on what they don't know. `Terminal` needs 2, `sprite` 3, triggers, `file`, `Slider`, `Input`, `android.notifications`, `android.volume`, `volume` and `notification` need 4, and `screen { }`, `screen()`, `close()`, `screenWidth` and `screenHeight` need 5, `Input`'s `focus`, `sh()` and `corners` 6, and `android.alarm`, `android.modes`, `torch`, `share` and `haptic` 7, and `app "…" { }` files, `android.apps`, `enc`, `post`, images from the web, `sound` and `screenInset` 8, and `parseTime`, `fmtAgo`, `fmtNum`, `random`, `shuffle`, `hash`, `fmtTime`'s zone and language, `set`, `remove`, `merge`, `reduce`, `scan`, `groupBy`, `toJson`, `capitalize`, `asin`, `acos`, `flatten`'s depth, `on … first`, and `if` and `let` in handlers 9, and `page "…" { }` files and `onLongPress` 10, and Text's `spans`, `fontWeight` and `letterSpacing`, gradient backgrounds and `frost` 11; using them without declaring it is an error |
+| `meta { owl: 10 }` | the language version the widget needs (this launcher has 11; the default is 1). Older launchers say "update the launcher" instead of failing on what they don't know. `Terminal` needs 2, `sprite` 3, triggers, `file`, `Slider`, `Input`, `android.notifications`, `android.volume`, `volume` and `notification` need 4, and `screen { }`, `screen()`, `close()`, `screenWidth` and `screenHeight` need 5, `Input`'s `focus`, `sh()` and `corners` 6, and `android.alarm`, `android.modes`, `torch`, `share` and `haptic` 7, and `app "…" { }` files, `android.apps`, `enc`, `post`, images from the web, `sound` and `screenInset` 8, and `parseTime`, `fmtAgo`, `fmtNum`, `random`, `shuffle`, `hash`, `fmtTime`'s zone and language, `set`, `remove`, `merge`, `reduce`, `scan`, `groupBy`, `toJson`, `capitalize`, `asin`, `acos`, `flatten`'s depth, `on … first`, and `if` and `let` in handlers 9, and `page "…" { }` files and `onLongPress` 10, and Text's `spans`, `fontWeight` and `letterSpacing`, gradient backgrounds, `frost`, fonts of a widget's own and Canvas `text`'s `font`, `fontWeight`, `italic` and `letterSpacing` 11; using them without declaring it is an error |
 | `onTap: ...` | runs when the tile (not a button inside it) is tapped |
 | `screen { ... }` | a full-screen view of the widget, opened with `screen()`; see Screens (owl 5) |
 | `every 10s { ... }`, `at t { ... }`, `when c { ... }`, `on x { ... }` | statements that run without a tap; see Triggers |
@@ -290,7 +290,7 @@ when lists reorder), and `let x = ...` inside any node.
 | `Flow` | a Row that wraps to new lines |
 | `Box` | stacks children on top of each other; `align: center/top/bottom/start/end/topStart/topEnd/bottomStart/bottomEnd` |
 | `Grid` | `columns` (2), `gap`; children fill cells left to right |
-| `Text` | `text`, `style: huge/title/body/small/muted/label`, `color`, `fontSize`, `bold`, `italic`, `font: mono/sans/serif/icon` (`icon` draws the Nerd Font weather glyphs U+E300–E3E3, plus 󰄬 U+F012C and 󰅖 U+F0156), `align: start/center/end`, `maxLines`; since owl 11 `fontWeight` (100 thin to 900 black; the font shows the nearest weight it has), `letterSpacing` (sp, negative to tighten) and `spans` (see Text in pieces) |
+| `Text` | `text`, `style: huge/title/body/small/muted/label`, `color`, `fontSize`, `bold`, `italic`, `font: mono/sans/serif/icon` (`icon` draws the Nerd Font weather glyphs U+E300–E3E3, plus 󰄬 U+F012C and 󰅖 U+F0156) or since owl 11 a font of the widget's own (see Fonts), `align: start/center/end`, `maxLines`; since owl 11 `fontWeight` (100 thin to 900 black; the font shows the nearest weight it has), `letterSpacing` (sp, negative to tighten) and `spans` (see Text in pieces) |
 | `Button` | `text`, `color`, `onTap` |
 | `Progress` | `value`, `max` (100), `color`, `track` |
 | `Ring` | circular progress: `value`, `max` (1), `color`, `track`, `thickness` (6), `start`/`sweep` (degrees; `start: 225; sweep: 270` makes a gauge). 64 dp unless sized |
@@ -323,8 +323,8 @@ Every node also takes:
 ### Text in pieces
 
 A Text's `spans` (owl 11) is its text in pieces, each styled on its own: a piece is text, or a map of its
-`text` and what differs from the rest, `color`, `bold`, `italic`, `fontSize`, `fontWeight` or
-`letterSpacing`. It takes the place of `text`; the Text's own properties are the rest's.
+`text` and what differs from the rest, `color`, `bold`, `italic`, `fontSize`, `fontWeight`, `letterSpacing`
+or `font` (in a map it's a value, so the words are text there: `font: "serif"`). Spaces at a piece's ends stay. It takes the place of `text`; the Text's own properties are the rest's.
 
 ```owl
 widget "clock" {
@@ -337,6 +337,37 @@ widget "clock" {
   }
 }
 ```
+
+### Fonts
+
+Since owl 11 `font` can also be a font of the widget's own, for a clock in a display face, a heading in a
+serif with character or a pixel font for a game: a TTF or OTF from an `asset`, an `https://` URL or a file in
+this system (`"~/.local/share/fonts/x.ttf"`, which needs Linux). It shows the launcher's font for the moment
+it takes to load.
+
+```owl
+page "poster" {
+  meta { owl: 11 }
+  source now = clock every 1m
+  asset pixel = base64"AAEAAA=="        // a small font's whole file in base64: the widget stays self-contained
+  let fraunces = "https://raw.githubusercontent.com/google/fonts/main/ofl/fraunces/Fraunces%5BSOFT,WONK,opsz,wght%5D.ttf"
+  Column {
+    Text { spans: [fmtTime(now, "HH"), {text: ":", color: accent}, fmtTime(now, "mm")]; font: fraunces; fontSize: 96; fontWeight: 100 }
+    Text { text: "LEVEL 3"; font: pixel; fontSize: 20 }
+  }
+}
+```
+
+- **Weights.** A variable font with a weight axis (most of Google Fonts' are, `[wght]` in the name) draws
+  every `fontWeight` it has, 100 to 900. A font of one weight is drawn thicker for `bold` or 600 and up, and
+  slanted for `italic`.
+- **From the web.** Downloaded from Android and kept like images from the web, and listed for review the same
+  way: `font GET https://…`. Google Fonts' own files are in https://github.com/google/fonts, under
+  `ofl/<name>/`; take the link of the `.ttf` from `raw.githubusercontent.com`. WOFF and WOFF2 web fonts
+  don't load: Android reads TTF and OTF only.
+- **Embedded.** An asset font makes the file big (a whole font is 30 KB to 1 MB), too big for a QR code to
+  share. Embed a small one, or link one.
+- Up to 8 fonts per file, and 8 MB each. Mind the license: Google Fonts' are OFL, free to use and share.
 
 ### Gradient backgrounds
 
@@ -459,7 +490,7 @@ app "flags" {
 }
 ```
 
-Like `http(...)`, the URLs are listed for whoever reviews the file: `image GET https://flagcdn.com/…`.
+Like `http(...)`, the URLs are listed for whoever reviews the file: `image GET https://flagcdn.com/…` (and fonts, see Fonts).
 Keep the start of the URL fixed, up to its first `/` after the server, so the server is known; a URL
 built entirely from values is flagged. Plain `http://` isn't loaded.
 
@@ -749,7 +780,7 @@ Canvas {
 | `arc(cx, cy, r, start, sweep)` | filled arcs are pie slices |
 | `line(x1, y1, x2, y2)` | |
 | `path(points)` | points are `[x, y]` or `{x, y}`; `closed: true` |
-| `text(s, x, y)` | `size:`, `color:`, `align: start/center/end`, `bold:`; y is the text's middle |
+| `text(s, x, y)` | `size:`, `color:`, `align: start/center/end`, `bold:`; y is the text's middle. Since owl 11 also `font:`, `fontWeight:`, `italic:` and `letterSpacing:` as on a Text, and `s` can be a list of spans |
 | `image(src, x, y, w, h)` | `src` as for `Image`; `color:` paints an SVG in one color |
 | `sprite(rows, x, y, pixel)` | pixel art (owl 3): `rows` is a list of strings, or one `"""` string of lines, with one letter per art pixel and `.` for empty. `palette: {b: accent, e: background}` colors each letter; letters it doesn't name aren't drawn, so one art can be drawn in parts that move separately. Without a palette every letter takes `fill`/`color`. `pixel` is the size of an art pixel in dp; edges land on whole screen pixels, so no seams show |
 | `translate(x, y) { }`, `rotate(deg, cx, cy) { }`, `scale(sx, sy, cx, cy) { }`, `clip(x, y, w, h) { }`, `layer(alpha) { }` | apply to the calls inside |

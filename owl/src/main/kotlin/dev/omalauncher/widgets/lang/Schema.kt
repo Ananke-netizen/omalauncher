@@ -62,6 +62,9 @@ internal val ENUMS =
         "cap" to setOf("round", "butt", "square"),
     )
 
+/** text(...)'s options beyond size, color, align and bold, as Text has them (owl 11). */
+internal val TEXT_STYLE = setOf("font", "fontWeight", "italic", "letterSpacing")
+
 /** Canvas calls: positional arity, and whether they take a { } body of further calls. */
 internal val DRAW: Map<String, DrawOp> =
     mapOf(
@@ -80,7 +83,7 @@ internal val DRAW: Map<String, DrawOp> =
         // owl 3: pixel art from rows of letters, one color per letter.
         "sprite" to DrawOp(4..4),
     )
-internal val DRAW_NAMED = setOf("fill", "stroke", "width", "cap", "radius", "closed", "size", "color", "align", "bold", "palette")
+internal val DRAW_NAMED = setOf("fill", "stroke", "width", "cap", "radius", "closed", "size", "color", "align", "bold", "palette") + TEXT_STYLE
 
 /** What needs a newer language than 1, with the version: using one without `meta { owl: N }` is an error. */
 internal val SINCE =
@@ -103,11 +106,17 @@ internal val SINCE =
         // owl 10: pages, files that are a whole home page; long-press where it isn't the home screen's.
         mapOf(PAGE_FILE to 10, "onLongPress" to 10) +
         // owl 11: text styled in pieces, by weight and spacing; gradients and frosted glass behind any node; Text in a Row as wide as its text.
-        listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 11 }
+        listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 11 } +
+        // owl 11: fonts of the widget's own, and Canvas text styled like a Text.
+        listOf(FONT_FILE, CANVAS_TEXT_STYLE).associateWith { 11 }
 
 internal const val PAGE_FILE = "page \"…\" { }"
 
 internal const val GRADIENT_BACKGROUND = "a gradient background"
+
+internal const val FONT_FILE = "a font of its own"
+
+internal const val CANVAS_TEXT_STYLE = "text(...) with font, fontWeight, italic or letterSpacing"
 
 internal const val WEB_IMAGE = "an image from the web"
 

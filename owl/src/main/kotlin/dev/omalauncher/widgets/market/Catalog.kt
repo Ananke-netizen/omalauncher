@@ -58,8 +58,8 @@ data class CatalogEntry(
 
     val supported get() = owl <= Compiler.LEVEL
 
-    /** Runs commands in the guest or installs packages, like [dev.omalauncher.widgets.lang.Program.needsLinux]; http requests, web images and sounds don't count. */
-    val needsLinux get() = requires.isNotEmpty() || commands.any { !it.startsWith("http GET ") && !it.startsWith("http POST ") && !it.startsWith("image GET ") && !it.startsWith("sound GET ") && !it.startsWith(Compiler.IF_LINUX) }
+    /** Runs commands in the guest or installs packages, like [dev.omalauncher.widgets.lang.Program.needsLinux]; http requests, web images, sounds and fonts don't count. */
+    val needsLinux get() = requires.isNotEmpty() || commands.any { !it.startsWith("http GET ") && !it.startsWith("http POST ") && !it.startsWith("image GET ") && !it.startsWith("sound GET ") && !it.startsWith("font GET ") && !it.startsWith(Compiler.IF_LINUX) }
 }
 
 object Catalog {

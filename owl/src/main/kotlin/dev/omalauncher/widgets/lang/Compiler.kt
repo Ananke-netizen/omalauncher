@@ -419,6 +419,17 @@ class Compiler private constructor(
         commands += "$what GET " + (whole ?: "$start…")
     }
 
+    /** A `font` that isn't one of the words names a font file: an asset, a file in this system or a URL (owl 11). */
+    private fun font(
+        e: Expr,
+        s: Scope,
+    ) {
+        val words = ENUMS.getValue("font")
+        if (e is Expr.Name && e.name in words || constText(e, s) in words) return
+        since(FONT_FILE, e.pos)
+        webFile(e, s, "font")
+    }
+
     /** The text [e] starts with whatever its values turn out to be: "https://x.test/" for "https://x.test/${id}.svg". */
     private fun constantStart(
         e: Expr,
@@ -643,6 +654,8 @@ class Compiler private constructor(
         for ((k, v) in c.named) if (k !in DRAW_NAMED) fail("unknown option '$k' (${DRAW_NAMED.joinToString()})", v.pos)
         since(c.name, c.pos)
         if (c.name == "image") webFile(c.args[0], scope, "image")
+        if (c.name == "text" && c.named.any { it.first in TEXT_STYLE }) since(CANVAS_TEXT_STYLE, c.pos)
+        c.named.firstOrNull { it.first == "font" }?.let { font(it.second, scope) }
         nodes++
         return WNode.Draw(
             c.name,
@@ -676,6 +689,7 @@ class Compiler private constructor(
             since("${n.type}.${p.name}", p.pos)
             if (p.name == "background" && gradient(p.value)) since(GRADIENT_BACKGROUND, p.pos)
             if (p.name == "frost") since("frost", p.pos)
+            if (p.name == "font") font(p.value, scope)
             props[p.name] = prop(p, scope)
         }
         val handlers =

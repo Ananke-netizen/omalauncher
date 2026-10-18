@@ -172,6 +172,7 @@ class WidgetInstance(
     @Volatile private var parkedTime = 0.0
     private val cells = arrayOfNulls<State<Value>>(program.globals.size)
     private val images = WidgetImages(program, services, ::report)
+    private val fonts = WidgetFonts(program, services, ::report)
 
     /** Where the sources run; set by [start]. */
     private var scope: CoroutineScope? = null
@@ -457,6 +458,9 @@ class WidgetInstance(
     /** See [WidgetImages.image]. */
     fun image(src: String): WidgetImage? = images.image(src)
 
+    /** See [WidgetFonts.font]. */
+    fun font(src: String): androidx.compose.ui.text.font.FontFamily? = fonts.font(src)
+
     /** Keeps values of sources and state across a reload of the same file, so saving doesn't flash "…". */
     fun adopt(old: WidgetInstance) {
         program.globals.forEachIndexed { i, g ->
@@ -493,6 +497,7 @@ class WidgetInstance(
     ) {
         this.scope = scope
         images.scope = scope
+        fonts.scope = scope
         // A sound stops with the app's window or the screen it played in.
         jobs +=
             scope.launch {

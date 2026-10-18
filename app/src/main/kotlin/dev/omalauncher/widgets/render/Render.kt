@@ -678,32 +678,52 @@ internal fun backgroundBrush(
     }
 }
 
-/** A Text's `spans`: each piece text, or a map of its text and how it differs from the rest (owl 11). */
-private fun spans(
+/** A Text's `spans`: each piece text, or a map of its text and how it differs from the rest (owl 11). Canvas text takes them too. */
+internal fun spans(
     v: Value,
-    p: Props,
+    inst: WidgetInstance,
 ): AnnotatedString =
     buildAnnotatedString {
         for (piece in Builtins.iterable(v)) {
             val f = (piece as? Obj)?.fields
             if (f == null) {
-                append(piece.text())
+                append(piece.spanText())
                 continue
             }
             val style =
                 SpanStyle(
-                    color = f["color"]?.let { p.color(it) } ?: Color.Unspecified,
+                    color = f["color"]?.let { c -> Builtins.argb(c, inst)?.let(::Color) } ?: Color.Unspecified,
+                    fontFamily = f["font"]?.let { fontFamily(it, inst) },
                     fontSize = f["fontSize"]?.num()?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
                     fontWeight = weight(f["fontWeight"]) ?: if (f["bold"]?.truthy == true) FontWeight.Bold else null,
                     fontStyle = if (f["italic"]?.truthy == true) FontStyle.Italic else null,
                     letterSpacing = f["letterSpacing"]?.num()?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
                 )
-            withStyle(style) { append(f["text"]?.text().orEmpty()) }
+            withStyle(style) { append(f["text"]?.spanText().orEmpty()) }
         }
     }
 
+/** A span's text as written: the spaces at its ends are what part it from the next, unlike a command's trailing newline. */
+private fun Value.spanText() = if (this is Str) v else text()
+
+/**
+ * A `font`: one of the words, or a font file of the widget's own (an asset, a file or a URL, owl 11), which
+ * shows the launcher's font until it has loaded. Null is the launcher's font.
+ */
+internal fun fontFamily(
+    v: Value?,
+    inst: WidgetInstance,
+): FontFamily =
+    when (val name = v?.takeIf { it != Null }?.toString()) {
+        null, "mono" -> LauncherStyle.font
+        "sans" -> FontFamily.SansSerif
+        "serif" -> FontFamily.Serif
+        "icon" -> NerdSymbols
+        else -> if (inst.program.level >= 11) inst.font(name) ?: LauncherStyle.font else LauncherStyle.font
+    }
+
 /** A font weight, 100 (thin) to 900 (black); the font shows the nearest one it has. */
-private fun weight(v: Value?) = v?.num()?.takeIf { it.isFinite() }?.let { FontWeight(it.toInt().coerceIn(1, 1000)) }
+internal fun weight(v: Value?) = v?.num()?.takeIf { it.isFinite() }?.let { FontWeight(it.toInt().coerceIn(1, 1000)) }
 
 @Composable
 private fun TextNode(
@@ -724,13 +744,7 @@ private fun TextNode(
     val color = p.color("color", defaultColor)
     val textStyle =
         TextStyle(
-            fontFamily =
-                when (p.observe("font")?.toString()) {
-                    "sans" -> FontFamily.SansSerif
-                    "serif" -> FontFamily.Serif
-                    "icon" -> NerdSymbols
-                    else -> LauncherStyle.font
-                },
+            fontFamily = fontFamily(p.observe("font"), p.inst),
             fontSize = p.observe("fontSize")?.num()?.sp ?: base.fontSize,
             fontWeight = weight(p.observe("fontWeight")) ?: if (p.observe("bold")?.truthy == true) FontWeight.Bold else null,
             letterSpacing = p.observe("letterSpacing")?.num()?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
@@ -744,7 +758,7 @@ private fun TextNode(
         )
     val pieces = p.observe("spans")
     BasicText(
-        if (pieces != null) spans(pieces, p) else AnnotatedString(p.observe("text")?.text().orEmpty()),
+        if (pieces != null) spans(pieces, p.inst) else AnnotatedString(p.observe("text")?.text().orEmpty()),
         if (p.has("width") || p.has("weight") || p.has("fill") || hug) mod else mod.fillMaxWidth(),
         style = textStyle,
         // Big text stays on one line in narrow tiles instead of breaking mid-word.

@@ -766,6 +766,22 @@ class LangTest {
         Compiler.compile("widget {\n Column { background: alpha(surface, 0.5) } }")
     }
 
+    @Test fun fontsOfTheirOwnNeedOwl11() {
+        val p =
+            Compiler.compile(
+                "page {\n meta { owl: 11 }\n asset display = base64\"AAEAAA==\"\n let base = \"https://x.test/fonts\"\n" +
+                    " Text { text: 1; font: display }\n Text { text: 2; font: \"${'$'}{base}/Inter.ttf\" }\n Text { text: 3; font: \"~/.fonts/a.otf\" }\n" +
+                    " Canvas { text([\"12\", {text: \":\", font: \"serif\"}], 10, 10, font: \"https://y.test/a.ttf\", fontWeight: 200, italic: true, letterSpacing: -1) } }",
+            )
+        assertEquals(listOf("font GET https://x.test/fonts/Inter.ttf", "font GET https://y.test/a.ttf"), p.commands)
+        assertTrue(!p.needsLinux)
+        // The words are as old as fonts, written as a word or as text.
+        Compiler.compile("widget {\n Text { text: 1; font: serif }\n Text { text: 2; font: \"sans\" } }")
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n asset f = base64\"AAEAAA==\"\n Text { text: 1; font: f } }").contains("a font of its own needs owl 11"))
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Canvas { text(\"a\", 0, 0, fontWeight: 300) } }").contains("text(...) with font, fontWeight, italic or letterSpacing needs owl 11"))
+        assertTrue(compileError("widget {\n meta { owl: 11 }\n Text { text: 1; font: \"http://x.test/a.ttf\" } }").contains("https only"))
+    }
+
     @Test fun appsAreScreensOfTheirOwn() {
         val app = Compiler.compile("app \"Notes\" {\n meta { owl: 8 }\n title: \"My notes\"\n state n = 0\n Column { Text { text: n }\n Button { text: \"x\"; onTap: close() } } }")
         assertEquals(OwlKind.App, app.kind)
