@@ -24,7 +24,7 @@ class Compiler private constructor(
          * instead of failing on what they don't know. Bump it with every
          * addition a widget could depend on: nodes, properties, builtins.
          */
-        const val LEVEL = 10
+        const val LEVEL = 11
         private const val MAX_ASSET_BYTES = 2 shl 20
 
         /** An app icon is a shape or two drawn in SVG, not a picture. */
@@ -202,6 +202,7 @@ class Compiler private constructor(
         val screen = screens.firstOrNull()?.let { screen(it) }
         val onTap = body.handlers.firstOrNull()?.let { handler(it, root) }
         if (screen == null) screenAction?.let { fail("screen() and close() need a screen { } block in the widget", it) }
+        val background = props["background"]?.let { if (gradient(it.value)) since(GRADIENT_BACKGROUND, it.pos); ex(it.value, root) }
         checkLevel(level)
 
         return Program(
@@ -217,7 +218,7 @@ class Compiler private constructor(
             page = props["page"]?.let { constInt(it) }?.let { if (fullPage) it else it.coerceAtLeast(1) } ?: if (fullPage) 0 else 1,
             order = props["order"]?.let { constInt(it) } ?: 0,
             padding = props["padding"]?.let { constant(it.value, "padding").num() } ?: 12.0,
-            background = props["background"]?.let { ex(it.value, root) },
+            background = background,
             globals = globals.map { it!! },
             root = rootNodes,
             screen = screen?.first,
@@ -673,6 +674,7 @@ class Compiler private constructor(
             // On a tile it would raise the keyboard whenever its page shows; in a component the launcher ignores it there.
             if (p.name == "focus" && inScreen == false) fail("focus only works in a screen { }", p.pos)
             since("${n.type}.${p.name}", p.pos)
+            if (p.name == "background" && gradient(p.value)) since(GRADIENT_BACKGROUND, p.pos)
             props[p.name] = prop(p, scope)
         }
         val handlers =
@@ -731,6 +733,15 @@ class Compiler private constructor(
         val wrapper = body.props.filter { it.name !in c.params }.associate { it.name to prop(it, scope) }
         return WNode.Use(n.type, args, wrapper, c.body, n.pos)
     }
+
+    /** Whether a background is written as a gradient, `linear(...)` or `radial(...)`, or chooses one: they need owl 11 there. */
+    private fun gradient(e: Expr): Boolean =
+        when (e) {
+            is Expr.Call -> e.name == "linear" || e.name == "radial"
+            is Expr.Cond -> gradient(e.a) || gradient(e.b)
+            is Expr.Binary -> e.op == "??" && (gradient(e.a) || gradient(e.b))
+            else -> false
+        }
 
     private fun enumOrNull(
         name: String,

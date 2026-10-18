@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorProducer
@@ -66,7 +67,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -84,9 +89,11 @@ import dev.omalauncher.ui.TerminalView
 import dev.omalauncher.widgets.lang.Action
 import dev.omalauncher.widgets.lang.Builtins
 import dev.omalauncher.widgets.lang.Env
+import dev.omalauncher.widgets.lang.Gradient
 import dev.omalauncher.widgets.lang.Lst
 import dev.omalauncher.widgets.lang.Null
 import dev.omalauncher.widgets.lang.Num
+import dev.omalauncher.widgets.lang.Obj
 import dev.omalauncher.ui.TerminalTiles
 import dev.omalauncher.widgets.lang.Str
 import dev.omalauncher.widgets.lang.Value
@@ -95,6 +102,7 @@ import dev.omalauncher.widgets.lang.num
 import dev.omalauncher.widgets.lang.text
 import dev.omalauncher.widgets.runtime.WidgetInstance
 import kotlinx.coroutines.flow.first
+import kotlin.math.max
 import kotlin.math.min
 
 /** Whether the home screen is hidden (drawer, full-screen panel); animated widgets stop ticking while it is. */
@@ -124,7 +132,18 @@ fun WidgetContent(
     Column(
         modifier
             .onSizeChanged { inst.setTile(null, null, (it.width / density).toDouble(), (it.height / density).toDouble()) }
-            .then(if (bg != null) Modifier.drawBehind { Builtins.argb(inst.eval(bg, inst.root, "background"), inst)?.let { drawRect(Color(it)) } } else Modifier)
+            .then(
+                if (bg != null) {
+                    Modifier.drawBehind {
+                        when (val v = inst.eval(bg, inst.root, "background")) {
+                            is Gradient -> if (program.level >= 11) drawRect(backgroundBrush(v, size, inst))
+                            else -> Builtins.argb(v, inst)?.let { drawRect(Color(it)) }
+                        }
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .then(if (insets != null) Modifier.windowInsetsPadding(insets) else Modifier)
             .padding(inset(program.padding)),
     ) {
@@ -311,7 +330,8 @@ private fun Element(
         }
         "Box" -> Box(mod, contentAlignment = boxAlign(p.observe("align")?.toString())) { Nodes(el.children, env, inst, this) }
         "Grid" -> Grid(mod, (p.observe("columns")?.num() ?: 2.0).toInt().coerceIn(1, 12), (p.observe("gap")?.num() ?: 6.0).dp) { Nodes(el.children, env, inst, null) }
-        "Text" -> TextNode(p, mod)
+        // Since owl 11 a Text in a Row or Flow is as wide as its text; before, it took the whole width unless sized.
+        "Text" -> TextNode(p, mod, parent is RowScope && inst.program.level >= 11)
         "Button" -> {
             val color = p.color("color") { Palette.accent }
             val radius = p.float("radius", 8f * LauncherStyle.cornerScale)
@@ -562,10 +582,20 @@ private fun common(
         val border = p.float("border", 0f)
         // Bordered elements (buttons, frames) follow the launcher's corner style unless they set a radius.
         val radius = p.float("radius", if (p.has("border")) 8f * LauncherStyle.cornerScale else 0f)
+        // Since owl 11 a background can be a gradient. Read at draw time in place of the color, once; an
+        // animated background stays a color, which is what animates.
+        val gradients = p.inst.program.level >= 11 && p.has("background") && "background" !in p.el.animations
         m =
             m.drawBehind {
                 val r = CornerRadius(radius().dp.toPx())
-                drawRoundRect(bg(), cornerRadius = r)
+                if (gradients) {
+                    when (val v = p.now("background")) {
+                        is Gradient -> drawRoundRect(backgroundBrush(v, size, p.inst), cornerRadius = r)
+                        else -> p.color(v)?.let { drawRoundRect(it, cornerRadius = r) }
+                    }
+                } else {
+                    drawRoundRect(bg(), cornerRadius = r)
+                }
                 val w = border().dp.toPx()
                 if (w > 0f) drawRoundRect(borderColor(), Offset(w / 2, w / 2), Size(size.width - w, size.height - w), r, style = Stroke(w))
             }
@@ -610,10 +640,57 @@ private fun handlers(p: Props): Modifier {
     return m
 }
 
+/**
+ * A gradient behind a node or a page. Its points are fractions of the size, 0 to 1 across and down, and a
+ * radial one's radius a fraction of the longer side, so it fits whatever size the node turns out to be.
+ */
+internal fun backgroundBrush(
+    g: Gradient,
+    size: Size,
+    inst: WidgetInstance,
+): Brush {
+    val colors = g.colors.map { Color(Builtins.argb(it, inst) ?: 0) }
+    val c = g.coords
+    return if (g.radial) {
+        Brush.radialGradient(colors, Offset(c[0] * size.width, c[1] * size.height), (c[2] * max(size.width, size.height)).coerceAtLeast(0.01f))
+    } else {
+        Brush.linearGradient(colors, Offset(c[0] * size.width, c[1] * size.height), Offset(c[2] * size.width, c[3] * size.height))
+    }
+}
+
+/** A Text's `spans`: each piece text, or a map of its text and how it differs from the rest (owl 11). */
+private fun spans(
+    v: Value,
+    p: Props,
+): AnnotatedString =
+    buildAnnotatedString {
+        for (piece in Builtins.iterable(v)) {
+            val f = (piece as? Obj)?.fields
+            if (f == null) {
+                append(piece.text())
+                continue
+            }
+            val style =
+                SpanStyle(
+                    color = f["color"]?.let { p.color(it) } ?: Color.Unspecified,
+                    fontSize = f["fontSize"]?.num()?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+                    fontWeight = weight(f["fontWeight"]) ?: if (f["bold"]?.truthy == true) FontWeight.Bold else null,
+                    fontStyle = if (f["italic"]?.truthy == true) FontStyle.Italic else null,
+                    letterSpacing = f["letterSpacing"]?.num()?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+                )
+            withStyle(style) { append(f["text"]?.text().orEmpty()) }
+        }
+    }
+
+/** A font weight, 100 (thin) to 900 (black); the font shows the nearest one it has. */
+private fun weight(v: Value?) = v?.num()?.takeIf { it.isFinite() }?.let { FontWeight(it.toInt().coerceIn(1, 1000)) }
+
 @Composable
 private fun TextNode(
     p: Props,
     mod: Modifier,
+    /** As wide as its text, in a Row or Flow, unless it's sized. */
+    hug: Boolean,
 ) {
     val style = p.observe("style")?.toString()
     val base =
@@ -635,7 +712,8 @@ private fun TextNode(
                     else -> LauncherStyle.font
                 },
             fontSize = p.observe("fontSize")?.num()?.sp ?: base.fontSize,
-            fontWeight = if (p.observe("bold")?.truthy == true) FontWeight.Bold else null,
+            fontWeight = weight(p.observe("fontWeight")) ?: if (p.observe("bold")?.truthy == true) FontWeight.Bold else null,
+            letterSpacing = p.observe("letterSpacing")?.num()?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
             fontStyle = if (p.observe("italic")?.truthy == true) FontStyle.Italic else null,
             textAlign =
                 when (p.observe("align")?.toString()) {
@@ -644,9 +722,10 @@ private fun TextNode(
                     else -> TextAlign.Start
                 },
         )
+    val pieces = p.observe("spans")
     BasicText(
-        p.observe("text")?.text().orEmpty(),
-        if (p.has("width") || p.has("weight") || p.has("fill")) mod else mod.fillMaxWidth(),
+        if (pieces != null) spans(pieces, p) else AnnotatedString(p.observe("text")?.text().orEmpty()),
+        if (p.has("width") || p.has("weight") || p.has("fill") || hug) mod else mod.fillMaxWidth(),
         style = textStyle,
         // Big text stays on one line in narrow tiles instead of breaking mid-word.
         maxLines = p.observe("maxLines")?.num()?.toInt()?.coerceAtLeast(1) ?: if (style == "huge" || style == "title") 1 else Int.MAX_VALUE,

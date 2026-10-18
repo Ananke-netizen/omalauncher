@@ -1,7 +1,7 @@
 page "start" {
   // Left of page 1, where a stock launcher has its news feed (page: 0, the default).
 
-  meta { owl: 10; description: "A start page: the time, the weather and the sun's path today, what's playing, the latest notifications and your most used apps"; version: "1.1"; license: "MIT"; category: "productivity" }
+  meta { owl: 11; description: "A start page: the time, the weather and the sun's path today, what's playing, the latest notifications and your most used apps"; version: "1.1"; license: "MIT"; category: "productivity" }
 
   source now = clock every 1m
   source wx = http("https://wttr.in/?format=j1") every 30m timeout 10s json
@@ -34,23 +34,22 @@ page "start" {
   }))).filter(s => s.hr > hour - 3).take(6)
   let playing = m != null && m.available != false && m.title != null
   let top = (apps ?? []).filter(a => !a.system || a.score > 0).sortBy(a => -a.score).take(8)
-  let glass = alpha(surface, 0.7)
+  let glass = linear(0, 0, 1, 1, [alpha(surface, 0.8), alpha(surface, 0.55)])
 
-  // The page draws on the wallpaper: a light veil, and glass cards where the text is.
-  background: alpha(background, 0.55)
+  // The page draws on the wallpaper: a veil, darker at the top and bottom where the text is, and glass cards.
+  background: linear(0, 0, 0, 1, [alpha(background, 0.85), alpha(background, 0.35), alpha(background, 0.4), alpha(background, 0.9)])
   padding: 0
 
   component Heading(label, note = "") {
     Row {
       align: center
       Text { text: label; style: label; color: accent; weight: 1 }
-      Text { text: note; style: label; color: muted; width: 120; align: end; maxLines: 1 }
+      Text { text: note; style: label; color: muted; maxLines: 1 }
     }
   }
 
   component Pill(label, tint = foreground) {
-    // A Text takes the full width unless sized: size the pill by its label.
-    Text { text: label; style: small; color: tint; maxLines: 1; width: len(label) * 8.5 + 26; align: center; padding: [0, 7]; background: alpha(surface, 0.7); radius: 14 * corners }
+    Text { text: label; style: small; color: tint; maxLines: 1; padding: [12, 7]; background: alpha(surface, 0.7); radius: 14 * corners }
   }
 
   Box {
@@ -65,19 +64,13 @@ page "start" {
       Column {
         gap: 0
         Text { text: greeting; style: label; color: accent }
-        Row {
-          gap: 0
-          align: center
-          Text { text: fmtTime(now, "HH"); fontSize: 92; width: 116; maxLines: 1 }
-          Text { text: ":"; fontSize: 92; color: accent; width: 60; align: center }
-          Text { text: fmtTime(now, "mm"); fontSize: 92; width: 116; maxLines: 1 }
-        }
+        Text { spans: [fmtTime(now, "HH"), {text: ":", color: accent}, fmtTime(now, "mm")]; fontSize: 96; fontWeight: 200; letterSpacing: -3 }
         Row {
           gap: 8
           align: center
           Text { text: lower(fmtTime(now, "EEEE d MMMM")); style: body; weight: 1; maxLines: 1 }
           if alarm.set {
-            Text { text: "alarm ${fmtTime(alarm.time, "HH:mm")}"; style: small; color: accent; width: 100; align: end; maxLines: 1; onTap: androidApp(alarm.app) }
+            Text { text: "alarm ${fmtTime(alarm.time, "HH:mm")}"; style: small; color: accent; maxLines: 1; onTap: androidApp(alarm.app) }
           }
         }
       }

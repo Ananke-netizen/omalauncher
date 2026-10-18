@@ -84,7 +84,7 @@ that read it redraw. Properties are separated by newlines or `;`.
 | `asset logo = base64"iVBOR..."` | an embedded image (under 2 MB) for `Image { src: logo }`, so the widget is one self-contained file |
 | `requires { pacman: ["jq", "curl"] }` | packages the widget's commands need; see Dependencies |
 | `meta { description: "..."; version: "1.0"; license: "MIT"; category: "news" }` | needed to publish to the widget store (see Sharing) |
-| `meta { owl: 10 }` | the language version the widget needs (this launcher has 10; the default is 1). Older launchers say "update the launcher" instead of failing on what they don't know. `Terminal` needs 2, `sprite` 3, triggers, `file`, `Slider`, `Input`, `android.notifications`, `android.volume`, `volume` and `notification` need 4, and `screen { }`, `screen()`, `close()`, `screenWidth` and `screenHeight` need 5, `Input`'s `focus`, `sh()` and `corners` 6, and `android.alarm`, `android.modes`, `torch`, `share` and `haptic` 7, and `app "…" { }` files, `android.apps`, `enc`, `post`, images from the web, `sound` and `screenInset` 8, and `parseTime`, `fmtAgo`, `fmtNum`, `random`, `shuffle`, `hash`, `fmtTime`'s zone and language, `set`, `remove`, `merge`, `reduce`, `scan`, `groupBy`, `toJson`, `capitalize`, `asin`, `acos`, `flatten`'s depth, `on … first`, and `if` and `let` in handlers 9, and `page "…" { }` files and `onLongPress` 10; using them without declaring it is an error |
+| `meta { owl: 10 }` | the language version the widget needs (this launcher has 11; the default is 1). Older launchers say "update the launcher" instead of failing on what they don't know. `Terminal` needs 2, `sprite` 3, triggers, `file`, `Slider`, `Input`, `android.notifications`, `android.volume`, `volume` and `notification` need 4, and `screen { }`, `screen()`, `close()`, `screenWidth` and `screenHeight` need 5, `Input`'s `focus`, `sh()` and `corners` 6, and `android.alarm`, `android.modes`, `torch`, `share` and `haptic` 7, and `app "…" { }` files, `android.apps`, `enc`, `post`, images from the web, `sound` and `screenInset` 8, and `parseTime`, `fmtAgo`, `fmtNum`, `random`, `shuffle`, `hash`, `fmtTime`'s zone and language, `set`, `remove`, `merge`, `reduce`, `scan`, `groupBy`, `toJson`, `capitalize`, `asin`, `acos`, `flatten`'s depth, `on … first`, and `if` and `let` in handlers 9, and `page "…" { }` files and `onLongPress` 10, and Text's `spans`, `fontWeight` and `letterSpacing` and gradient backgrounds 11; using them without declaring it is an error |
 | `onTap: ...` | runs when the tile (not a button inside it) is tapped |
 | `screen { ... }` | a full-screen view of the widget, opened with `screen()`; see Screens (owl 5) |
 | `every 10s { ... }`, `at t { ... }`, `when c { ... }`, `on x { ... }` | statements that run without a tap; see Triggers |
@@ -195,7 +195,7 @@ second is held back and reported (one that changes what it watches would otherwi
 | chance | `random()`, `random(n)`, `random(a, b)`, `shuffle(list)`, only in handlers and a state's first value; `hash(...)` and `shuffle(list, seed)` anywhere. See Chance |
 | lists | `range(n)` or `range(a, b, step)`, `map filter find any all count sum avg sort sortBy reverse take drop first last indexOf unique`, `flatten(list, depth)` (depth 1 unless given), `keys values entries get(obj, key, default)`; see Changing lists and maps |
 | colors | theme names `accent foreground background muted surface border red green yellow blue magenta cyan orange` plus `bright_*`, `color0`…`color15`; `#7aa2f7`; `rgb(r, g, b, a)`, `hsl(h, s, l, a)`, `alpha(c, 0.5)`, `mix(a, b, t)` |
-| gradients | `linear(x0, y0, x1, y1, [colors])`, `radial(cx, cy, r, [colors])`: fills in Canvas |
+| gradients | `linear(x0, y0, x1, y1, [colors])`, `radial(cx, cy, r, [colors])`: fills in Canvas, and backgrounds (owl 11, see Nodes) |
 
 Prefer theme color names: widgets then follow theme changes.
 
@@ -290,7 +290,7 @@ when lists reorder), and `let x = ...` inside any node.
 | `Flow` | a Row that wraps to new lines |
 | `Box` | stacks children on top of each other; `align: center/top/bottom/start/end/topStart/topEnd/bottomStart/bottomEnd` |
 | `Grid` | `columns` (2), `gap`; children fill cells left to right |
-| `Text` | `text`, `style: huge/title/body/small/muted/label`, `color`, `fontSize`, `bold`, `italic`, `font: mono/sans/serif/icon` (`icon` draws the Nerd Font weather glyphs U+E300–E3E3, plus 󰄬 U+F012C and 󰅖 U+F0156), `align: start/center/end`, `maxLines` |
+| `Text` | `text`, `style: huge/title/body/small/muted/label`, `color`, `fontSize`, `bold`, `italic`, `font: mono/sans/serif/icon` (`icon` draws the Nerd Font weather glyphs U+E300–E3E3, plus 󰄬 U+F012C and 󰅖 U+F0156), `align: start/center/end`, `maxLines`; since owl 11 `fontWeight` (100 thin to 900 black; the font shows the nearest weight it has), `letterSpacing` (sp, negative to tighten) and `spans` (see Text in pieces) |
 | `Button` | `text`, `color`, `onTap` |
 | `Progress` | `value`, `max` (100), `color`, `track` |
 | `Ring` | circular progress: `value`, `max` (1), `color`, `track`, `thickness` (6), `start`/`sweep` (degrees; `start: 225; sweep: 270` makes a gauge). 64 dp unless sized |
@@ -307,7 +307,7 @@ Every node also takes:
 
 - `width height size` (dp), `fill: true/width/height`, `weight` (share of the
   space left in a Row or Column), `padding` (`8`, `[h, v]` or `[l, t, r, b]`)
-- `background`, `border` (dp), `borderColor`, `radius`, `clip: true`
+- `background` (a color, or since owl 11 a gradient, see Gradient backgrounds), `border` (dp), `borderColor`, `radius`, `clip: true`
   (without `radius`, bordered elements follow the launcher's corner style: 0 for edge, 4 for soft, 8 for round;
   anything else matches it with `radius: 8 * corners`)
 - `opacity`, `rotation` (degrees), `scale`, `offset: [x, y]` (dp), `visible`
@@ -318,6 +318,54 @@ Every node also takes:
 - `animate prop: spring()` or `tween(300ms, "linear"/"in"/"out"/"ease")`, for `value`,
   `opacity`, `rotation`, `scale`, `color` or `background`. For springs:
   `spring(damping, stiffness)`
+
+### Text in pieces
+
+A Text's `spans` (owl 11) is its text in pieces, each styled on its own: a piece is text, or a map of its
+`text` and what differs from the rest, `color`, `bold`, `italic`, `fontSize`, `fontWeight` or
+`letterSpacing`. It takes the place of `text`; the Text's own properties are the rest's.
+
+```owl
+widget "clock" {
+  meta { owl: 11 }
+  source now = clock every 1m
+  state cpu = 42
+  Column {
+    Text { spans: [fmtTime(now, "HH"), {text: ":", color: accent}, fmtTime(now, "mm")]; fontSize: 64; fontWeight: 200 }
+    Text { spans: ["cpu ", {text: "${cpu}%", bold: true, color: cpu > 80 ? red : green}]; style: small }
+  }
+}
+```
+
+### Gradient backgrounds
+
+Since owl 11 a node's `background`, and a page's or tile's, can be a `linear(...)` or `radial(...)`. There its
+points are fractions of the node, 0 to 1 across and down, since its size in dp isn't known as you write it:
+`linear(0, 0, 0, 1, [...])` runs top to bottom, `linear(0, 0, 1, 1, [...])` corner to corner, and a radial
+one's radius is a fraction of the longer side, `radial(0.5, 0.5, 0.7, [...])`. The colors are spread evenly.
+A page's background runs under the status bar too, so a veil darker where the text is reads well on any
+wallpaper:
+
+```owl
+page "dusk" {
+  meta { owl: 11 }
+  background: linear(0, 0, 0, 1, [alpha(background, 0.85), alpha(background, 0.35), alpha(background, 0.9)])
+  Column {
+    padding: 16
+    background: radial(0.5, 0, 1, [alpha(accent, 0.3), alpha(surface, 0.6)])
+    radius: 16 * corners
+    Text { text: "evening" }
+  }
+}
+```
+
+An animated `background` is a color, as before.
+
+### Text in a Row
+
+Since owl 11 a Text in a Row or Flow is as wide as its text, like a Button: labels, chips and values sit side by
+side without a `width`, and a `weight: 1` neighbour takes what's left. Before, it took the whole width unless
+sized, and widgets that declare an older owl keep that. In a Column a Text still takes the whole width.
 
 `opacity`, `rotation`, `scale`, `offset`, colors and the contents of Canvas and
 Shader apply at draw time. Changing them, even every frame, costs no layout.
@@ -519,7 +567,8 @@ page "morning" {
   much of its bottom the navigation bar covers, in dp, so end it with `Spacer { height: screenInset }` or
   pad buttons along the bottom by it.
 - **Looks.** There's no tile frame and no background: it draws straight on the wallpaper. Where text needs
-  one to be readable, give the page `background: alpha(background, 0.7)`, or just the nodes that hold it.
+  one to be readable, give the page `background: alpha(background, 0.7)` or a gradient (owl 11), or just the
+  nodes that hold it.
   `padding` (12 by default) is around everything, as on a tile.
 - **Size.** `cols` and `rows` are the whole grid (6 or so by 12), and `tileWidth` and `tileHeight` the
   screen's size in dp: lay it out by those, since phones differ. It takes no `size` or `minSize`.
@@ -854,8 +903,9 @@ and the message goes to `.errors/`.
 - The phone is portrait: 6 columns, ~12 rows. A full-width widget is `6xN`,
   half-width `3xN`. Set `minSize` to what the layout still fits in. For the whole screen, write a page.
 - Use `weight: 1` to fill leftover space and `fill: width` to stretch across.
-- A `Text` without `width`, `weight` or `fill` takes the full width. In a `Row`, give the Texts
-  next to a `weight: 1` one a `width`, or the weighted one is squeezed to nothing.
+- A `Text` without `width`, `weight` or `fill` takes the full width, except in a `Row` or `Flow` since owl 11,
+  where it's as wide as its text. Before owl 11, give the Texts next to a `weight: 1` one a `width`, or the
+  weighted one is squeezed to nothing.
 - Look at the example widgets in this folder for patterns: `90-analog-clock` (Canvas),
   `91-focus` (state, buttons and `at`), `92-aurora` (Shader), `93-latency` (stream),
   `88-notes` (Input), `98-notifications` (android.notifications), `99-volume` (Slider),

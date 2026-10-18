@@ -752,6 +752,17 @@ class LangTest {
         assertTrue(compileError("widget {\n Column {\n$many\n } }").contains("more than 500 nodes"))
     }
 
+    @Test fun textInPiecesAndGradientBackgroundsNeedOwl11() {
+        Compiler.compile("widget {\n meta { owl: 11 }\n Text { spans: [\"15\", {text: \":\", color: accent, fontWeight: 300}, \"34\"]; fontWeight: 200; letterSpacing: -2 } }")
+        Compiler.compile("page {\n meta { owl: 11 }\n background: linear(0, 0, 0, 1, [background, alpha(background, 0.3)])\n Column { background: true ? radial(0.5, 0.5, 0.5, [accent, surface]) : surface } }")
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { spans: [\"a\"] } }").contains("Text.spans needs owl 11"))
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { text: 1; fontWeight: 300 } }").contains("Text.fontWeight needs owl 11"))
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Column { background: linear(0, 0, 1, 0, [red, blue]) } }").contains("a gradient background needs owl 11"))
+        assertTrue(compileError("page {\n meta { owl: 10 }\n background: linear(0, 0, 1, 0, [red, blue])\n Text { text: 1 } }").contains("a gradient background needs owl 11"))
+        // A color background is as old as backgrounds.
+        Compiler.compile("widget {\n Column { background: alpha(surface, 0.5) } }")
+    }
+
     @Test fun appsAreScreensOfTheirOwn() {
         val app = Compiler.compile("app \"Notes\" {\n meta { owl: 8 }\n title: \"My notes\"\n state n = 0\n Column { Text { text: n }\n Button { text: \"x\"; onTap: close() } } }")
         assertEquals(OwlKind.App, app.kind)

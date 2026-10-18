@@ -26,7 +26,7 @@ internal val KINDS: Map<String, Kind> =
         "Flow" to Kind(setOf("gap", "align", "justify"), Children.UI),
         "Box" to Kind(setOf("align"), Children.UI),
         "Grid" to Kind(setOf("columns", "gap"), Children.UI),
-        "Text" to Kind(setOf("text", "style", "color", "fontSize", "bold", "italic", "font", "align", "maxLines"), Children.NONE),
+        "Text" to Kind(setOf("text", "style", "color", "fontSize", "bold", "italic", "font", "align", "maxLines", "spans", "fontWeight", "letterSpacing"), Children.NONE),
         "Image" to Kind(setOf("src", "fit", "tint"), Children.NONE),
         "Button" to Kind(setOf("text", "color"), Children.NONE),
         "Progress" to Kind(setOf("value", "max", "color", "track"), Children.NONE),
@@ -101,9 +101,13 @@ internal val SINCE =
         // owl 9: handlers that choose, and name values on the way.
         listOf(HANDLER_IF, HANDLER_LET).associateWith { 9 } +
         // owl 10: pages, files that are a whole home page; long-press where it isn't the home screen's.
-        mapOf(PAGE_FILE to 10, "onLongPress" to 10)
+        mapOf(PAGE_FILE to 10, "onLongPress" to 10) +
+        // owl 11: text styled in pieces, by weight and spacing; gradients behind any node; Text in a Row as wide as its text.
+        listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND).associateWith { 11 }
 
 internal const val PAGE_FILE = "page \"…\" { }"
+
+internal const val GRADIENT_BACKGROUND = "a gradient background"
 
 internal const val WEB_IMAGE = "an image from the web"
 
