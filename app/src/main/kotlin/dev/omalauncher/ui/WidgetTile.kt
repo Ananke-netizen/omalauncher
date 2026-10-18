@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.only
@@ -52,6 +53,8 @@ internal fun WidgetTile(
     /** Where Linux stands, if the widget needs it and it isn't running: a placeholder keeps its cells. */
     waitsForLinux: LinuxState? = null,
     onInstallLinux: () -> Unit = {},
+    /** How much of a face the soft keyboard covers while one of its fields has it, in pixels: its `screenInset` then. */
+    keyboard: Float = 0f,
 ) {
     // A face draws straight on the wallpaper, without a tile's frame; selected, it still shows the focus border.
     val bare = spec.isFace && waitsForLinux == null && instance != null && needs.isEmpty()
@@ -94,10 +97,10 @@ internal fun WidgetTile(
         } else if (bare) {
             // The whole screen: under the status bar and the navigation bar. The nodes keep clear of the camera cutout and
             // of the status bar while it stays (statusBar true); the navigation bar is the face's to mind, through
-            // screenInset, as an edge app's is.
+            // screenInset, as an edge app's is, and so is the keyboard while one of its fields has it.
             val top = if (instance.showsStatusBar()) WindowInsets.statusBars.union(WindowInsets.displayCutout) else WindowInsets.displayCutout
             WidgetContent(instance, Modifier.fillMaxSize(), cells, top.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-            ScreenInset(instance)
+            ScreenInset(instance, face = true, keyboard = keyboard)
         } else {
             WidgetContent(instance, Modifier.fillMaxSize(), cells)
         }
@@ -165,11 +168,24 @@ internal fun OwlAppWindow(
     if (instance.program.edge) ScreenInset(instance)
 }
 
-/** Tells an `edge` app's `screenInset` how much of its bottom the navigation bar covers; none while the keyboard is up. */
+/**
+ * Tells an `edge` app's or a [face]'s `screenInset` how much of its bottom the navigation bar covers; for an app none while
+ * the keyboard is up, and for a face the [keyboard] (in pixels) while one of its fields has it. A face goes straight back
+ * to the navigation bar as the keyboard starts closing, rather than to none until it has.
+ */
 @Composable
-private fun ScreenInset(instance: WidgetInstance) {
+private fun ScreenInset(
+    instance: WidgetInstance,
+    face: Boolean = false,
+    keyboard: Float = 0f,
+) {
     val density = LocalDensity.current
-    val covered = (WindowInsets.safeDrawing.getBottom(density) - WindowInsets.ime.getBottom(density)).coerceAtLeast(0)
+    val covered =
+        if (face) {
+            maxOf(WindowInsets.navigationBars.getBottom(density).toFloat(), keyboard)
+        } else {
+            (WindowInsets.safeDrawing.getBottom(density) - WindowInsets.ime.getBottom(density)).coerceAtLeast(0).toFloat()
+        }
     val dp = with(density) { covered.toDp().value.toDouble() }
     SideEffect { instance.setScreenInset(dp) }
 }
