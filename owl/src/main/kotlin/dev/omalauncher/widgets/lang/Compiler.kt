@@ -518,6 +518,7 @@ class Compiler private constructor(
                 // Listed with the commands, so the store shows it before anyone installs the widget.
                 if (e.name == "notifications") commands += "read Android notifications (apps, titles and text)"
                 if (e.name == "apps") commands += "read installed Android apps (names, packages and icons)"
+                if (e.name == "recent") commands += "read the recently opened apps"
                 Global.Source(d.name, "android.${e.name}", null, (every ?: 60.0).coerceAtLeast(1.0), false, 0)
             }
             else -> fail("a source is cmd(\"...\"), stream(\"...\"), http(\"...\"), file(\"...\"), clock, or android.${ANDROID.joinToString("/")}", e.pos)
@@ -877,6 +878,8 @@ class Compiler private constructor(
                 if (call.name == "sound") webFile(call.args[0], scope, "sound")
                 if (call.name == "screen" || call.name == "close") screenAction = screenAction ?: call.pos
                 if (call.name == "screen") openScreen = openScreen ?: call.pos
+                // The reviewer sees what a widget would ask, as it sees a command.
+                if (call.name == "ask") commands += (args[0].const as? Str)?.v?.let { "ask the agent: $it" } ?: "ask the agent something built from widget values"
                 if (call.name in setOf("run", "terminal", "app")) {
                     listCommand(call.args[0], args[0], scope, "${call.name}(…)")
                     // A tap on terminal(...) or app(...) without Linux offers to install it; run(...) would fail unseen.

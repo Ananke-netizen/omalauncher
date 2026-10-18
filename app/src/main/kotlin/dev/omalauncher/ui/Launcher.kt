@@ -126,15 +126,9 @@ private fun DesktopScreen(
     val highlighted = search.highlighted(state.picked)
 
     fun launch(hit: AppHit) {
-        runtime.usage.record(hit.key)
         state.query = ""
         state.closeNow()
-        when (hit) {
-            is AppHit.Linux -> runtime.launch(hit.app)
-            is AppHit.Android -> runtime.androidApps.open(hit.app)
-            is AppHit.Shortcut -> runtime.androidApps.open(hit.shortcut)
-            is AppHit.Owl -> runtime.openOwlApp(hit.spec.file.name)
-        }
+        hit.open(runtime)
     }
 
     val handlers =

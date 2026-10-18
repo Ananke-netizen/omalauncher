@@ -11,7 +11,7 @@ page "start" {
   source m = android.media
   source modes = android.modes
   // Ranked as the drawer's search ranks them: opened often and lately first.
-  source apps = android.apps every 5m
+  source apps = android.apps
 
   let hour = num(fmtTime(now, "H"))
   let minute = hour * 60 + num(fmtTime(now, "m"))

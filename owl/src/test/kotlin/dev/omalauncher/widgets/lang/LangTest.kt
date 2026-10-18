@@ -689,6 +689,25 @@ class LangTest {
         assertTrue(compileError("widget {\n meta { owl: 7 }\n source a = android.apps\n Text { text: 1 } }").contains("android.apps needs owl 8"))
     }
 
+    @Test fun androidAgents() {
+        val p = Compiler.compile("widget {\n meta { owl: 11 }\n source ag = android.agents\n Text { text: ag.default.bin; onTap: terminal(ag.default.command, ag.default.name) } }")
+        assertEquals(listOf("android.agents"), p.globals.map { (it as Global.Source).kind })
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n source ag = android.agents\n Text { text: 1 } }").contains("android.agents needs owl 11"))
+    }
+
+    @Test fun recentAppsOpenAndAgentsAsk() {
+        val p =
+            Compiler.compile(
+                "widget {\n meta { owl: 11 }\n source r = android.recent\n state q = \"\"\n" +
+                    " Image { src: r[0].icon; onTap: open(r[0].key) }\n Input { text: q; onSubmit: ask(value) }\n Text { text: 1; onTap: ask(\"what's new?\", \"claude\") } }",
+            )
+        assertEquals(listOf("android.recent"), p.globals.filterIsInstance<Global.Source>().map { it.kind })
+        assertEquals(listOf("read the recently opened apps", "ask the agent something built from widget values", "ask the agent: what's new?"), p.commands)
+        for (old in listOf("source r = android.recent\n Text { text: 1 }", "Text { text: 1; onTap: open(\"l:foot\") }", "Text { text: 1; onTap: ask(\"hi\") }")) {
+            assertTrue(compileError("widget {\n meta { owl: 10 }\n $old }").contains("needs owl 11"))
+        }
+    }
+
     @Test fun appsGoBackALevelWhileBackHolds() {
         val app = Compiler.compile("app \"x\" {\n meta { owl: 8 }\n state page = \"\"\n title: page == \"\" ? \"x\" : page\n back: page != \"\"\n onBack: page = \"\"\n Text { text: 1; onTap: page = \"tar\" } }")
         val host = TestHost(app)

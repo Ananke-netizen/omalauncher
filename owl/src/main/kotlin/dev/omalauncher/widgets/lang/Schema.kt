@@ -107,6 +107,8 @@ internal val SINCE =
         mapOf(PAGE_FILE to 10, "onLongPress" to 10) +
         // owl 11: text styled in pieces, by weight and spacing; gradients and frosted glass behind any node; Text in a Row as wide as its text.
         listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 11 } +
+        // owl 11: the coding agents in Linux and the recent strip's apps, for a page with its own prompt bar.
+        listOf("android.agents", "android.recent", "open", "ask").associateWith { 11 } +
         // owl 11: fonts of the widget's own, and Canvas text styled like a Text.
         listOf(FONT_FILE, CANVAS_TEXT_STYLE).associateWith { 11 }
 
@@ -153,8 +155,8 @@ internal val HANDLER_KINDS = mapOf("onChange" to setOf("Slider", "Input"), "onSu
 /** What triggers bind in their statements. */
 internal val TRIGGER_PARAMS = mapOf("on" to listOf("value", "old"))
 
-/** Data only Android has; battery, media, notifications, volume, alarm and modes update as they change, device is fixed, system and apps are polled. */
-internal val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "alarm", "modes", "apps")
+/** Data from the phone and the launcher; device is fixed, system is polled, the rest update as they change. */
+internal val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "alarm", "modes", "apps", "agents", "recent")
 
 /** The words an action's first value may be, when it's written out; [numbers] also allows a number. */
 internal class Words(

@@ -121,6 +121,9 @@ interface Services {
     /** An Android app's icon, `Image { src: "app:org.pkg" }`; null until the launcher has loaded it, or if there's no such app. */
     fun appIcon(pkg: String): ImageBitmap? = null
 
+    /** A launcher app's icon by its `android.recent` key, `Image { src: "icon:l:foot" }`: Linux, Android, owl apps and shortcuts alike. */
+    fun launcherIcon(key: String): ImageBitmap? = null
+
     /** Runs an action; [done] is called once its effects should be visible, to refresh the widget that ran it. */
     fun act(
         name: String,
