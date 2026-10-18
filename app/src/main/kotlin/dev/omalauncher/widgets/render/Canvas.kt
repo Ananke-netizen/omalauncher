@@ -261,7 +261,7 @@ private class Painter(
                             fontSize = (named["size"]?.num() ?: 13.0).sp,
                             fontWeight = (if (styled) weight(named["fontWeight"]) else null) ?: if (named["bold"]?.truthy == true) FontWeight.Bold else null,
                             fontStyle = if (styled && named["italic"]?.truthy == true) FontStyle.Italic else null,
-                            letterSpacing = (if (styled) named["letterSpacing"]?.num()?.sp else null) ?: TextUnit.Unspecified,
+                            letterSpacing = (if (styled) textUnit(named["letterSpacing"]) else null) ?: TextUnit.Unspecified,
                         ),
                     )
                 val w = layout.size.width / density

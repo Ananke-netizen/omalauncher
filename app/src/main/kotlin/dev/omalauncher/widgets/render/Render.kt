@@ -703,10 +703,10 @@ internal fun spans(
                 SpanStyle(
                     color = f["color"]?.let { c -> Builtins.argb(c, inst)?.let(::Color) } ?: Color.Unspecified,
                     fontFamily = f["font"]?.let { fontFamily(it, inst) },
-                    fontSize = f["fontSize"]?.num()?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+                    fontSize = textUnit(f["fontSize"]) ?: androidx.compose.ui.unit.TextUnit.Unspecified,
                     fontWeight = weight(f["fontWeight"]) ?: if (f["bold"]?.truthy == true) FontWeight.Bold else null,
                     fontStyle = if (f["italic"]?.truthy == true) FontStyle.Italic else null,
-                    letterSpacing = f["letterSpacing"]?.num()?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+                    letterSpacing = textUnit(f["letterSpacing"]) ?: androidx.compose.ui.unit.TextUnit.Unspecified,
                 )
             withStyle(style) { append(f["text"]?.spanText().orEmpty()) }
         }
@@ -734,6 +734,9 @@ internal fun fontFamily(
 /** A font weight, 100 (thin) to 900 (black); the font shows the nearest one it has. */
 internal fun weight(v: Value?) = v?.num()?.takeIf { it.isFinite() }?.let { FontWeight(it.toInt().coerceIn(1, 1000)) }
 
+/** A size or spacing in sp, within bounds: a NaN one (sqrt of a negative, "NaN" from a command) throws as text is laid out. */
+internal fun textUnit(v: Value?) = v?.num()?.takeIf { it.isFinite() }?.coerceIn(-1000.0, 1000.0)?.sp
+
 @Composable
 private fun TextNode(
     p: Props,
@@ -754,9 +757,9 @@ private fun TextNode(
     val textStyle =
         TextStyle(
             fontFamily = fontFamily(p.observe("font"), p.inst),
-            fontSize = p.observe("fontSize")?.num()?.sp ?: base.fontSize,
+            fontSize = textUnit(p.observe("fontSize")) ?: base.fontSize,
             fontWeight = weight(p.observe("fontWeight")) ?: if (p.observe("bold")?.truthy == true) FontWeight.Bold else null,
-            letterSpacing = p.observe("letterSpacing")?.num()?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+            letterSpacing = textUnit(p.observe("letterSpacing")) ?: androidx.compose.ui.unit.TextUnit.Unspecified,
             fontStyle = if (p.observe("italic")?.truthy == true) FontStyle.Italic else null,
             textAlign =
                 when (p.observe("align")?.toString()) {
