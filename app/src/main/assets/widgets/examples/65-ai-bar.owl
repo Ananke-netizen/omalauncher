@@ -3,7 +3,7 @@ widget "ai bar" {
   order: 30
   size: 6x2
   minSize: 4x2
-  meta { description: "The launcher's prompt bar and recent apps, written in owl: type to find an app, Enter opens it or asks your agent, tap the agent's name to switch"; version: "1.0"; license: "MIT"; category: "productivity"; owl: 11 }
+  meta { description: "The launcher's prompt bar and recent apps, written in owl: type to find an app, Enter opens it or asks your agent, tap the agent's name to pick another"; version: "1.0"; license: "MIT"; category: "productivity"; owl: 11 }
   padding: 0
   background: transparent
 
@@ -11,8 +11,9 @@ widget "ai bar" {
   source r = android.recent
   source apps = android.apps
   state q = ""
-  // The agent picked with a tap on its name; "" follows the launcher's default.
-  state pick = ""
+  // The agent picked from the menu under its name; "" follows the launcher's default.
+  state pick = "" persist
+  state menu = false
 
   let agent = find(ag.installed, a => a.bin == pick) ?? ag.default
   let query = lower(trim(q))
@@ -25,7 +26,26 @@ widget "ai bar" {
 
   Column {
     gap: 6
+    // The agent menu takes the strip's place while it's open, as the bar's pops up above it.
     Row {
+      visible: menu
+      gap: 4
+      height: 52
+      align: center
+      for a in ag.installed key a.bin {
+        Box {
+          size: 50
+          padding: 5
+          radius: 12
+          border: a.bin == agent.bin ? 1 : 0
+          borderColor: accent
+          Image { src: a.icon; size: 40; onTap: { pick = a.bin; menu = false } }
+        }
+      }
+      Text { text: "manage agents…"; color: muted; padding: [8, 12]; onTap: { menu = false; launcher("agents") } }
+    }
+    Row {
+      visible: !menu
       gap: 2
       height: 52
       for x, i in strip key x.key {
@@ -47,14 +67,13 @@ widget "ai bar" {
       borderColor: border
       background: alpha(background, 0.9)
       Text {
-        text: agent == null ? "agent" : "${agent.bin} ⌄"
+        spans: [agent == null ? "agent" : agent.bin, {text: menu ? " ⌃" : " ⌄", color: muted}]
         color: agent == null ? muted : accent
         onTap: {
           if agent == null {
             launcher("agents")
           } else {
-            let names = map(ag.installed, a => a.bin)
-            pick = names[(indexOf(names, agent.bin) + 1) % len(names)]
+            menu = !menu
           }
         }
       }
@@ -63,7 +82,7 @@ widget "ai bar" {
         text: q
         clear: true
         placeholder: agent == null ? "open an app…" : "open an app or ask ${agent.bin}…"
-        onChange: q = value
+        onChange: { q = value; menu = false }
         onSubmit: {
           if opens {
             open(matches[0].key)
