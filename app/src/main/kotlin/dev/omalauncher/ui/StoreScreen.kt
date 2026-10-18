@@ -61,11 +61,11 @@ import dev.omalauncher.widgets.market.CatalogEntry
 import kotlinx.coroutines.launch
 
 /**
- * The store, with a toggle between widgets, pages and apps. Widgets: built-in terminal tiles (a plain shell,
+ * The store, with a toggle between widgets, faces and apps. Widgets: built-in terminal tiles (a plain shell,
  * and one per installed coding agent), then reviewed widgets from the marketplace repo as a grid of
- * previews, with search and category tabs (and one for the newest). Pages and apps: the reviewed ones, the same way.
+ * previews, with search and category tabs (and one for the newest). Faces and apps: the reviewed ones, the same way.
  * Tapping one opens its page, which shows what it installs and runs; from there a widget goes on the current page,
- * a page left of page 1 and an app in the drawer (or any of them updates).
+ * a face left of page 1 and an app in the drawer (or any of them updates).
  */
 @Composable
 fun StoreScreen(
@@ -130,7 +130,7 @@ fun StoreScreen(
                         onInstall = {
                             scope.launch {
                                 message = market.install(e, page)
-                                // A widget closes the store to show it on its page; an app or a page stays, its page saying where it went.
+                                // A widget closes the store to show it on its page; an app or a face stays, its page saying where it went.
                                 if (message == null && market.kind == OwlKind.Widget) onDismiss()
                             }
                         },
@@ -165,7 +165,7 @@ fun StoreScreen(
     }
 }
 
-/** Widgets, pages or apps: segments in the store's header, the shown one filled. */
+/** Widgets, faces or apps: segments in the store's header, the shown one filled. */
 @Composable
 private fun KindToggle(
     kind: OwlKind,
@@ -209,7 +209,7 @@ private fun StoreList(
     onDismiss: () -> Unit,
 ) {
     val apps = market.kind == OwlKind.App
-    // Pages get a "new" tab like widgets; apps have never had one.
+    // Faces get a "new" tab like widgets; apps have never had one.
     val noun = "${market.kind.word}s"
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -412,7 +412,7 @@ private fun Card(
     ) {
         Box(Modifier.fillMaxWidth().height(104.dp), contentAlignment = Alignment.Center) {
             if (preview != null && market.kind != OwlKind.Widget) {
-                // A whole phone screen would be a sliver this high: its top, as wide as the card, reads as the app or page.
+                // A whole phone screen would be a sliver this high: its top, as wide as the card, reads as the app or face.
                 Image(preview, null, Modifier.fillMaxSize(), alignment = Alignment.TopCenter, contentScale = ContentScale.FillWidth)
             } else if (preview != null) {
                 Image(preview, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
@@ -533,7 +533,7 @@ private fun Detail(
                 BracketAction(
                     when (market.kind) {
                         OwlKind.Widget -> "add to page $page"
-                        OwlKind.Page -> "add as a page"
+                        OwlKind.Face -> "add as a face"
                         OwlKind.App -> "install"
                     },
                     Palette.accent,
@@ -552,13 +552,13 @@ private fun Detail(
     }
 }
 
-/** Where an added widget, page or app went. */
+/** Where an added widget, face or app went. */
 @Composable
 internal fun AddedMark(kind: OwlKind) =
     BasicText(
         when (kind) {
             OwlKind.Widget -> "✓ on your home screen"
-            OwlKind.Page -> "✓ left of your first page"
+            OwlKind.Face -> "✓ left of your first page"
             OwlKind.App -> "✓ in your app drawer"
         },
         style = Mono.copy(color = Palette.green),

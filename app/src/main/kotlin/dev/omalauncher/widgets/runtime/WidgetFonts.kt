@@ -18,7 +18,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * A widget's own fonts by src (owl 11): a TTF or OTF from an asset, a file in this system or the web,
+ * A widget's own fonts by src (owl 10): a TTF or OTF from an asset, a file in this system or the web,
  * loaded off the main thread. A variable font with a weight axis gets a face at each hundred from 100
  * to 900, so `fontWeight` picks a real weight instead of a smeared bold.
  */
@@ -71,6 +71,8 @@ internal class WidgetFonts(
             "wOFF", "wOF2" -> throw IllegalStateException("is a WOFF web font, which Android can't read; use the TTF or OTF")
             else -> throw IllegalStateException("isn't a TTF or OTF font")
         }
+        // Parsed here, off the main thread, so a damaged file is reported rather than met while text is laid out.
+        android.graphics.fonts.Font.Builder(file).build()
         // A face per weight that Compose picks from by fontWeight; one face alone it makes bold and italic itself.
         val axis = weightAxis(bytes) ?: return FontFamily(Font(file))
         val weights = (100..900 step 100).map { it.coerceIn(axis.first, axis.last) }.distinct()

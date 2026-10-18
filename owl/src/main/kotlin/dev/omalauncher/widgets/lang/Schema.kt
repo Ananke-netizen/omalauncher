@@ -39,7 +39,9 @@ internal val KINDS: Map<String, Kind> =
         "Terminal" to Kind(setOf("command", "fontSize"), Children.NONE),
         // owl 4: input.
         "Slider" to Kind(setOf("value", "min", "max", "step", "color", "track", "live"), Children.NONE),
-        "Input" to Kind(setOf("text", "placeholder", "color", "fontSize", "clear", "focus"), Children.NONE),
+        "Input" to Kind(setOf("text", "placeholder", "color", "fontSize", "clear", "focus", "underline"), Children.NONE),
+        // owl 10: a menu over everything else, next to the node that holds it.
+        "Popup" to Kind(setOf("position", "gap", "align"), Children.UI),
     )
 
 internal val COMMON =
@@ -60,9 +62,10 @@ internal val ENUMS =
         "font" to setOf("mono", "sans", "serif", "icon"),
         "fill" to setOf("width", "height"),
         "cap" to setOf("round", "butt", "square"),
+        "position" to setOf("above", "below"),
     )
 
-/** text(...)'s options beyond size, color, align and bold, as Text has them (owl 11). */
+/** text(...)'s options beyond size, color, align and bold, as Text has them (owl 10). */
 internal val TEXT_STYLE = setOf("font", "fontWeight", "italic", "letterSpacing")
 
 /** Canvas calls: positional arity, and whether they take a { } body of further calls. */
@@ -103,16 +106,16 @@ internal val SINCE =
         listOf("set", "remove", "merge", "reduce", "scan", "groupBy", "toJson", "capitalize", "asin", "acos", FLATTEN_DEPTH, ON_FIRST).associateWith { 9 } +
         // owl 9: handlers that choose, and name values on the way.
         listOf(HANDLER_IF, HANDLER_LET).associateWith { 9 } +
-        // owl 10: pages, files that are a whole home page; long-press where it isn't the home screen's.
-        mapOf(PAGE_FILE to 10, "onLongPress" to 10) +
-        // owl 11: text styled in pieces, by weight and spacing; gradients and frosted glass behind any node; Text in a Row as wide as its text.
-        listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 11 } +
-        // owl 11: the coding agents in Linux and the recent strip's apps, for a page with its own prompt bar.
-        listOf("android.agents", "android.recent", "open", "ask").associateWith { 11 } +
-        // owl 11: fonts of the widget's own, and Canvas text styled like a Text.
-        listOf(FONT_FILE, CANVAS_TEXT_STYLE).associateWith { 11 }
+        // owl 10: faces, files that are a whole home page; long-press where it isn't the home screen's.
+        mapOf(FACE_FILE to 10, "onLongPress" to 10) +
+        // owl 10: text styled in pieces, by weight and spacing; gradients and frosted glass behind any node; Text in a Row as wide as its text.
+        listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 10 } +
+        // owl 10: the coding agents in Linux and the recent strip's apps, for a face with its own prompt bar.
+        listOf("android.agents", "android.recent", "open", "ask", "Popup", "Input.underline").associateWith { 10 } +
+        // owl 10: fonts of the widget's own, and Canvas text styled like a Text.
+        listOf(FONT_FILE, CANVAS_TEXT_STYLE).associateWith { 10 }
 
-internal const val PAGE_FILE = "page \"…\" { }"
+internal const val FACE_FILE = "face \"…\" { }"
 
 internal const val GRADIENT_BACKGROUND = "a gradient background"
 
@@ -147,10 +150,11 @@ internal val HANDLER_PARAMS =
         "onDrag" to listOf("dx", "dy", "x", "y"),
         "onChange" to listOf("value"),
         "onSubmit" to listOf("value"),
+        "onDismiss" to emptyList(),
     )
 
 /** Handlers only some nodes have. */
-internal val HANDLER_KINDS = mapOf("onChange" to setOf("Slider", "Input"), "onSubmit" to setOf("Input"))
+internal val HANDLER_KINDS = mapOf("onChange" to setOf("Slider", "Input"), "onSubmit" to setOf("Input"), "onDismiss" to setOf("Popup"))
 
 /** What triggers bind in their statements. */
 internal val TRIGGER_PARAMS = mapOf("on" to listOf("value", "old"))
@@ -183,5 +187,5 @@ internal val NUMBERS = setOf("int", "round", "floor", "ceil", "abs", "fixed", "l
 
 internal val WIDGET_PROPS = setOf("size", "minSize", "page", "order", "padding", "background")
 
-/** A page has no tile's size; it says where it goes and whether the status bar stays over it. */
-internal val PAGE_PROPS = setOf("page", "order", "padding", "background", "statusBar")
+/** A face has no tile's size; it says where it goes and whether the status bar stays over it. */
+internal val FACE_PROPS = setOf("page", "order", "padding", "background", "statusBar")

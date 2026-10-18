@@ -2,6 +2,7 @@ package dev.omalauncher.widgets.lang
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -690,21 +691,34 @@ class LangTest {
     }
 
     @Test fun androidAgents() {
-        val p = Compiler.compile("widget {\n meta { owl: 11 }\n source ag = android.agents\n Text { text: ag.default.bin; onTap: terminal(ag.default.command, ag.default.name) } }")
+        val p = Compiler.compile("widget {\n meta { owl: 10 }\n source ag = android.agents\n Text { text: ag.default.bin; onTap: terminal(ag.default.command, ag.default.name) } }")
         assertEquals(listOf("android.agents"), p.globals.map { (it as Global.Source).kind })
-        assertTrue(compileError("widget {\n meta { owl: 10 }\n source ag = android.agents\n Text { text: 1 } }").contains("android.agents needs owl 11"))
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n source ag = android.agents\n Text { text: 1 } }").contains("android.agents needs owl 10"))
+    }
+
+    @Test fun inputsCanLeaveOutTheirLine() {
+        Compiler.compile("widget {\n meta { owl: 10 }\n Input { underline: false } }")
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n Input { underline: false } }").contains("Input.underline needs owl 10"))
+    }
+
+    @Test fun popupsNeedOnDismissAndOwl10() {
+        val ok = "widget {\n meta { owl: 10 }\n state open = false\n Box { Text { text: \"x\"; onTap: open = true }\n Popup { visible: open; position: above; onDismiss: open = false\n Text { text: \"y\" } } } }"
+        Compiler.compile(ok)
+        assertTrue(compileError(ok.replace("owl: 10", "owl: 9")).contains("Popup needs owl 10"))
+        assertTrue(compileError(ok.replace("; onDismiss: open = false", "")).contains("a Popup needs onDismiss"))
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { text: 1; onDismiss: refresh() } }").contains("onDismiss only works on Popup"))
     }
 
     @Test fun recentAppsOpenAndAgentsAsk() {
         val p =
             Compiler.compile(
-                "widget {\n meta { owl: 11 }\n source r = android.recent\n state q = \"\"\n" +
+                "widget {\n meta { owl: 10 }\n source r = android.recent\n state q = \"\"\n" +
                     " Image { src: r[0].icon; onTap: open(r[0].key) }\n Input { text: q; onSubmit: ask(value) }\n Text { text: 1; onTap: ask(\"what's new?\", \"claude\") } }",
             )
         assertEquals(listOf("android.recent"), p.globals.filterIsInstance<Global.Source>().map { it.kind })
         assertEquals(listOf("read the recently opened apps", "ask the agent something built from widget values", "ask the agent: what's new?"), p.commands)
         for (old in listOf("source r = android.recent\n Text { text: 1 }", "Text { text: 1; onTap: open(\"l:foot\") }", "Text { text: 1; onTap: ask(\"hi\") }")) {
-            assertTrue(compileError("widget {\n meta { owl: 10 }\n $old }").contains("needs owl 11"))
+            assertTrue(compileError("widget {\n meta { owl: 9 }\n $old }").contains("needs owl 10"))
         }
     }
 
@@ -732,7 +746,7 @@ class LangTest {
     }
 
     @Test fun longPressIsForPagesAppsAndScreens() {
-        Compiler.compile("page {\n meta { owl: 10 }\n Text { text: 1; onLongPress: close() }\n screen { Text { text: 2 } } }")
+        Compiler.compile("face {\n meta { owl: 10 }\n Text { text: 1; onLongPress: close() }\n screen { Text { text: 2 } } }")
         Compiler.compile("app {\n meta { owl: 10 }\n state n = 0\n Text { text: n; onLongPress: n = x } }")
         Compiler.compile("widget {\n meta { owl: 10 }\n Text { text: 1; onTap: screen() }\n screen { Text { text: 2; onLongPress: close() } } }")
         // A component can go anywhere: on a tile the launcher leaves its long presses to the home screen.
@@ -741,54 +755,61 @@ class LangTest {
         assertTrue(compileError("app {\n meta { owl: 9 }\n Text { text: 1; onLongPress: close() } }").contains("onLongPress needs owl 10"))
     }
 
-    @Test fun pagesAreWholeHomePages() {
-        val page = Compiler.compile("page \"start\" {\n meta { owl: 10 }\n Text { text: 1 } }")
-        assertEquals(OwlKind.Page, page.kind)
-        assertEquals("start", page.name)
-        assertTrue(page.fullPage)
-        assertNull(page.size)
-        assertTrue(page.statusBar)
+    @Test fun facesAreWholeHomePages() {
+        val face = Compiler.compile("face \"start\" {\n meta { owl: 10 }\n Text { text: 1 } }")
+        assertEquals(OwlKind.Face, face.kind)
+        assertEquals("start", face.name)
+        assertTrue(face.isFace)
+        assertNull(face.size)
+        assertNull(face.statusBar)
         // Left of page 1 unless it says: 0, then -1, -2, ... further left.
-        assertEquals(0, page.page)
-        assertEquals(-2, Compiler.compile("page {\n meta { owl: 10 }\n page: -2\n Text { text: 1 } }").page)
-        assertEquals(3, Compiler.compile("page {\n meta { owl: 10 }\n page: 3\n Text { text: 1 } }").page)
-        assertFalse(Compiler.compile("page {\n meta { owl: 10 }\n statusBar: false\n Text { text: 1 } }").statusBar)
+        assertEquals(0, face.page)
+        assertEquals(-2, Compiler.compile("face {\n meta { owl: 10 }\n page: -2\n Text { text: 1 } }").page)
+        assertEquals(3, Compiler.compile("face {\n meta { owl: 10 }\n page: 3\n Text { text: 1 } }").page)
+        assertEquals(false, Compiler.compile("face {\n meta { owl: 10 }\n statusBar: false\n Text { text: 1 } }").statusBar?.const?.truthy)
         // A tile can't go left of page 1.
         assertEquals(1, Compiler.compile("widget {\n size: 2x2\n page: 0\n Text { text: 1 } }").page)
-        assertFalse(Compiler.compile("widget {\n Text { text: 1 } }").fullPage)
+        // Nor so far out that the pages beside it wrap around Int.
+        assertEquals(-1000, Compiler.compile("face {\n meta { owl: 10 }\n page: -2147483648\n Text { text: 1 } }").page)
+        assertEquals(1000, Compiler.compile("widget {\n page: 2147483647\n Text { text: 1 } }").page)
+        // A bare / as the command compiles rather than throwing past the compile error.
+        Compiler.compile("widget {\n source s = cmd(\"/\")\n Text { text: s } }")
+        assertFalse(Compiler.compile("widget {\n Text { text: 1 } }").isFace)
 
-        assertTrue(compileError("page {\n Text { text: 1 } }").contains("needs owl 10"))
-        assertTrue(compileError("page {\n meta { owl: 10 }\n size: 2x2\n Text { text: 1 } }").contains("unknown page property 'size'"))
-        assertTrue(compileError("page {\n meta { owl: 10 }\n state s = true\n statusBar: s\n Text { text: 1 } }").contains("statusBar is true or false"))
+        assertTrue(compileError("face {\n Text { text: 1 } }").contains("needs owl 10"))
+        assertTrue(compileError("face {\n meta { owl: 10 }\n size: 2x2\n Text { text: 1 } }").contains("unknown face property 'size'"))
+        // Read as it changes: a face can hide the status bar for a while.
+        assertNotNull(Compiler.compile("face {\n meta { owl: 10 }\n state s = true\n statusBar: !s\n Text { text: 1; onTap: s = !s } }").statusBar)
         assertTrue(compileError("widget {\n statusBar: false\n Text { text: 1 } }").contains("unknown widget property"))
-        assertEquals(OwlKind.Page, OwlKind.of("// mine\npage \"x\" {"))
-        // A page runs under the navigation bar, like an edge app; its screen { } doesn't.
-        Compiler.compile("page {\n meta { owl: 10 }\n Spacer { height: screenInset } }")
-        assertTrue(compileError("page {\n meta { owl: 10 }\n Text { text: 1; onTap: screen() }\n screen { Text { text: screenInset } } }").contains("screenInset is for apps"))
-        // A page has a screen's room: more nodes than a tile.
+        assertEquals(OwlKind.Face, OwlKind.of("// mine\nface \"x\" {"))
+        // A face runs under the navigation bar, like an edge app; its screen { } doesn't.
+        Compiler.compile("face {\n meta { owl: 10 }\n Spacer { height: screenInset } }")
+        // Its components and lets too, which are compiled before the face's own nodes.
+        Compiler.compile("face {\n meta { owl: 10 }\n let bottom = screenInset + 8\n component Foot() { Spacer { height: screenInset } }\n Column { Foot { }  Spacer { height: bottom } } }")
+        assertTrue(compileError("face {\n meta { owl: 10 }\n Text { text: 1; onTap: screen() }\n screen { Text { text: screenInset } } }").contains("screenInset is for apps"))
+        // A face has a screen's room: more nodes than a tile.
         val many = (1..600).joinToString("\n") { "Text { text: $it }" }
-        Compiler.compile("page {\n meta { owl: 10 }\n Column {\n$many\n } }")
+        Compiler.compile("face {\n meta { owl: 10 }\n Column {\n$many\n } }")
         assertTrue(compileError("widget {\n Column {\n$many\n } }").contains("more than 500 nodes"))
     }
 
-    @Test fun textInPiecesAndGradientBackgroundsNeedOwl11() {
-        Compiler.compile("widget {\n meta { owl: 11 }\n Text { spans: [\"15\", {text: \":\", color: accent, fontWeight: 300}, \"34\"]; fontWeight: 200; letterSpacing: -2 } }")
-        Compiler.compile("page {\n meta { owl: 11 }\n background: linear(0, 0, 0, 1, [background, alpha(background, 0.3)])\n Column { background: true ? radial(0.5, 0.5, 0.5, [accent, surface]) : surface } }")
-        assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { spans: [\"a\"] } }").contains("Text.spans needs owl 11"))
-        assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { text: 1; fontWeight: 300 } }").contains("Text.fontWeight needs owl 11"))
-        assertTrue(compileError("widget {\n meta { owl: 10 }\n Column { background: linear(0, 0, 1, 0, [red, blue]) } }").contains("a gradient background needs owl 11"))
-        assertTrue(compileError("page {\n meta { owl: 10 }\n background: linear(0, 0, 1, 0, [red, blue])\n Text { text: 1 } }").contains("a gradient background needs owl 11"))
-        Compiler.compile("page {\n meta { owl: 11 }\n Column { frost: 24; background: alpha(surface, 0.4) } }")
-        assertTrue(compileError("widget {\n meta { owl: 10 }\n Column { frost: 24 } }").contains("frost needs owl 11"))
-        assertTrue(compileError("widget {\n meta { owl: 10 }\n component Card() { Column { } }\n Card { frost: 24 } }").contains("frost needs owl 11"))
+    @Test fun textInPiecesAndGradientBackgroundsNeedOwl10() {
+        Compiler.compile("widget {\n meta { owl: 10 }\n Text { spans: [\"15\", {text: \":\", color: accent, fontWeight: 300}, \"34\"]; fontWeight: 200; letterSpacing: -2 } }")
+        Compiler.compile("face {\n meta { owl: 10 }\n background: linear(0, 0, 0, 1, [background, alpha(background, 0.3)])\n Column { background: true ? radial(0.5, 0.5, 0.5, [accent, surface]) : surface } }")
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n Text { spans: [\"a\"] } }").contains("Text.spans needs owl 10"))
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n Text { text: 1; fontWeight: 300 } }").contains("Text.fontWeight needs owl 10"))
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n Column { background: linear(0, 0, 1, 0, [red, blue]) } }").contains("a gradient background needs owl 10"))
+        Compiler.compile("face {\n meta { owl: 10 }\n Column { frost: 24; background: alpha(surface, 0.4) } }")
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n Column { frost: 24 } }").contains("frost needs owl 10"))
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n component Card() { Column { } }\n Card { frost: 24 } }").contains("frost needs owl 10"))
         // A color background is as old as backgrounds.
         Compiler.compile("widget {\n Column { background: alpha(surface, 0.5) } }")
     }
 
-    @Test fun fontsOfTheirOwnNeedOwl11() {
+    @Test fun fontsOfTheirOwnNeedOwl10() {
         val p =
             Compiler.compile(
-                "page {\n meta { owl: 11 }\n asset display = base64\"AAEAAA==\"\n let base = \"https://x.test/fonts\"\n" +
+                "face {\n meta { owl: 10 }\n asset display = base64\"AAEAAA==\"\n let base = \"https://x.test/fonts\"\n" +
                     " Text { text: 1; font: display }\n Text { text: 2; font: \"${'$'}{base}/Inter.ttf\" }\n Text { text: 3; font: \"~/.fonts/a.otf\" }\n" +
                     " Canvas { text([\"12\", {text: \":\", font: \"serif\"}], 10, 10, font: \"https://y.test/a.ttf\", fontWeight: 200, italic: true, letterSpacing: -1) } }",
             )
@@ -796,9 +817,12 @@ class LangTest {
         assertTrue(!p.needsLinux)
         // The words are as old as fonts, written as a word or as text.
         Compiler.compile("widget {\n Text { text: 1; font: serif }\n Text { text: 2; font: \"sans\" } }")
-        assertTrue(compileError("widget {\n meta { owl: 10 }\n asset f = base64\"AAEAAA==\"\n Text { text: 1; font: f } }").contains("a font of its own needs owl 11"))
-        assertTrue(compileError("widget {\n meta { owl: 10 }\n Canvas { text(\"a\", 0, 0, fontWeight: 300) } }").contains("text(...) with font, fontWeight, italic or letterSpacing needs owl 11"))
-        assertTrue(compileError("widget {\n meta { owl: 11 }\n Text { text: 1; font: \"http://x.test/a.ttf\" } }").contains("https only"))
+        // So is one picked at run time, as store widgets from before owl 10 do.
+        Compiler.compile("widget {\n meta { owl: 8 }\n state f = \"mono\" persist\n Text { text: 1; font: f }\n Text { text: 2; font: f == \"mono\" ? \"mono\" : \"sans\" } }")
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n Text { text: 1; font: true ? \"mono\" : \"https://x.test/a.ttf\" } }").contains("a font of its own needs owl 10"))
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n asset f = base64\"AAEAAA==\"\n Text { text: 1; font: f } }").contains("a font of its own needs owl 10"))
+        assertTrue(compileError("widget {\n meta { owl: 9 }\n Canvas { text(\"a\", 0, 0, fontWeight: 300) } }").contains("text(...) with font, fontWeight, italic or letterSpacing needs owl 10"))
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Text { text: 1; font: \"http://x.test/a.ttf\" } }").contains("https only"))
     }
 
     @Test fun appsAreScreensOfTheirOwn() {

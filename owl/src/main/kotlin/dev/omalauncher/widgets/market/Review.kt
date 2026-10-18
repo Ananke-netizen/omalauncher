@@ -28,7 +28,7 @@ class Review(
     var name = ""
         private set
 
-    /** What the path says it is: under apps/ an app, under pages/ a page, else a widget. */
+    /** What the path says it is: under apps/ an app, under faces/ a face, else a widget. */
     val kind get() = OwlKind.entries.firstOrNull { path.startsWith(it.word + "s/") } ?: OwlKind.Widget
 
     val id get() = "$author/$name"
@@ -42,7 +42,7 @@ class Review(
     private fun run() {
         val m = PATH.matchEntire(path)
         if (m == null) {
-            errors += "widgets go at widgets/<author>/<name>/widget.owl, pages at pages/<author>/<name>/page.owl and apps at apps/<author>/<name>/app.owl, " +
+            errors += "widgets go at widgets/<author>/<name>/widget.owl, faces at faces/<author>/<name>/face.owl and apps at apps/<author>/<name>/app.owl, " +
                 "in lowercase letters, digits and dashes (got $path)"
         } else {
             author = m.groupValues[2]
@@ -55,6 +55,10 @@ class Review(
                 Compiler.compile(text)
             } catch (e: CompileError) {
                 errors += "doesn't compile: " + Source(text).format(e)
+                return
+            } catch (e: RuntimeException) {
+                // A compiler bug, not the file's: turned down all the same rather than taking the share screen or CI with it.
+                errors += "doesn't compile: $e"
                 return
             }
         program = p
@@ -146,7 +150,7 @@ class Review(
 
     companion object {
         const val MAX_BYTES = 256 * 1024
-        val PATH = Regex("""(widget|page|app)s/([a-z0-9][a-z0-9-]{0,38})/([a-z0-9][a-z0-9-]{0,38})/\1\.owl""")
+        val PATH = Regex("""(widget|face|app)s/([a-z0-9][a-z0-9-]{0,38})/([a-z0-9][a-z0-9-]{0,38})/\1\.owl""")
         private val VERSION = Regex("""\d+(\.\d+){0,2}""")
 
         /** What in [commands] matches [RISKS], one line each: "command pipes a download into a shell: curl ... | sh". */
@@ -181,6 +185,9 @@ class Review(
                 // What the compiler lists for a command that isn't fixed text (Compiler's `commands`): it could be
                 // anything, a download for one, and can change after anyone read the widget.
                 UNQUOTED to "is put together while the widget runs, so what it runs can't be shown here",
+                // The compiler's line for ask(...) with text that isn't fixed: the agent acts on whatever it is, a download's
+                // text for one.
+                Regex("""\bask the agent something built from widget values$""") to "gives the agent text made while the widget runs, which could come from the web",
                 // sh(...) keeps a value one word, but not one that is the program, or code for one.
                 Regex("""(^|[;&|(`\n]|\$\()\s*${Compiler.VALUE}""") to "runs a program a widget value names",
                 Regex("""\b(eval|source|$INTERPRETERS)\s+(-\S+\s+)*${Compiler.VALUE}""") to "runs a widget value as code",
