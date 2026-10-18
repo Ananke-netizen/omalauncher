@@ -121,6 +121,9 @@ interface Services {
     /** An Android app's icon, `Image { src: "app:org.pkg" }`; null until the launcher has loaded it, or if there's no such app. */
     fun appIcon(pkg: String): ImageBitmap? = null
 
+    /** A launcher app's icon by its `android.recent` key, `Image { src: "icon:l:foot" }`: Linux, Android, owl apps and shortcuts alike. */
+    fun launcherIcon(key: String): ImageBitmap? = null
+
     /** Runs an action; [done] is called once its effects should be visible, to refresh the widget that ran it. */
     fun act(
         name: String,
@@ -172,6 +175,7 @@ class WidgetInstance(
     @Volatile private var parkedTime = 0.0
     private val cells = arrayOfNulls<State<Value>>(program.globals.size)
     private val images = WidgetImages(program, services, ::report)
+    private val fonts = WidgetFonts(program, services, ::report)
 
     /** Where the sources run; set by [start]. */
     private var scope: CoroutineScope? = null
@@ -457,6 +461,9 @@ class WidgetInstance(
     /** See [WidgetImages.image]. */
     fun image(src: String): WidgetImage? = images.image(src)
 
+    /** See [WidgetFonts.font]. */
+    fun font(src: String): androidx.compose.ui.text.font.FontFamily? = fonts.font(src)
+
     /** Keeps values of sources and state across a reload of the same file, so saving doesn't flash "…". */
     fun adopt(old: WidgetInstance) {
         program.globals.forEachIndexed { i, g ->
@@ -493,6 +500,7 @@ class WidgetInstance(
     ) {
         this.scope = scope
         images.scope = scope
+        fonts.scope = scope
         // A sound stops with the app's window or the screen it played in.
         jobs +=
             scope.launch {

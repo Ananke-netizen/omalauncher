@@ -24,7 +24,7 @@ class Compiler private constructor(
          * instead of failing on what they don't know. Bump it with every
          * addition a widget could depend on: nodes, properties, builtins.
          */
-        const val LEVEL = 9
+        const val LEVEL = 11
         private const val MAX_ASSET_BYTES = 2 shl 20
 
         /** An app icon is a shape or two drawn in SVG, not a picture. */
@@ -93,6 +93,9 @@ class Compiler private constructor(
 
     /** Whether nodes being compiled are the screen's (true) or the tile's (false); null in components, which can go in either. */
     private var inScreen: Boolean? = null
+
+    /** A page: it runs under the navigation bar, so its nodes may read `screenInset`. */
+    private var fullPage = false
 
     /** Where a handler calls screen() or close(), which need a screen { } block. */
     private var screenAction: Int? = null
@@ -176,9 +179,22 @@ class Compiler private constructor(
         val meta = body.decls.filterIsInstance<Decl.Meta>().flatMap { it.fields }.associate { it.name to constant(it.value, "meta values") }
         val requires = requires(body.decls.filterIsInstance<Decl.Requires>().flatMap { it.fields })
         if (ast.kind == OwlKind.App) return app(body, meta, level, requires, globals.map { it!! }, triggers)
-        for (p in body.props) if (p.name !in WIDGET_PROPS) fail("unknown widget property '${p.name}' (${WIDGET_PROPS.joinToString()})", p.pos)
+        // A page is a widget that fills a home page of its own, the whole screen: it gets a screen's room, and
+        // has no tile's size.
+        fullPage = ast.kind == OwlKind.Page
+        val allowed = if (fullPage) PAGE_PROPS else WIDGET_PROPS
+        for (p in body.props) {
+            if (p.name !in allowed) fail("unknown ${ast.kind.word} property '${p.name}' (${allowed.joinToString()})", p.pos)
+        }
+        if (fullPage) {
+            since(PAGE_FILE, 0)
+            maxNodes = MAX_SCREEN_NODES
+        }
+        // Whether the status bar stays over a page: fixed in the file, like an app's edge.
+        val statusBar =
+            props["statusBar"]?.let { p -> ((p.value as? Expr.Lit)?.value as? Bool)?.v ?: fail("statusBar is true or false, not an expression", p.pos) } ?: true
         val screens = body.items.filter { it is Item.Node && it.type == "screen" }.map { it as Item.Node }
-        if (screens.size > 1) fail("a widget has one screen { }", screens[1].pos)
+        if (screens.size > 1) fail("a ${ast.kind.word} has one screen { }", screens[1].pos)
         inScreen = false
         val rootNodes = items(body.items - screens.toSet(), root, Children.UI)
         if (rootNodes.isEmpty()) fail("a widget needs at least one node, like Text { text: \"hi\" }", 0)
@@ -186,6 +202,7 @@ class Compiler private constructor(
         val screen = screens.firstOrNull()?.let { screen(it) }
         val onTap = body.handlers.firstOrNull()?.let { handler(it, root) }
         if (screen == null) screenAction?.let { fail("screen() and close() need a screen { } block in the widget", it) }
+        val background = props["background"]?.let { if (gradient(it.value)) since(GRADIENT_BACKGROUND, it.pos); ex(it.value, root) }
         checkLevel(level)
 
         return Program(
@@ -193,11 +210,15 @@ class Compiler private constructor(
             meta = meta,
             level = level,
             size = props["size"]?.let { cells(it) },
+            fullPage = fullPage,
+            statusBar = statusBar,
+            kind = ast.kind,
             minSize = props["minSize"]?.let { cells(it) } ?: (1 to 1),
-            page = props["page"]?.let { constInt(it) }?.coerceAtLeast(1) ?: 1,
+            // A page goes left of page 1 by default: 0, and -1, -2, ... further left. A tile never does.
+            page = props["page"]?.let { constInt(it) }?.let { if (fullPage) it else it.coerceAtLeast(1) } ?: if (fullPage) 0 else 1,
             order = props["order"]?.let { constInt(it) } ?: 0,
             padding = props["padding"]?.let { constant(it.value, "padding").num() } ?: 12.0,
-            background = props["background"]?.let { ex(it.value, root) },
+            background = background,
             globals = globals.map { it!! },
             root = rootNodes,
             screen = screen?.first,
@@ -398,6 +419,17 @@ class Compiler private constructor(
         commands += "$what GET " + (whole ?: "$start…")
     }
 
+    /** A `font` that isn't one of the words names a font file: an asset, a file in this system or a URL (owl 11). */
+    private fun font(
+        e: Expr,
+        s: Scope,
+    ) {
+        val words = ENUMS.getValue("font")
+        if (e is Expr.Name && e.name in words || constText(e, s) in words) return
+        since(FONT_FILE, e.pos)
+        webFile(e, s, "font")
+    }
+
     /** The text [e] starts with whatever its values turn out to be: "https://x.test/" for "https://x.test/${id}.svg". */
     private fun constantStart(
         e: Expr,
@@ -486,6 +518,7 @@ class Compiler private constructor(
                 // Listed with the commands, so the store shows it before anyone installs the widget.
                 if (e.name == "notifications") commands += "read Android notifications (apps, titles and text)"
                 if (e.name == "apps") commands += "read installed Android apps (names, packages and icons)"
+                if (e.name == "recent") commands += "read the recently opened apps"
                 Global.Source(d.name, "android.${e.name}", null, (every ?: 60.0).coerceAtLeast(1.0), false, 0)
             }
             else -> fail("a source is cmd(\"...\"), stream(\"...\"), http(\"...\"), file(\"...\"), clock, or android.${ANDROID.joinToString("/")}", e.pos)
@@ -622,6 +655,8 @@ class Compiler private constructor(
         for ((k, v) in c.named) if (k !in DRAW_NAMED) fail("unknown option '$k' (${DRAW_NAMED.joinToString()})", v.pos)
         since(c.name, c.pos)
         if (c.name == "image") webFile(c.args[0], scope, "image")
+        if (c.name == "text" && c.named.any { it.first in TEXT_STYLE }) since(CANVAS_TEXT_STYLE, c.pos)
+        c.named.firstOrNull { it.first == "font" }?.let { font(it.second, scope) }
         nodes++
         return WNode.Draw(
             c.name,
@@ -639,7 +674,7 @@ class Compiler private constructor(
         n: Item.Node,
         scope: Scope,
     ): WNode {
-        if (++nodes > maxNodes) fail("more than $maxNodes nodes; ${if (maxNodes == MAX_NODES) "widgets" else "screens"} should stay small", n.pos)
+        if (++nodes > maxNodes) fail("more than $maxNodes nodes; ${if (maxNodes == MAX_NODES) "widgets" else "screens and pages"} should stay small", n.pos)
         if (n.type == "screen") fail("screen { } goes at the top of the widget, next to its nodes", n.pos)
         val body = n.body
         body.decls.firstOrNull()?.let { fail("declarations belong at the top of the widget", it.pos) }
@@ -653,12 +688,19 @@ class Compiler private constructor(
             // On a tile it would raise the keyboard whenever its page shows; in a component the launcher ignores it there.
             if (p.name == "focus" && inScreen == false) fail("focus only works in a screen { }", p.pos)
             since("${n.type}.${p.name}", p.pos)
+            if (p.name == "background" && gradient(p.value)) since(GRADIENT_BACKGROUND, p.pos)
+            if (p.name == "frost") since("frost", p.pos)
+            if (p.name == "font") font(p.value, scope)
             props[p.name] = prop(p, scope)
         }
         val handlers =
             body.handlers.associate { h ->
                 if (h.name !in HANDLER_PARAMS) fail("unknown handler '${h.name}' (${HANDLER_PARAMS.keys.joinToString()})", h.pos)
                 HANDLER_KINDS[h.name]?.let { kinds -> if (n.type !in kinds) fail("${h.name} only works on ${kinds.joinToString(" and ")}", h.pos) }
+                if (h.name == "onLongPress" && inScreen == false && !fullPage) {
+                    fail("long-press on a tile belongs to the home screen, which lifts it to move and resize it; onLongPress works in pages, apps and a screen { }", h.pos)
+                }
+                since(h.name, h.pos)
                 h.name to handler(h, scope)
             }
         val animations =
@@ -705,8 +747,18 @@ class Compiler private constructor(
                 given[name]?.let { ex(it.value, scope) } ?: c.defaults[i] ?: fail("${n.type} needs '$name'", n.pos)
             }
         val wrapper = body.props.filter { it.name !in c.params }.associate { it.name to prop(it, scope) }
+        body.props.firstOrNull { it.name == "frost" && it.name !in c.params }?.let { since("frost", it.pos) }
         return WNode.Use(n.type, args, wrapper, c.body, n.pos)
     }
+
+    /** Whether a background is written as a gradient, `linear(...)` or `radial(...)`, or chooses one: they need owl 11 there. */
+    private fun gradient(e: Expr): Boolean =
+        when (e) {
+            is Expr.Call -> e.name == "linear" || e.name == "radial"
+            is Expr.Cond -> gradient(e.a) || gradient(e.b)
+            is Expr.Binary -> e.op == "??" && (gradient(e.a) || gradient(e.b))
+            else -> false
+        }
 
     private fun enumOrNull(
         name: String,
@@ -826,6 +878,8 @@ class Compiler private constructor(
                 if (call.name == "sound") webFile(call.args[0], scope, "sound")
                 if (call.name == "screen" || call.name == "close") screenAction = screenAction ?: call.pos
                 if (call.name == "screen") openScreen = openScreen ?: call.pos
+                // The reviewer sees what a widget would ask, as it sees a command.
+                if (call.name == "ask") commands += (args[0].const as? Str)?.v?.let { "ask the agent: $it" } ?: "ask the agent something built from widget values"
                 if (call.name in setOf("run", "terminal", "app")) {
                     listCommand(call.args[0], args[0], scope, "${call.name}(…)")
                     // A tap on terminal(...) or app(...) without Linux offers to install it; run(...) would fail unseen.
@@ -1072,7 +1126,9 @@ class Compiler private constructor(
             return Ev(null, { env -> Num(env.host.time()) }, Fast { env -> env.host.time() })
         }
         // A widget's screen always ends above the navigation bar; only an app with `edge` runs under it.
-        if (e.name == "screenInset" && ast.kind != OwlKind.App) fail("screenInset is for apps with edge: true; a widget's screen ends above the navigation bar", e.pos)
+        if (e.name == "screenInset" && ast.kind != OwlKind.App && !(fullPage && inScreen != true)) {
+            fail("screenInset is for apps with edge: true and pages; a widget's screen ends above the navigation bar", e.pos)
+        }
         // Not reserved: widgets that already declare `rows` or `cols` keep their own.
         if (e.name in TILE || e.name == LINUX) {
             since(e.name, e.pos)
