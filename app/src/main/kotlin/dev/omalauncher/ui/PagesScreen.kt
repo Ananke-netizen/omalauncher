@@ -45,9 +45,9 @@ import dev.omalauncher.widgets.WidgetSpec
 import dev.omalauncher.widgets.editWidgetCommand
 
 /**
- * Home's pages, left to right: the pages of tiles and the full-screen pages (`page "…" { }`), whose long presses are
+ * Home's pages, left to right: the pages of tiles and the faces (`face "…" { }`), whose long presses are
  * their own, so they're arranged here. Drag a row by its handle to move the page; letting go numbers home's pages again
- * ([dev.omalauncher.widgets.WidgetEngine.arrangePages]). A full-screen page can be edited with the agent ([onAgent]) or
+ * ([dev.omalauncher.widgets.WidgetEngine.arrangePages]). A face can be edited with the agent ([onAgent]) or
  * shared ([onShare]); any page can be removed, after asking.
  */
 @Composable
@@ -59,8 +59,9 @@ internal fun PagesScreen(
 ) {
     val engine = runtime.widgets
     val pages = engine.pages
-    // While a row is dragged, the order it's shown in; a new page list (after letting go) starts it over.
-    var order by remember(pages) { mutableStateOf(pages) }
+    // While a row is dragged, the order it's shown in; otherwise home's own. One state for good: the handles' gestures
+    // outlive compositions, and one keyed by the page list left them moving rows in a list no longer shown.
+    var order by remember { mutableStateOf(pages) }
     var dragged by remember { mutableStateOf<Int?>(null) }
     var offset by remember { mutableFloatStateOf(0f) }
     val heights = remember { mutableStateMapOf<Int, Int>() }
@@ -69,7 +70,7 @@ internal fun PagesScreen(
     val gap = with(LocalDensity.current) { RowGap.roundToPx() }
     OverlayPanel("pages", onDismiss, contentWidth = ReadingWidth) {
         BasicText(
-            "Home's pages, left to right. Drag one by ≡ to move it. Home opens on the first with tiles; full-screen pages before it sit left of it.",
+            "Home's pages, left to right. Drag one by ≡ to move it. Home opens on the first with tiles; faces before it sit left of it.",
             style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
         )
         Spacer(Modifier.height(12.dp))
@@ -82,7 +83,7 @@ internal fun PagesScreen(
             return@OverlayPanel
         }
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(RowGap)) {
-            for (page in order) {
+            for (page in if (dragged == null) pages else order) {
                 key(page) {
                     val lifted = dragged == page
                     PageRow(
@@ -104,14 +105,17 @@ internal fun PagesScreen(
                                     detectVerticalDragGestures(
                                         onDragStart = {
                                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            order = engine.pages
                                             dragged = page
                                             offset = 0f
                                         },
                                         onVerticalDrag = { change, dy ->
                                             change.consume()
                                             offset += dy
-                                            // Past the middle of the row beside it, the two trade places.
+                                            // Past the middle of the row beside it, the two trade places. A row whose page
+                                            // went or was renumbered since it was composed isn't in the list to move.
                                             val i = order.indexOf(page)
+                                            if (i < 0) return@detectVerticalDragGestures
                                             val next = order.getOrNull(i + 1)
                                             val prev = order.getOrNull(i - 1)
                                             val nextHeight = next?.let { heights[it] } ?: 0
@@ -129,14 +133,10 @@ internal fun PagesScreen(
                                             offset = 0f
                                             // Read now, not as composed: the drag outlives the composition it started in.
                                             if (order != engine.pages) engine.arrangePages(order)
-                                            // Numbered again, the pages are usually the same numbers in a new order, which
-                                            // the list wouldn't notice: it starts over from home's own order.
-                                            order = engine.pages
                                         },
                                         onDragCancel = {
                                             dragged = null
                                             offset = 0f
-                                            order = engine.pages
                                         },
                                     )
                                 },
@@ -173,7 +173,7 @@ private fun pageContents(items: List<HomeItem>): String {
     return (widgets + listOfNotNull(apps.takeIf { it > 0 }?.let { if (it == 1) "1 app" else "$it apps" })).joinToString(", ").ifEmpty { "empty" }
 }
 
-/** One page: a full-screen page by its name, a page of tiles by what's on it. */
+/** One page: a face by its name, a page of tiles by what's on it. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PageRow(
@@ -208,7 +208,7 @@ private fun PageRow(
                 BasicText(
                     when {
                         spec?.error != null -> "doesn't compile"
-                        spec != null -> "full screen"
+                        spec != null -> "face"
                         page == 1 -> "home"
                         else -> ""
                     },

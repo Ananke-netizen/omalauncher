@@ -71,7 +71,17 @@ private object FrostCache {
                     CompletableDeferred<ImageBitmap?>().also { made[key] = it } to true
                 }
             }
-        if (mine) job.complete(withContext(Dispatchers.Default) { runCatching { make(file, radius, context) }.getOrNull() })
+        if (mine) {
+            try {
+                job.complete(withContext(Dispatchers.Default) { runCatching { make(file, radius, context) }.getOrNull() })
+            } finally {
+                // Cancelled mid-way (its node left the screen): the next one to ask makes it again, rather than waiting forever.
+                if (!job.isCompleted) {
+                    synchronized(made) { if (made[key] === job) made.remove(key) }
+                    job.complete(null)
+                }
+            }
+        }
         return job.await()
     }
 
@@ -147,7 +157,7 @@ private object FrostCache {
 }
 
 /**
- * `frost` (owl 11): the background behind the node, blurred by that many dp, under the node's own
+ * `frost` (owl 10): the background behind the node, blurred by that many dp, under the node's own
  * background, so `background: alpha(surface, 0.4)` tints it like frosted glass. It blurs the wallpaper,
  * not other nodes, and shows nothing where the launcher draws no wallpaper behind.
  */

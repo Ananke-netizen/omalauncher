@@ -396,6 +396,9 @@ class WidgetInstance(
             args.firstOrNull()?.takeIf { it != Null }?.let { sound(it.toString()) }
             return
         }
+        // An agent or an app opening on its own, from a timer or a fetched value, over whatever the user is doing: like
+        // sound(...), a trigger does it only while the app or screen is open.
+        if ((name == "ask" || name == "open") && inTrigger && !foreground()) return report("$name(...) in a trigger works only while the app or screen is open")
         // Only this widget refreshes afterwards; the others keep their own intervals.
         services.act(name, args) { refresh() }
     }
@@ -758,6 +761,9 @@ class WidgetInstance(
         refresh()
         return null
     }
+
+    /** Whether a face keeps the status bar over it now: its `statusBar`, true unless it says otherwise. */
+    fun showsStatusBar() = program.statusBar?.let { eval(it, root, "statusBar").truthy } ?: true
 
     /** Whether an app's Back goes up a level inside it now, because its `back` holds. */
     fun canGoUp() = program.back?.let { eval(it, root, "back").truthy } == true
