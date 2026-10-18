@@ -1,5 +1,8 @@
 package dev.omalauncher.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.omalauncher.widgets.render.LocalLongPressClaim
+import dev.omalauncher.widgets.render.LongPressClaim
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.foundation.pager.PagerState
@@ -334,6 +337,7 @@ internal fun HomeGrid(
 ) {
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    val claims = remember { LongPressClaim() }
 
     BoxWithConstraints(modifier) {
         val density = LocalDensity.current
@@ -640,8 +644,19 @@ internal fun HomeGrid(
                         }
 
                         val hit = placed.lastOrNull { (i, c) -> g.rect(i, c).has(at) }
-                        // A page's long presses are its own (onLongPress); it's edited in settings › style.
-                        if (hit?.first?.fullPage == true) return@awaitEachGesture
+                        // A full-screen page's long presses are its own nodes' (onLongPress), which it's not lifted by (it's
+                        // arranged in settings › pages). One that none of them takes opens the menu, as empty space does:
+                        // they take it as the press times out, so give them a moment to say so.
+                        if (hit?.first?.fullPage == true) {
+                            if (!awaitLongPress(down.id, start)) return@awaitEachGesture
+                            val held = SystemClock.uptimeMillis()
+                            withTimeoutOrNull(CLAIM_MS) { while (true) awaitPointerEvent(PointerEventPass.Initial) }
+                            if (claims.at < held - viewConfiguration.longPressTimeoutMillis) {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onLongPressEmpty()
+                            }
+                            return@awaitEachGesture
+                        }
                         if (!awaitLongPress(down.id, start)) return@awaitEachGesture
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         if (hit == null) {
@@ -662,11 +677,14 @@ internal fun HomeGrid(
                     }
                 },
         ) {
-            HorizontalPager(pager, Modifier.fillMaxSize(), key = { pages.getOrElse(it * grid.per) { -it } }) { slot ->
-                Row(Modifier.fillMaxSize()) {
-                    for (page in pagesAt(slot, pages, grid)) {
-                        Box(Modifier.width(with(density) { grid.width.toDp() }).fillMaxHeight()) {
-                            TiledPage(page, itemsOn(page), layout, grid, arrange, selected, render, actions, onNoRoom, feed)
+            // A full-screen page's nodes say here when they take a long press, so the menu doesn't open for it too.
+            CompositionLocalProvider(LocalLongPressClaim provides claims) {
+                HorizontalPager(pager, Modifier.fillMaxSize(), key = { pages.getOrElse(it * grid.per) { -it } }) { slot ->
+                    Row(Modifier.fillMaxSize()) {
+                        for (page in pagesAt(slot, pages, grid)) {
+                            Box(Modifier.width(with(density) { grid.width.toDp() }).fillMaxHeight()) {
+                                TiledPage(page, itemsOn(page), layout, grid, arrange, selected, render, actions, onNoRoom, feed)
+                            }
                         }
                     }
                 }
@@ -736,6 +754,9 @@ private fun DropPreview(
             .frame(2.dp, Palette.accent, Palette.accent.copy(alpha = if (arrange.grouping) 0.35f else 0.12f)),
     )
 }
+
+/** How long after a long press times out a full-screen page's node may still take it before home opens its menu. */
+private const val CLAIM_MS = 100L
 
 /** How long a carried tile rests against a side edge before the page turns. */
 private const val PAGE_TURN_MS = 600L

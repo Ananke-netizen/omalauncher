@@ -156,6 +156,22 @@ fun WidgetContent(
 /** Whether nodes here take long presses: in screens, apps and pages, not on a tile, where the home screen has them. */
 val LocalLongPress = staticCompositionLocalOf { false }
 
+/**
+ * Where a node's onLongPress says it took a long press, so the home screen around a page knows not to open its menu
+ * for the same one; see [dev.omalauncher.ui.HomeGrid].
+ */
+class LongPressClaim {
+    /** When the last long press was taken, in uptime milliseconds. */
+    @Volatile var at = 0L
+        private set
+
+    fun claim() {
+        at = android.os.SystemClock.uptimeMillis()
+    }
+}
+
+val LocalLongPressClaim = staticCompositionLocalOf<LongPressClaim?> { null }
+
 /** Widget text, 13sp as widgets were made for, whatever size the launcher's own text is. */
 internal val WidgetMono get() = Mono.copy(fontSize = 13.sp)
 
@@ -621,6 +637,7 @@ private fun handlers(p: Props): Modifier {
     val tap = el.handlers["onTap"]
     val long = el.handlers["onLongPress"]?.takeIf { LocalLongPress.current }
     val haptics = LocalHapticFeedback.current
+    val claim = LocalLongPressClaim.current
     if (tap != null || long != null) {
         m =
             m.pointerInput(el, p.env, long != null) {
@@ -628,6 +645,7 @@ private fun handlers(p: Props): Modifier {
                     onLongPress =
                         long?.let { a ->
                             { o ->
+                                claim?.claim()
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 fire(a, o.x, o.y)
                             }

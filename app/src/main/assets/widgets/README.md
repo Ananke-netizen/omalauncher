@@ -595,8 +595,8 @@ page "morning" {
   `padding` (12 by default) is around everything, as on a tile.
 - **Size.** `cols` and `rows` are the whole grid (6 or so by 12), and `tileWidth` and `tileHeight` the
   screen's size in dp: lay it out by those, since phones differ. It takes no `size` or `minSize`.
-- **On the phone.** Long presses are the page's own (`onLongPress`), so pages are edited, shared, moved and
-  removed in settings › pages, which lists home's pages left to right: hold one and drag it to move it. Swiping up opens the app drawer and sideways turns the page, so
+- **On the phone.** Long presses are the page's own (`onLongPress`); one that no node takes opens the home
+  menu, as on empty space between tiles. Pages are edited, shared, moved and removed in settings › pages, which lists home's pages left to right: hold one and drag it to move it. Swiping up opens the app drawer and sideways turns the page, so
   a `scroll: true` Column scrolls up and down, and a page has nothing to swipe sideways.
 
 owl-check's preview of a page is the page at the phone's size, as home last laid it out. `examples/00-start.owl`
