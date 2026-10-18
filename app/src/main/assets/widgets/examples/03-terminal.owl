@@ -1,7 +1,7 @@
 face "terminal" {
   // A shell session over digital rain: each command's output is the phone's state, live.
 
-  meta { owl: 11; description: "A hacker's terminal over digital rain: the date, uptime, battery, weather and notifications as command output, your apps as an ls, and a prompt that finds an app as you type"; version: "1.0"; license: "MIT"; category: "fun" }
+  meta { owl: 10; description: "A hacker's terminal over digital rain: the date, uptime, battery, weather and notifications as command output, your apps as an ls, and a prompt that finds an app as you type"; version: "1.0"; license: "MIT"; category: "fun" }
 
   statusBar: true
 

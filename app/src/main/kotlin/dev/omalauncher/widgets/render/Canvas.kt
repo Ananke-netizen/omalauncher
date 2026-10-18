@@ -250,8 +250,8 @@ private class Painter(
             }
             "text" -> {
                 val color = Builtins.argb(named["color"] ?: named["fill"] ?: Num(0.0), inst)?.let { androidx.compose.ui.graphics.Color(it) } ?: Palette.foreground
-                // Since owl 11 styled like a Text: its font, weight, slant and spacing, and a list is spans.
-                val styled = inst.program.level >= 11
+                // Since owl 10 styled like a Text: its font, weight, slant and spacing, and a list is spans.
+                val styled = inst.program.level >= 10
                 val layout =
                     measurer.measure(
                         if (styled && first is Lst) spans(first, inst) else AnnotatedString(first.text()),

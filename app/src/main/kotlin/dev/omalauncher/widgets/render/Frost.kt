@@ -147,7 +147,7 @@ private object FrostCache {
 }
 
 /**
- * `frost` (owl 11): the background behind the node, blurred by that many dp, under the node's own
+ * `frost` (owl 10): the background behind the node, blurred by that many dp, under the node's own
  * background, so `background: alpha(surface, 0.4)` tints it like frosted glass. It blurs the wallpaper,
  * not other nodes, and shows nothing where the launcher draws no wallpaper behind.
  */

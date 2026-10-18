@@ -18,7 +18,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * A widget's own fonts by src (owl 11): a TTF or OTF from an asset, a file in this system or the web,
+ * A widget's own fonts by src (owl 10): a TTF or OTF from an asset, a file in this system or the web,
  * loaded off the main thread. A variable font with a weight axis gets a face at each hundred from 100
  * to 900, so `fontWeight` picks a real weight instead of a smeared bold.
  */

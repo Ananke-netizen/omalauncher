@@ -143,7 +143,7 @@ fun WidgetContent(
                 if (bg != null) {
                     Modifier.drawBehind {
                         when (val v = inst.eval(bg, inst.root, "background")) {
-                            is Gradient -> if (program.level >= 11) drawRect(backgroundBrush(v, size, inst))
+                            is Gradient -> if (program.level >= 10) drawRect(backgroundBrush(v, size, inst))
                             else -> Builtins.argb(v, inst)?.let { drawRect(Color(it)) }
                         }
                     }
@@ -355,8 +355,8 @@ private fun Element(
         "Box" -> Box(mod, contentAlignment = boxAlign(p.observe("align")?.toString())) { Nodes(el.children, env, inst, this) }
         "Popup" -> PopupNode(el, p, mod, env, inst)
         "Grid" -> Grid(mod, (p.observe("columns")?.num() ?: 2.0).toInt().coerceIn(1, 12), (p.observe("gap")?.num() ?: 6.0).dp) { Nodes(el.children, env, inst, null) }
-        // Since owl 11 a Text in a Row or Flow is as wide as its text; before, it took the whole width unless sized.
-        "Text" -> TextNode(p, mod, parent is RowScope && inst.program.level >= 11)
+        // Since owl 10 a Text in a Row or Flow is as wide as its text; before, it took the whole width unless sized.
+        "Text" -> TextNode(p, mod, parent is RowScope && inst.program.level >= 10)
         "Button" -> {
             val color = p.color("color") { Palette.accent }
             val radius = p.float("radius", 8f * LauncherStyle.cornerScale)
@@ -609,9 +609,9 @@ private fun common(
         val border = p.float("border", 0f)
         // Bordered elements (buttons, frames) follow the launcher's corner style unless they set a radius.
         val radius = p.float("radius", if (p.has("border")) 8f * LauncherStyle.cornerScale else 0f)
-        // Since owl 11 a background can be a gradient. Read at draw time in place of the color, once; an
+        // Since owl 10 a background can be a gradient. Read at draw time in place of the color, once; an
         // animated background stays a color, which is what animates.
-        val gradients = p.inst.program.level >= 11 && p.has("background") && "background" !in p.el.animations
+        val gradients = p.inst.program.level >= 10 && p.has("background") && "background" !in p.el.animations
         m =
             m.drawBehind {
                 val r = CornerRadius(radius().dp.toPx())
@@ -687,7 +687,7 @@ internal fun backgroundBrush(
     }
 }
 
-/** A Text's `spans`: each piece text, or a map of its text and how it differs from the rest (owl 11). Canvas text takes them too. */
+/** A Text's `spans`: each piece text, or a map of its text and how it differs from the rest (owl 10). Canvas text takes them too. */
 internal fun spans(
     v: Value,
     inst: WidgetInstance,
@@ -716,7 +716,7 @@ internal fun spans(
 private fun Value.spanText() = if (this is Str) v else text()
 
 /**
- * A `font`: one of the words, or a font file of the widget's own (an asset, a file or a URL, owl 11), which
+ * A `font`: one of the words, or a font file of the widget's own (an asset, a file or a URL, owl 10), which
  * shows the launcher's font until it has loaded. Null is the launcher's font.
  */
 internal fun fontFamily(
@@ -728,7 +728,7 @@ internal fun fontFamily(
         "sans" -> FontFamily.SansSerif
         "serif" -> FontFamily.Serif
         "icon" -> NerdSymbols
-        else -> if (inst.program.level >= 11) inst.font(name) ?: LauncherStyle.font else LauncherStyle.font
+        else -> if (inst.program.level >= 10) inst.font(name) ?: LauncherStyle.font else LauncherStyle.font
     }
 
 /** A font weight, 100 (thin) to 900 (black); the font shows the nearest one it has. */
@@ -778,7 +778,7 @@ private fun TextNode(
 }
 
 /**
- * A Popup (owl 11): its children in a window over everything, the tile, the bar and other tiles, below the
+ * A Popup (owl 10): its children in a window over everything, the tile, the bar and other tiles, below the
  * node that holds it or above with `position: above`, kept on screen. Framed like the launcher's own menus
  * unless it has a background or border. A tap outside or Back runs onDismiss, which the compiler requires.
  */

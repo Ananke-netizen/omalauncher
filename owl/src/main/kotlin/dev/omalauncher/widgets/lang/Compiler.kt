@@ -24,7 +24,7 @@ class Compiler private constructor(
          * instead of failing on what they don't know. Bump it with every
          * addition a widget could depend on: nodes, properties, builtins.
          */
-        const val LEVEL = 11
+        const val LEVEL = 10
         private const val MAX_ASSET_BYTES = 2 shl 20
 
         /** An app icon is a shape or two drawn in SVG, not a picture. */
@@ -418,7 +418,7 @@ class Compiler private constructor(
         commands += "$what GET " + (whole ?: "$start…")
     }
 
-    /** A `font` that isn't one of the words names a font file: an asset, a file in this system or a URL (owl 11). */
+    /** A `font` that isn't one of the words names a font file: an asset, a file in this system or a URL (owl 10). */
     private fun font(
         e: Expr,
         s: Scope,
@@ -752,7 +752,7 @@ class Compiler private constructor(
         return WNode.Use(n.type, args, wrapper, c.body, n.pos)
     }
 
-    /** Whether a background is written as a gradient, `linear(...)` or `radial(...)`, or chooses one: they need owl 11 there. */
+    /** Whether a background is written as a gradient, `linear(...)` or `radial(...)`, or chooses one: they need owl 10 there. */
     private fun gradient(e: Expr): Boolean =
         when (e) {
             is Expr.Call -> e.name == "linear" || e.name == "radial"

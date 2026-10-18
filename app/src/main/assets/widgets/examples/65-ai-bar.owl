@@ -3,7 +3,7 @@ widget "ai bar" {
   order: 30
   size: 6x2
   minSize: 4x2
-  meta { description: "The launcher's prompt bar and recent apps, written in owl: type to find an app, Enter opens it or asks your agent, tap the agent's name to pick another"; version: "1.0"; license: "MIT"; category: "productivity"; owl: 11 }
+  meta { description: "The launcher's prompt bar and recent apps, written in owl: type to find an app, Enter opens it or asks your agent, tap the agent's name to pick another"; version: "1.0"; license: "MIT"; category: "productivity"; owl: 10 }
   padding: 0
   background: transparent
 

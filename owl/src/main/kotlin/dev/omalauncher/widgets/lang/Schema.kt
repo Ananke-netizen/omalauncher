@@ -40,7 +40,7 @@ internal val KINDS: Map<String, Kind> =
         // owl 4: input.
         "Slider" to Kind(setOf("value", "min", "max", "step", "color", "track", "live"), Children.NONE),
         "Input" to Kind(setOf("text", "placeholder", "color", "fontSize", "clear", "focus", "underline"), Children.NONE),
-        // owl 11: a menu over everything else, next to the node that holds it.
+        // owl 10: a menu over everything else, next to the node that holds it.
         "Popup" to Kind(setOf("position", "gap", "align"), Children.UI),
     )
 
@@ -65,7 +65,7 @@ internal val ENUMS =
         "position" to setOf("above", "below"),
     )
 
-/** text(...)'s options beyond size, color, align and bold, as Text has them (owl 11). */
+/** text(...)'s options beyond size, color, align and bold, as Text has them (owl 10). */
 internal val TEXT_STYLE = setOf("font", "fontWeight", "italic", "letterSpacing")
 
 /** Canvas calls: positional arity, and whether they take a { } body of further calls. */
@@ -108,12 +108,12 @@ internal val SINCE =
         listOf(HANDLER_IF, HANDLER_LET).associateWith { 9 } +
         // owl 10: faces, files that are a whole home page; long-press where it isn't the home screen's.
         mapOf(FACE_FILE to 10, "onLongPress" to 10) +
-        // owl 11: text styled in pieces, by weight and spacing; gradients and frosted glass behind any node; Text in a Row as wide as its text.
-        listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 11 } +
-        // owl 11: the coding agents in Linux and the recent strip's apps, for a face with its own prompt bar.
-        listOf("android.agents", "android.recent", "open", "ask", "Popup", "Input.underline").associateWith { 11 } +
-        // owl 11: fonts of the widget's own, and Canvas text styled like a Text.
-        listOf(FONT_FILE, CANVAS_TEXT_STYLE).associateWith { 11 }
+        // owl 10: text styled in pieces, by weight and spacing; gradients and frosted glass behind any node; Text in a Row as wide as its text.
+        listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 10 } +
+        // owl 10: the coding agents in Linux and the recent strip's apps, for a face with its own prompt bar.
+        listOf("android.agents", "android.recent", "open", "ask", "Popup", "Input.underline").associateWith { 10 } +
+        // owl 10: fonts of the widget's own, and Canvas text styled like a Text.
+        listOf(FONT_FILE, CANVAS_TEXT_STYLE).associateWith { 10 }
 
 internal const val FACE_FILE = "face \"…\" { }"
 

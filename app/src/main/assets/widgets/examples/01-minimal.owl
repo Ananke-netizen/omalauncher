@@ -1,7 +1,7 @@
 face "minimal" {
   // A quiet page: a thin clock, the day as a hairline, one line about the phone and your apps as words.
 
-  meta { owl: 11; description: "A quiet page: a thin clock, the day as a hairline, one line about the phone and your most used apps as plain words"; version: "1.0"; license: "MIT"; category: "productivity" }
+  meta { owl: 10; description: "A quiet page: a thin clock, the day as a hairline, one line about the phone and your most used apps as plain words"; version: "1.0"; license: "MIT"; category: "productivity" }
 
   statusBar: false
 
