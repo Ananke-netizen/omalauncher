@@ -112,8 +112,10 @@ internal fun PagesScreen(
                                         onVerticalDrag = { change, dy ->
                                             change.consume()
                                             offset += dy
-                                            // Past the middle of the row beside it, the two trade places.
+                                            // Past the middle of the row beside it, the two trade places. A row whose page
+                                            // went or was renumbered since it was composed isn't in the list to move.
                                             val i = order.indexOf(page)
+                                            if (i < 0) return@detectVerticalDragGestures
                                             val next = order.getOrNull(i + 1)
                                             val prev = order.getOrNull(i - 1)
                                             val nextHeight = next?.let { heights[it] } ?: 0
