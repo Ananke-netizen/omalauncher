@@ -967,5 +967,6 @@ and the message goes to `.errors/`.
 - Look at the example widgets in this folder for patterns: `90-analog-clock` (Canvas),
   `91-focus` (state, buttons and `at`), `92-aurora` (Shader), `93-latency` (stream),
   `88-notes` (Input), `98-notifications` (android.notifications), `99-volume` (Slider),
+  `65-ai-bar` (the prompt bar and recent strip: android.agents, android.recent, open and ask),
   and next to it `10-today` (a weather screen behind the tile), `20-fetch` (fastfetch as a dashboard), `45-terminal` (a live terminal) and
   `60-owl` (sprites).
