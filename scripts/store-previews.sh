@@ -106,6 +106,8 @@ seed() {
     carburant) json='{"city":"Lyon"}' ;;
     # A made-up key: the demo's python3 answers lastfm's helper without calling Last.fm.
     lastfm) json='{"username":"demo","apiKey":"demo"}' ;;
+    # A public landmark's postcode (the Empire State Building), so the passes show.
+    iss) json='{"country":"US","zip":"10118"}' ;;
     # A few days into practice: a streak, a level and two sessions done.
     yoga) json=$(printf '{"done":[1,3],"streak":4,"lastDay":"%s","xp":250,"pace":1,"voice":true}' "$(date +%F)") ;;
     *) return 0 ;;
