@@ -71,7 +71,17 @@ private object FrostCache {
                     CompletableDeferred<ImageBitmap?>().also { made[key] = it } to true
                 }
             }
-        if (mine) job.complete(withContext(Dispatchers.Default) { runCatching { make(file, radius, context) }.getOrNull() })
+        if (mine) {
+            try {
+                job.complete(withContext(Dispatchers.Default) { runCatching { make(file, radius, context) }.getOrNull() })
+            } finally {
+                // Cancelled mid-way (its node left the screen): the next one to ask makes it again, rather than waiting forever.
+                if (!job.isCompleted) {
+                    synchronized(made) { if (made[key] === job) made.remove(key) }
+                    job.complete(null)
+                }
+            }
+        }
         return job.await()
     }
 
