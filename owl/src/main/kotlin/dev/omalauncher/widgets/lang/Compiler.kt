@@ -709,6 +709,8 @@ class Compiler private constructor(
                 a.name to ex(a.value, scope)
             }
         since(n.type, n.pos)
+        // A tap outside or Back asks it to close; without a handler for that, nothing could.
+        if (n.type == "Popup" && "onDismiss" !in handlers) fail("a Popup needs onDismiss, run when a tap outside it or Back closes it: onDismiss: open = false", n.pos)
         if (n.type == "Terminal") {
             terminal = true
             val command = props["command"]

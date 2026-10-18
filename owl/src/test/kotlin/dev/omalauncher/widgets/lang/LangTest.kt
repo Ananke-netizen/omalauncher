@@ -695,6 +695,19 @@ class LangTest {
         assertTrue(compileError("widget {\n meta { owl: 10 }\n source ag = android.agents\n Text { text: 1 } }").contains("android.agents needs owl 11"))
     }
 
+    @Test fun inputsCanLeaveOutTheirLine() {
+        Compiler.compile("widget {\n meta { owl: 11 }\n Input { underline: false } }")
+        assertTrue(compileError("widget {\n meta { owl: 10 }\n Input { underline: false } }").contains("Input.underline needs owl 11"))
+    }
+
+    @Test fun popupsNeedOnDismissAndOwl11() {
+        val ok = "widget {\n meta { owl: 11 }\n state open = false\n Box { Text { text: \"x\"; onTap: open = true }\n Popup { visible: open; position: above; onDismiss: open = false\n Text { text: \"y\" } } } }"
+        Compiler.compile(ok)
+        assertTrue(compileError(ok.replace("owl: 11", "owl: 10")).contains("Popup needs owl 11"))
+        assertTrue(compileError(ok.replace("; onDismiss: open = false", "")).contains("a Popup needs onDismiss"))
+        assertTrue(compileError("widget {\n meta { owl: 11 }\n Text { text: 1; onDismiss: refresh() } }").contains("onDismiss only works on Popup"))
+    }
+
     @Test fun recentAppsOpenAndAgentsAsk() {
         val p =
             Compiler.compile(

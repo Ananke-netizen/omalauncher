@@ -81,10 +81,17 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import dev.omalauncher.ui.Mono
 import dev.omalauncher.ui.NerdSymbols
 import dev.omalauncher.ui.LauncherStyle
 import dev.omalauncher.ui.Palette
+import dev.omalauncher.ui.frame
 import dev.omalauncher.ui.TerminalView
 import dev.omalauncher.widgets.lang.Action
 import dev.omalauncher.widgets.lang.Builtins
@@ -310,7 +317,8 @@ private fun Element(
 ) {
     val p = remember(el, env) { Props(el, env, inst) }
     if (p.has("visible") && p.observe("visible")?.truthy == false) return
-    val mod = common(p, parent)
+    // A Popup's size and weight are its menu's, in a window of its own: the layout it's in doesn't hold it.
+    val mod = common(p, if (el.kind == "Popup") null else parent)
     val sized = SIZING.any { p.has(it) }
     when (el.kind) {
         "Column" -> {
@@ -345,6 +353,7 @@ private fun Element(
             }
         }
         "Box" -> Box(mod, contentAlignment = boxAlign(p.observe("align")?.toString())) { Nodes(el.children, env, inst, this) }
+        "Popup" -> PopupNode(el, p, mod, env, inst)
         "Grid" -> Grid(mod, (p.observe("columns")?.num() ?: 2.0).toInt().coerceIn(1, 12), (p.observe("gap")?.num() ?: 6.0).dp) { Nodes(el.children, env, inst, null) }
         // Since owl 11 a Text in a Row or Flow is as wide as its text; before, it took the whole width unless sized.
         "Text" -> TextNode(p, mod, parent is RowScope && inst.program.level >= 11)
@@ -766,6 +775,63 @@ private fun TextNode(
         overflow = TextOverflow.Ellipsis,
         color = ColorProducer { color() },
     )
+}
+
+/**
+ * A Popup (owl 11): its children in a window over everything, the tile, the bar and other tiles, below the
+ * node that holds it or above with `position: above`, kept on screen. Framed like the launcher's own menus
+ * unless it has a background or border. A tap outside or Back runs onDismiss, which the compiler requires.
+ */
+@Composable
+private fun PopupNode(
+    el: WNode.Element,
+    p: Props,
+    mod: Modifier,
+    env: Env,
+    inst: WidgetInstance,
+) {
+    val above = p.observe("position")?.toString() == "above"
+    val position = remember(above) { NextToAnchor(above) }
+    val framed = p.has("background") || p.has("border")
+    Popup(
+        popupPositionProvider = position,
+        onDismissRequest = { el.handlers["onDismiss"]?.run(env, emptyList()) },
+        properties = PopupProperties(focusable = true),
+    ) {
+        val gap = (p.observe("gap")?.num() ?: 4.0).dp
+        val align =
+            when (p.observe("align")?.toString()) {
+                "center" -> Alignment.CenterHorizontally
+                "end" -> Alignment.End
+                else -> Alignment.Start
+            }
+        Column(
+            (if (framed) mod else Modifier.frame(2.dp, Palette.accent, Palette.background).then(mod).then(if (p.has("padding")) Modifier else Modifier.padding(4.dp))),
+            verticalArrangement = Arrangement.spacedBy(gap),
+            horizontalAlignment = align,
+        ) { Nodes(el.children, env, inst, this) }
+    }
+}
+
+/** Below its anchor, or [above] it, at its start; on the other side when there's no room, and never off screen. */
+private class NextToAnchor(
+    val above: Boolean,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val h = popupContentSize.height
+        val up = anchorBounds.top - h
+        val down = anchorBounds.bottom
+        val y = if (above) (if (up >= 0 || down + h > windowSize.height) up else down) else (if (down + h <= windowSize.height || up < 0) down else up)
+        return IntOffset(
+            anchorBounds.left.coerceAtMost(windowSize.width - popupContentSize.width).coerceAtLeast(0),
+            y.coerceAtMost(windowSize.height - h).coerceAtLeast(0),
+        )
+    }
 }
 
 /** Fixed-column grid: children fill cells left to right. */

@@ -39,7 +39,9 @@ internal val KINDS: Map<String, Kind> =
         "Terminal" to Kind(setOf("command", "fontSize"), Children.NONE),
         // owl 4: input.
         "Slider" to Kind(setOf("value", "min", "max", "step", "color", "track", "live"), Children.NONE),
-        "Input" to Kind(setOf("text", "placeholder", "color", "fontSize", "clear", "focus"), Children.NONE),
+        "Input" to Kind(setOf("text", "placeholder", "color", "fontSize", "clear", "focus", "underline"), Children.NONE),
+        // owl 11: a menu over everything else, next to the node that holds it.
+        "Popup" to Kind(setOf("position", "gap", "align"), Children.UI),
     )
 
 internal val COMMON =
@@ -60,6 +62,7 @@ internal val ENUMS =
         "font" to setOf("mono", "sans", "serif", "icon"),
         "fill" to setOf("width", "height"),
         "cap" to setOf("round", "butt", "square"),
+        "position" to setOf("above", "below"),
     )
 
 /** text(...)'s options beyond size, color, align and bold, as Text has them (owl 11). */
@@ -108,7 +111,7 @@ internal val SINCE =
         // owl 11: text styled in pieces, by weight and spacing; gradients and frosted glass behind any node; Text in a Row as wide as its text.
         listOf("Text.spans", "Text.fontWeight", "Text.letterSpacing", GRADIENT_BACKGROUND, "frost").associateWith { 11 } +
         // owl 11: the coding agents in Linux and the recent strip's apps, for a page with its own prompt bar.
-        listOf("android.agents", "android.recent", "open", "ask").associateWith { 11 } +
+        listOf("android.agents", "android.recent", "open", "ask", "Popup", "Input.underline").associateWith { 11 } +
         // owl 11: fonts of the widget's own, and Canvas text styled like a Text.
         listOf(FONT_FILE, CANVAS_TEXT_STYLE).associateWith { 11 }
 
@@ -147,10 +150,11 @@ internal val HANDLER_PARAMS =
         "onDrag" to listOf("dx", "dy", "x", "y"),
         "onChange" to listOf("value"),
         "onSubmit" to listOf("value"),
+        "onDismiss" to emptyList(),
     )
 
 /** Handlers only some nodes have. */
-internal val HANDLER_KINDS = mapOf("onChange" to setOf("Slider", "Input"), "onSubmit" to setOf("Input"))
+internal val HANDLER_KINDS = mapOf("onChange" to setOf("Slider", "Input"), "onSubmit" to setOf("Input"), "onDismiss" to setOf("Popup"))
 
 /** What triggers bind in their statements. */
 internal val TRIGGER_PARAMS = mapOf("on" to listOf("value", "old"))
