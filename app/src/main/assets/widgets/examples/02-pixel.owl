@@ -193,8 +193,7 @@ face "pixel" {
   }
 
   // Below ground, or beside it in landscape: the HUD and the inventory.
-  // inset is the navigation bar's, passed in: a face's components can't read screenInset themselves yet.
-  component Panel(inset = 0) {
+  component Panel() {
     Column {
       fill: wide ? true : "width"
       gap: wide ? 10 : 14
@@ -346,13 +345,13 @@ face "pixel" {
           }
         }
       }
-      Spacer { height: inset }
+      Spacer { height: screenInset }
     }
   }
 
   if wide {
-    Row { fill: true; gap: 0; Scene { }  Panel { inset: screenInset; weight: 1 } }
+    Row { fill: true; gap: 0; Scene { }  Panel { weight: 1 } }
   } else {
-    Column { fill: true; gap: 0; Scene { weight: 1 }  Panel { inset: screenInset } }
+    Column { fill: true; gap: 0; Scene { weight: 1 }  Panel { } }
   }
 }

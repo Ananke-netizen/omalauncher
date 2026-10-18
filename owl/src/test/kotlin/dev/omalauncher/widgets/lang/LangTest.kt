@@ -779,6 +779,8 @@ class LangTest {
         assertEquals(OwlKind.Face, OwlKind.of("// mine\nface \"x\" {"))
         // A face runs under the navigation bar, like an edge app; its screen { } doesn't.
         Compiler.compile("face {\n meta { owl: 10 }\n Spacer { height: screenInset } }")
+        // Its components and lets too, which are compiled before the face's own nodes.
+        Compiler.compile("face {\n meta { owl: 10 }\n let bottom = screenInset + 8\n component Foot() { Spacer { height: screenInset } }\n Column { Foot { }  Spacer { height: bottom } } }")
         assertTrue(compileError("face {\n meta { owl: 10 }\n Text { text: 1; onTap: screen() }\n screen { Text { text: screenInset } } }").contains("screenInset is for apps"))
         // A face has a screen's room: more nodes than a tile.
         val many = (1..600).joinToString("\n") { "Text { text: $it }" }

@@ -94,8 +94,8 @@ class Compiler private constructor(
     /** Whether nodes being compiled are the screen's (true) or the tile's (false); null in components, which can go in either. */
     private var inScreen: Boolean? = null
 
-    /** A face: it runs under the navigation bar, so its nodes may read `screenInset`. */
-    private var isFace = false
+    /** A face: it runs under the navigation bar, so its nodes may read `screenInset`. Known from the file's first word, so its lets and components see it too. */
+    private val isFace = ast.kind == OwlKind.Face
 
     /** Where a handler calls screen() or close(), which need a screen { } block. */
     private var screenAction: Int? = null
@@ -181,7 +181,6 @@ class Compiler private constructor(
         if (ast.kind == OwlKind.App) return app(body, meta, level, requires, globals.map { it!! }, triggers)
         // A face is a widget that fills a home page of its own, the whole screen: it gets a screen's room, and
         // has no tile's size.
-        isFace = ast.kind == OwlKind.Face
         val allowed = if (isFace) FACE_PROPS else WIDGET_PROPS
         for (p in body.props) {
             if (p.name !in allowed) fail("unknown ${ast.kind.word} property '${p.name}' (${allowed.joinToString()})", p.pos)
