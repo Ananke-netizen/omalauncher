@@ -266,13 +266,16 @@ class WidgetEngine(
     fun moveToFreePage(item: HomeItem): Int {
         val page =
             if (item.isFace && item.page <= FACE_PAGE) {
-                minOf(pages.minOrNull() ?: 1, FACE_PAGE + 1) - 1
+                newFacePage()
             } else {
                 pages.firstOrNull { it > item.page && layout.claim(item, itemsOn(it)) } ?: ((pages.maxOrNull() ?: 1) + 1)
             }
         moveToPage(item, page)
         return page
     }
+
+    /** The empty page waiting left of the leftmost, where a new face goes. */
+    fun newFacePage() = minOf(pages.minOrNull() ?: 1, FACE_PAGE + 1) - 1
 
     /**
      * Puts home's pages in [order] (page numbers, as [pages] lists them) and numbers them again: the first one with tiles
@@ -370,7 +373,7 @@ class WidgetEngine(
         page: Int,
     ) = withContext(Dispatchers.IO) {
         val name = shared.fileName
-        if (!File(dir, name).exists() && OwlKind.of(shared.text) != OwlKind.Face) setPage(name, page)
+        if (!File(dir, name).exists()) setPage(name, if (OwlKind.of(shared.text) == OwlKind.Face) newFacePage() else page)
         installDependenciesWhenLoaded(name)
         File(dir, name).writeText(shared.text)
     }
@@ -561,7 +564,13 @@ class WidgetEngine(
         checkDependencies(parsed)
         // Not at startup, when every file compiles: only what changed while the launcher runs, which is an agent at work.
         if (loaded) changed.forEach(::requestPreview)
-        loaded = true
+        if (!loaded) {
+            loaded = true
+            // Before faces, page 1 could be emptied by moving its last tile away, and home opens on page 1: the first page
+            // of tiles becomes it again.
+            val first = pages.firstOrNull { p -> itemsOn(p).any { !it.isFace } }
+            if (first != null && first != 1) arrangePages(pages)
+        }
     }
 
     /**

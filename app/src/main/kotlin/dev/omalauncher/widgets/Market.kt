@@ -127,7 +127,10 @@ class Market(
             withContext(Dispatchers.IO) {
                 // An update keeps its page; a new install goes where the user is. Apps go in the drawer, on no page, and a face
                 // left of page 1, to the empty one waiting there.
-                if (kind == OwlKind.Widget && installedVersion(e) == null) engine.setPage(name, page)
+                if (installedVersion(e) == null) {
+                    if (kind == OwlKind.Widget) engine.setPage(name, page)
+                    if (kind == OwlKind.Face) engine.setPage(name, engine.newFacePage())
+                }
                 engine.installDependenciesWhenLoaded(name)
                 File(engine.dir, name).writeBytes(bytes)
             }

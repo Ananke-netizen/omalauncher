@@ -147,9 +147,11 @@ class WidgetLayout(
      * The face ([HomeItem.isFace]) that [items], one page's, show: the first of them, while no tile
      * there has a cell. A face keeps no cell, so the tiles that were there first keep the page, and
      * a widget that becomes a face (or back) never overlaps them or comes back as a tile the page's size.
+     * One placed on the phone comes before one there by its file's `page:` alone, so a new face file
+     * (`page: 0` by default) doesn't push the face already on that page away.
      */
     fun owner(items: List<HomeItem>): HomeItem? {
-        val face = items.firstOrNull { it.isFace } ?: return null
+        val face = items.filter { it.isFace }.sortedBy { !pages.containsKey(it.key) }.firstOrNull() ?: return null
         return face.takeIf { items.none { !it.isFace && cells[it.key] != null } }
     }
 

@@ -301,16 +301,18 @@ internal class Arrange {
  * drawn over it (the recent apps strip) can take them first. [turned] lays
  * portrait's grid on its side, for landscape.
  *
- * With [per] of 2 (an unfolded foldable) each pager slot shows two of [pages]
- * side by side, so every tile keeps the size it has folded; [pages] then holds
- * an even number, and the pager counts slots.
+ * The pager counts [slots], the pages each of its positions shows (see slotsOf). With [per] of 2 (an
+ * unfolded foldable) a slot shows two tile pages side by side, so every tile keeps the size it has folded,
+ * or one [full] page (a face's) across the whole width.
  */
 @Composable
 internal fun HomeGrid(
     pager: PagerState,
     /** What tiles keep clear of on every side, in pixels: the system bars, and the bar or the side rail. */
     keepClear: GridPad,
-    pages: List<Int>,
+    slots: List<List<Int>>,
+    /** A face's page, or the empty one waiting for a face: alone in its slot, it takes the whole width. */
+    full: (Int) -> Boolean,
     itemsOn: (Int) -> List<HomeItem>,
     layout: WidgetLayout,
     arrange: Arrange,
@@ -361,8 +363,8 @@ internal fun HomeGrid(
         val windowSize = "${minOf(window.width, window.height)}x${maxOf(window.width, window.height)}"
         // Rows the tiles on every page reach down to (apps show as 1x1); the pages share one grid.
         // Derived, so moving or resizing a tile recomposes only its page, unless it changes how far down they reach.
-        val used by remember(pages, itemsOn, layout) {
-            derivedStateOf { pages.flatMap(itemsOn).maxOfOrNull { item -> layout.cell(item.key)?.let { if (item.resizable) it.bottom else it.y + 1 } ?: 0 } ?: 0 }
+        val used by remember(slots, itemsOn, layout) {
+            derivedStateOf { slots.flatten().flatMap(itemsOn).maxOfOrNull { item -> layout.cell(item.key)?.let { if (item.resizable) it.bottom else it.y + 1 } ?: 0 } ?: 0 }
         }
         val cols = layout.columns
         val grid =
@@ -370,17 +372,22 @@ internal fun HomeGrid(
                 // Not seen in portrait yet: square cells across.
                 Grid(width, height, gap, pad, cols, turned, if (turned) layout.portraitRows(windowSize) else null, used, per)
             }
+        // A face's slot, unfolded: one page the whole width, on the same rows, since placing a page sets the grid faces get.
+        val wide =
+            remember(grid, constraints.maxWidth) {
+                if (per == 1) grid else Grid(constraints.maxWidth, height, gap, pad, cols, turned, if (turned) layout.portraitRows(windowSize) else null, grid.rows)
+            }
         if (!turned) SideEffect { layout.setPortraitRows(windowSize, grid.rows) }
         // Previews draw tiles at the size they have here.
         SideEffect {
             layout.geometry = Triple(grid.cellW, grid.cellH, gap)
-            layout.pageSize = grid.width to grid.height
+            layout.pageSize = wide.width to wide.height
             layout.turned = turned
         }
         val grab = with(density) { 20.dp.roundToPx() }
         val sideGrab = with(density) { 36.dp.roundToPx() }
         val edge = with(density) { 28.dp.roundToPx() }
-        val current by rememberUpdatedState(Triple(pages, grid, selected))
+        val current by rememberUpdatedState(Triple(slots, grid to wide, selected))
 
         fun placedOn(
             page: Int,
@@ -390,9 +397,14 @@ internal fun HomeGrid(
         /** The pages a pager slot shows, left to right. */
         fun pagesAt(
             slot: Int,
-            pages: List<Int>,
-            g: Grid,
-        ) = (0 until g.per).map { pages.getOrElse(slot * g.per + it) { 1 } }
+            slots: List<List<Int>>,
+        ) = slots.getOrElse(slot) { listOf(1) }
+
+        /** The grid [shown]'s pages are laid out on: the whole width for a face's slot, unfolded. */
+        fun gridFor(
+            shown: List<Int>,
+            grids: Pair<Grid, Grid>,
+        ) = if (shown.size == 1 && full(shown[0])) grids.second else grids.first
 
         /** Which of [shown] holds [key], or -1. */
         fun sideOf(
@@ -486,18 +498,28 @@ internal fun HomeGrid(
                                     atEdgeSince = now + PAGE_TURN_MS
                                 }
                             }
-                            val (pages, g) = current
-                            // Side by side, the finger picks the page; the drop preview works in its coordinates.
+                            val (slots, grids) = current
+                            // Side by side, the finger picks the page; the drop preview works in its coordinates. Over the
+                            // empty half beside a lone tile page nothing lands.
+                            val over = pagesAt(pager.targetPage, slots)
+                            val g = gridFor(over, grids)
                             val side = g.side(position)
                             val at = g.local(position, side)
-                            val page = pages.getOrElse(pager.targetPage * g.per + side) { from }
+                            val page = over.getOrNull(side)
+                            if (page == null) {
+                                arrange.page = from
+                                arrange.preview = null
+                                arrange.swapWith = null
+                                arrange.grouping = false
+                                continue
+                            }
                             arrange.page = page
                             val others = placedOn(page, g).filter { it.first.key != item.key }
-                            val over = others.lastOrNull { (o, r) -> g.rect(o, r).has(at) }
+                            val under = others.lastOrNull { (o, r) -> g.rect(o, r).has(at) }
                             // Apps group with apps and folders; anything else swaps, except an app from a folder, which has no cell to
                             // trade, and a face, whose page isn't a cell either: one lands only on an empty page, and nothing on its.
-                            val groups = item is Shortcut && (over?.first is Shortcut || over?.first is Folder)
-                            val target = over?.takeIf { groups || (!inFolder && !item.isFace && !it.first.isFace) }
+                            val groups = item is Shortcut && (under?.first is Shortcut || under?.first is Folder)
+                            val target = under?.takeIf { groups || (!inFolder && !item.isFace && !it.first.isFace) }
                             // Left of page 1 only faces go.
                             val onlyFaces = isFacePage(page) && !item.isFace
                             arrange.grouping = groups
@@ -505,7 +527,7 @@ internal fun HomeGrid(
                             arrange.preview =
                                 if (onlyFaces) {
                                     null
-                                } else if (over != null) {
+                                } else if (under != null) {
                                     target?.second
                                 } else {
                                     val x = g.colLine(at - hold).coerceIn(0, (g.cols - cell.w).coerceAtLeast(0))
@@ -566,12 +588,14 @@ internal fun HomeGrid(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                         val start = down.position
-                        val (pages, g, sel) = current
-                        val shown = pagesAt(pager.currentPage, pages, g)
+                        val (slots, grids, sel) = current
+                        val shown = pagesAt(pager.currentPage, slots)
+                        val g = gridFor(shown, grids)
                         val side = g.side(start)
-                        val page = shown[side]
+                        // The empty half beside a lone tile page is empty space.
+                        val page = shown.getOrElse(side) { shown[0] }
                         val at = g.local(start, side)
-                        val placed = placedOn(page, g)
+                        val placed = if (side < shown.size) placedOn(page, g) else emptyList()
 
                         // An open folder takes every touch: a tap on an app opens it (the tile gets the tap),
                         // a long-press lifts it to sort it in or drag it out, a tap on its name types a new one, a tap outside closes the folder. Its panel is centered on
@@ -679,11 +703,13 @@ internal fun HomeGrid(
         ) {
             // A face's nodes say here when they take a long press, so the menu doesn't open for it too.
             CompositionLocalProvider(LocalLongPressClaim provides claims) {
-                HorizontalPager(pager, Modifier.fillMaxSize(), key = { pages.getOrElse(it * grid.per) { -it } }) { slot ->
+                HorizontalPager(pager, Modifier.fillMaxSize(), key = { slots.getOrNull(it)?.first() ?: -it }) { slot ->
+                    val shown = pagesAt(slot, slots)
+                    val g = gridFor(shown, grid to wide)
                     Row(Modifier.fillMaxSize()) {
-                        for (page in pagesAt(slot, pages, grid)) {
-                            Box(Modifier.width(with(density) { grid.width.toDp() }).fillMaxHeight()) {
-                                TiledPage(page, itemsOn(page), layout, grid, arrange, selected, render, actions, onNoRoom, feed)
+                        for (page in shown) {
+                            Box(Modifier.width(with(density) { g.width.toDp() }).fillMaxHeight()) {
+                                TiledPage(page, itemsOn(page), layout, g, arrange, selected, render, actions, onNoRoom, feed)
                             }
                         }
                     }
@@ -691,7 +717,7 @@ internal fun HomeGrid(
             }
 
             // The open folder, over the page it's on.
-            val openFolder = arrange.folder?.let { key -> pagesAt(pager.currentPage, pages, grid).firstNotNullOfOrNull { p -> itemsOn(p).firstOrNull { it.key == key } as? Folder } }
+            val openFolder = arrange.folder?.let { key -> pagesAt(pager.currentPage, slots).firstNotNullOfOrNull { p -> itemsOn(p).firstOrNull { it.key == key } as? Folder } }
             if (openFolder != null) {
                 val fg = FolderGeometry(width * per, grid.height, grid.cellW, grid.cellH, gap, openFolder.apps.size, density)
                 FolderPanel(

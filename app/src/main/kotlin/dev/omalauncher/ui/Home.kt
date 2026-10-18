@@ -44,6 +44,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
+import androidx.compose.foundation.layout.systemBars
+import dev.omalauncher.theme.Style
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
@@ -82,20 +84,25 @@ fun HomeScreen(
     // while they hold something, so it becomes a real page once used and a new empty one follows.
     // Left of page 1 the same, for faces: like a stock launcher's feed, but the user's own. An empty one waits left of
     // the leftmost, page 0 at first, then -1, -2, ... as they fill.
-    // Unfolded, pages show in pairs: the pager counts pairs, and an odd last page gets an empty partner.
+    // Unfolded, tile pages show in pairs and a face across both halves: the pager counts slots (see slotsOf).
     val per = if (showsTwoPages(windowSize())) 2 else 1
     val pageNumbers =
         engine.pages
             .let { listOf(minOf(it.first(), FACE_PAGE + 1) - 1) + it }
             .let { if (engine.itemsOn(it.last()).isEmpty()) it else it + (it.last() + 1) }
-            .let { if (it.size % per == 0) it else it + (it.last() + 1) }
-    // Home opens on page 1, not left of it.
-    val pager = rememberPagerState(initialPage = pageNumbers.indexOf(1).coerceAtLeast(0) / per) { pageNumbers.size / per }
+    // Only faces on screen, or the empty one waiting left of them: they get it whole, the bar's room too (see
+    // LauncherState.faceShowing), and the status bar's while all of them say statusBar: false.
+    fun faceOn(page: Int?) = page?.let { engine.layout.owner(engine.itemsOn(it)) as? WidgetItem }?.takeIf { it.isFace }
+    fun full(page: Int?) = page != null && (isFacePage(page) || faceOn(page) != null)
+    val slots = slotsOf(pageNumbers, per, ::full)
+    fun slotOf(page: Int) = slots.indexOfFirst { page in it }
+    // Home opens on page 1, not left of it; on the first tile page, if a layout from before faces has none numbered 1.
+    val pager = rememberPagerState(initialPage = slotOf(pageNumbers.firstOrNull { it >= 1 } ?: 1).coerceAtLeast(0)) { slots.size }
     // A tile dropped on another page: show that page once the page list has caught up.
     var showPage by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(showPage, pageNumbers) {
-        val i = showPage?.let(pageNumbers::indexOf) ?: return@LaunchedEffect
-        if (i >= 0) pager.scrollToPage(i / per)
+    LaunchedEffect(showPage, slots) {
+        val i = showPage?.let(::slotOf) ?: return@LaunchedEffect
+        if (i >= 0) pager.scrollToPage(i)
         showPage = null
     }
     var menuFor by remember { mutableStateOf<HomeItem?>(null) }
@@ -121,37 +128,35 @@ fun HomeScreen(
     var shownPer by remember { mutableIntStateOf(per) }
     LaunchedEffect(per) {
         if (per == shownPer) return@LaunchedEffect
-        val i = pageNumbers.indexOf(engine.activePage)
+        val i = slotOf(engine.activePage)
         shownPer = per
-        if (i >= 0) pager.scrollToPage(i / per)
+        if (i >= 0) pager.scrollToPage(i)
     }
-    // The drawer pins apps to whichever page is showing (the left one of a pair); from a face, to page 1.
+    // The drawer pins apps to whichever page is showing (the left one of a pair); from a face, wherever it is, to page 1.
     // Pages appearing before the one showing don't move home off it, unless home was just sent to another page. At
     // start, pinned apps load before widgets, so page 1 may join after the faces and later pages: until widgets have
     // loaded, home keeps to page 1 rather than whatever stands at its index.
-    val listed = remember { arrayOf(pageNumbers) }
-    LaunchedEffect(pager.currentPage, pageNumbers, engine.loaded) {
+    val listed = remember { arrayOf(slots) }
+    LaunchedEffect(pager.currentPage, slots, engine.loaded) {
         if (!engine.loaded) return@LaunchedEffect
-        if (pageNumbers != listed[0]) {
-            listed[0] = pageNumbers
-            val i = pageNumbers.indexOf(engine.activePage)
-            if (showPage == null && i >= 0 && i / per != pager.currentPage) {
-                pager.scrollToPage(i / per)
+        if (slots != listed[0]) {
+            listed[0] = slots
+            val i = slotOf(engine.activePage)
+            if (showPage == null && i >= 0 && i != pager.currentPage) {
+                pager.scrollToPage(i)
                 return@LaunchedEffect
             }
         }
-        engine.activePage = pageNumbers.getOrElse(pager.currentPage * per) { 1 }
-        state.currentPage = engine.activePage.coerceAtLeast(1)
+        engine.activePage = slots.getOrNull(pager.currentPage)?.first() ?: 1
+        state.currentPage = engine.activePage.takeIf { it >= 1 && !full(it) } ?: 1
     }
-    // Only faces on screen, or the empty one waiting left of them: they get it whole, the bar's room too (see
-    // LauncherState.faceShowing), and the status bar's while all of them say statusBar: false.
-    fun faceOn(page: Int?) = page?.let { engine.layout.owner(engine.itemsOn(it)) as? WidgetItem }?.takeIf { it.isFace }
-    fun full(page: Int?) = page != null && (isFacePage(page) || faceOn(page) != null)
-    val shown = (0 until per).map { pageNumbers.getOrNull(pager.currentPage * per + it) }
+    val shown = slots.getOrElse(pager.currentPage) { listOf(1) }
+    // A face showing has the keyboard, for one of its fields or terminals: it isn't lifted, it makes room itself.
+    val faceTyping = shown.mapNotNull(::faceOn).any { f -> engine.instance(f.spec)?.let { it.owns(runtime.terminals.active) || runtime.terminals.field?.widget === it } == true }
     val faceShowing = shown.all(::full)
     val statusBarAway = shown.all { faceOn(it)?.let { f -> engine.instance(f.spec) }?.showsStatusBar() == false }
     // Which pager slots are full screen, for the bar to slide with the others.
-    val fullSlots = List(pager.pageCount) { slot -> (0 until per).all { full(pageNumbers.getOrNull(slot * per + it)) } }
+    val fullSlots = slots.map { it.all(::full) }
     SideEffect {
         state.faceShowing = faceShowing
         state.statusBarAway = statusBarAway
@@ -186,7 +191,7 @@ fun HomeScreen(
     val typing = terminals.active != null
     LaunchedEffect(typing) { if (!typing) terminals.keyboard?.hide() }
     LaunchedEffect(state.requestedPage) {
-        state.requestedPage?.let { pageNumbers.indexOf(it).takeIf { i -> i >= 0 }?.let { i -> pager.animateScrollToPage(i / per) } }
+        state.requestedPage?.let { slotOf(it).takeIf { i -> i >= 0 }?.let { i -> pager.animateScrollToPage(i) } }
         state.requestedPage = null
     }
 
@@ -275,10 +280,11 @@ fun HomeScreen(
                     )
             }
             // Nothing below where the typing tile ends, above the extra keys, so the gaps around them show the wallpaper, and
-            // nothing lifted under the status bar.
+            // nothing lifted under the status bar. A face typing is the whole screen: it isn't lifted and keeps drawing
+            // under the status bar and down to the keyboard.
             .drawWithContent {
                 val keyboard = ime.getBottom(density)
-                if (!terminals.typing || keyboard == 0) {
+                if (!terminals.typing || keyboard == 0 || faceTyping) {
                     drawContent()
                 } else {
                     val keys = if (extraKeys) ExtraKeysHeight.toPx() else 0f
@@ -291,12 +297,12 @@ fun HomeScreen(
             }
     ) {
         // The pages fill the window, so a face can; tiles keep clear of the system bars (as if shown, so they
-        // don't move when a face hides the status bar) and of the bar, which DesktopScreen draws over the pages
-        // (so the keyboard lifts it without shrinking the grid). Below the grid the strip, a gap, the bar and the gap
-        // to the edge: the bar as measured, since a large font makes it taller. In a phone's landscape they stand
-        // beside it instead, on the side portrait's bottom turned to.
+        // don't move when a face hides the status bar; with style hiding it they reach the top, as always) and of the
+        // bar, which DesktopScreen draws over the pages (so the keyboard lifts it without shrinking the grid). Below the
+        // grid the strip, a gap, the bar and the gap to the edge: the bar as measured, since a large font makes it
+        // taller. In a phone's landscape they stand beside it instead, on the side portrait's bottom turned to.
         @OptIn(ExperimentalLayoutApi::class)
-        val bars = WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
+        val bars = (if (LauncherStyle.style[Style.STATUS_BAR_SHOWN]) WindowInsets.systemBarsIgnoringVisibility else WindowInsets.systemBars).union(WindowInsets.displayCutout)
         val direction = LocalLayoutDirection.current
         val keepClear =
             with(density) {
@@ -310,7 +316,8 @@ fun HomeScreen(
         HomeGrid(
             pager = pager,
             keepClear = keepClear,
-            pages = pageNumbers,
+            slots = slots,
+            full = ::full,
             itemsOn = engine::itemsOn,
             layout = engine.layout,
             arrange = arrange,
@@ -356,10 +363,14 @@ fun HomeScreen(
                             instance = engine.instance(item.spec),
                             // As shown: on its side in landscape. A face is the whole grid.
                             cells = (if (item.isFace) engine.layout.grid else engine.layout.cell(item.key)?.let { it.w to it.h })?.let { (w, h) -> if (turned) h to w else w to h },
-                            // Accent like Hyprland's active border: only while one of its terminals has the keyboard.
-                            focused = highlighted || typing,
+                            // Accent like Hyprland's active border: only while one of its terminals has the keyboard. A face
+                            // has none, being the whole screen; its screenInset grows by what the keyboard covers instead.
+                            focused = highlighted || (typing && !item.isFace),
+                            keyboard = if (typing && item.isFace) terminals.cut else 0f,
                             modifier =
-                                if (typing) {
+                                if (typing && item.isFace) {
+                                    tile.onGloballyPositioned { terminals.tile = it.boundsInWindow().translate(0f, terminals.lift) }
+                                } else if (typing) {
                                     tile
                                         .onGloballyPositioned { terminals.tile = it.boundsInWindow().translate(0f, terminals.lift) }
                                         .padding(bottom = with(density) { terminals.cut.toDp() })
@@ -475,6 +486,35 @@ private fun FaceInvite(
             }
         }
     }
+}
+
+/**
+ * The pager's slots, what each of its positions shows left to right: a page each with [per] 1. Unfolded ([per] 2), tile
+ * pages in pairs, so every tile keeps its folded size, and a [full] page (a face's, or the empty one waiting for one)
+ * alone across both halves, as a face is the whole screen. A tile page with a full one after it stands alone, its other
+ * half empty; the last one gets the number after it as an empty partner, to drop tiles on.
+ */
+internal fun slotsOf(
+    pages: List<Int>,
+    per: Int,
+    full: (Int) -> Boolean,
+): List<List<Int>> {
+    if (per == 1) return pages.map { listOf(it) }
+    val slots = ArrayList<List<Int>>()
+    var i = 0
+    while (i < pages.size) {
+        val page = pages[i]
+        val next = pages.getOrNull(i + 1)
+        slots +=
+            when {
+                full(page) -> listOf(page)
+                next == null -> listOf(page, page + 1)
+                full(next) -> listOf(page)
+                else -> listOf(page, next).also { i++ }
+            }
+        i++
+    }
+    return slots
 }
 
 /**

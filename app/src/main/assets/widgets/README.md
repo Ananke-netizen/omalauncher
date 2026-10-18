@@ -625,13 +625,19 @@ face "morning" {
   keeps it while a game waits and hides it while one runs.
 - **The navigation bar.** The face runs on under it, like an app with `edge: true`: `screenInset` is how
   much of its bottom the navigation bar covers, in dp, so end it with `Spacer { height: screenInset }` or
-  pad buttons along the bottom by it.
+  pad buttons along the bottom by it. While one of its `Input`s has the keyboard, `screenInset` is what the keyboard
+  covers instead, so the same Spacer lifts the field above it; a face can also leave things out then
+  (`if screenInset < 120 { ... }`) to make room. The face itself stays put, under the status bar and the keyboard.
 - **Looks.** There's no tile frame and no background: it draws straight on the wallpaper. Where text needs
   one to be readable, give the face `background: alpha(background, 0.7)` or a gradient (owl 10), or just the
   nodes that hold it, which can be frosted glass (`frost`, owl 10).
   `padding` (12 by default) is around everything, as on a tile.
 - **Size.** `cols` and `rows` are the whole grid (6 or so by 12), and `tileWidth` and `tileHeight` the
   screen's size in dp: lay it out by those, since phones differ. It takes no `size` or `minSize`.
+- **Foldables.** Unfolded, where home shows two pages of tiles side by side, a face still gets the whole
+  screen, both halves, so `tileWidth` can be more than `tileHeight`. Lay it out for that too: the examples
+  take `let wide = (tileWidth ?? 0) > (tileHeight ?? 1)` and put two columns side by side when it is. The
+  same goes for a tablet and for landscape.
 - **On the phone.** Long presses are the face's own (`onLongPress`); one that no node takes opens the home
   menu, as on empty space between tiles. Faces are edited, shared, moved and removed in settings › pages, which lists home's pages left to right, faces and pages of tiles: drag one by its handle to move it. Swiping up opens the app drawer and sideways turns the page, so
   a `scroll: true` Column scrolls up and down, and a face has nothing to swipe sideways.
