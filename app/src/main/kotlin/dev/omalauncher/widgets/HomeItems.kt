@@ -21,6 +21,9 @@ sealed interface HomeItem {
 
     /** App shortcuts are fixed 1x1 icons; only widgets resize. */
     val resizable: Boolean get() = true
+
+    /** A page (`page "…" { }`): it has no cell, and fills a home page of its own; see [WidgetLayout.owner]. */
+    val fullPage: Boolean get() = false
 }
 
 /** Equal while its spec is the same object, so pages that didn't change skip recomposition. */
@@ -31,6 +34,8 @@ data class WidgetItem(
     override val page get() = spec.page
     override val size get() = spec.size
     override val minSize get() = spec.minSize
+    override val resizable get() = !spec.fullPage
+    override val fullPage get() = spec.fullPage
 }
 
 /**

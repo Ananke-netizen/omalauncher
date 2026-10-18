@@ -42,6 +42,7 @@ fun SettingsScreen(
     runtime: Runtime,
     onDismiss: () -> Unit,
     onStyle: () -> Unit,
+    onPages: () -> Unit,
     onAgents: () -> Unit,
     onPackages: () -> Unit,
     onLinux: () -> Unit,
@@ -79,6 +80,7 @@ fun SettingsScreen(
             listOfNotNull(
                 Triple("style", runtime.themes.current?.title ?: "theme, background, home screen", onStyle),
                 Triple("icons", iconsStatus(runtime.icons), onIcons),
+                Triple("pages", runtime.widgets.pages.size.let { if (it == 1) "1 page" else "$it pages" } + " · arrange, edit, remove", onPages),
                 Triple("gestures", "swipe up: ${runtime.gestures.swipeUp.label} · down: ${runtime.gestures.swipeDown.label}", onGestures),
                 Triple("linux", linuxStatus, onLinux),
                 if (installed) {
@@ -154,7 +156,7 @@ private fun UpdatesBox(
 ) {
     val updates = runtime.updates
     val engine = runtime.widgets
-    val markets = listOf(engine.market, engine.appMarket)
+    val markets = engine.markets
     if (linux) LaunchedEffect(Unit) { updates.check() }
     LaunchedEffect(Unit) {
         // Opened on its own after the process died, settings comes before the engine has read these.
