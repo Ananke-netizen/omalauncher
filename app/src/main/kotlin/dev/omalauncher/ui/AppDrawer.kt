@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Popup
+import dev.omalauncher.drawer.DrawerFoldersFile
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.graphics.ColorFilter
@@ -311,9 +312,12 @@ private fun HitCell(
     hit: AppHit,
     handlers: AppHandlers,
     selected: Boolean = false,
+    /** Offers "folder" in the long-press menu of Android apps, when the drawer has folders. */
+    onFolder: ((AndroidApp) -> Unit)? = null,
 ) {
     val (icon, mask) = hit.icons(runtime)
-    AppCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) }, shortcuts = { hit.shortcutMenu(handlers) }, selected = selected, spoken = hit.spoken, paused = hit.paused(runtime))
+    val folderAction = if (onFolder != null && hit is AppHit.Android) listOf("folder" to { onFolder(hit.app) }) else emptyList()
+    AppCell(hit.label, icon, mask, onClick = { handlers.launch(hit) }, actions = { hit.actions(handlers) + folderAction }, shortcuts = { hit.shortcutMenu(handlers) }, selected = selected, spoken = hit.spoken, paused = hit.paused(runtime))
 }
 
 /** Height of the recent apps strip; home keeps this much room for it above the bar, even while it's empty. */
@@ -451,6 +455,12 @@ internal fun AppPanel(
     val apps = runtime.androidApps
     // With a work profile, the empty bar lists one profile's apps at a time, as stock drawers' tabs do.
     val (tabs, tab) = shownTabs(runtime, state)
+    // The drawer folder shown open under its row, by name; one at a time.
+    var openFolder by remember { mutableStateOf<String?>(null) }
+    // The Android app whose "folder" menu item was picked, while the folder chooser is up.
+    var choosing by remember { mutableStateOf<AndroidApp?>(null) }
+    val folders = runtime.drawerFolders.folders
+    val onFolder: ((AndroidApp) -> Unit)? = if (folders.isEmpty()) null else { app -> choosing = app }
 
     val screenHeight = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     // Pulling down past the end of the list drags the panel closed, like stock drawers.
@@ -538,7 +548,7 @@ internal fun AppPanel(
                                 selected: Int = -1,
                             ) = item(key = key) {
                                 Row(Modifier.fillMaxWidth()) {
-                                    cells.forEachIndexed { i, hit -> Box(Modifier.weight(1f)) { HitCell(runtime, hit, handlers, selected = i == selected) } }
+                                    cells.forEachIndexed { i, hit -> Box(Modifier.weight(1f)) { HitCell(runtime, hit, handlers, selected = i == selected, onFolder = onFolder) } }
                                     repeat(columns - cells.size) { Spacer(Modifier.weight(1f)) }
                                 }
                             }
@@ -585,13 +595,63 @@ internal fun AppPanel(
                                     }
                                     // Usually few and just added: between the Linux and the Android apps, not past all the Android ones.
                                     section("shortcuts", apps.shortcuts.filter { !it.work }.map { AppHit.Shortcut(it) })
-                                    section("android", apps.apps.filter { !it.work }.map { AppHit.Android(it) })
+                                    val personal = apps.apps.filter { !it.work }
+                                    if (folders.isEmpty()) {
+                                        section("android", personal.map { AppHit.Android(it) })
+                                    } else {
+                                        val byPackage = personal.groupBy { it.component.packageName }
+                                        val filled =
+                                            folders.mapNotNull { f ->
+                                                f.packages.flatMap { byPackage[it].orEmpty() }.takeIf { it.isNotEmpty() }?.let { f.name to it.map { a -> AppHit.Android(a) } }
+                                            }
+                                        if (filled.isNotEmpty()) {
+                                            item(key = "h:folders") { Section("folders") }
+                                            filled.chunked(columns).forEachIndexed { r, cells ->
+                                                item(key = "f:$r") {
+                                                    Row(Modifier.fillMaxWidth()) {
+                                                        for ((name, hits) in cells) {
+                                                            Box(Modifier.weight(1f)) {
+                                                                FolderCell(runtime, name, hits, open = name == openFolder) {
+                                                                    openFolder = if (openFolder == name) null else name
+                                                                }
+                                                            }
+                                                        }
+                                                        repeat(columns - cells.size) { Spacer(Modifier.weight(1f)) }
+                                                    }
+                                                }
+                                                cells.firstOrNull { it.first == openFolder }?.let { (name, hits) ->
+                                                    item(key = "fo:$name") {
+                                                        FolderPanel(name) {
+                                                            hits.chunked(columns).forEach { rowHits ->
+                                                                Row(Modifier.fillMaxWidth()) {
+                                                                    rowHits.forEach { hit -> Box(Modifier.weight(1f)) { HitCell(runtime, hit, handlers, onFolder = onFolder) } }
+                                                                    repeat(columns - rowHits.size) { Spacer(Modifier.weight(1f)) }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        val foldered = folders.flatMap { it.packages }.toSet()
+                                        section("android", personal.filter { it.component.packageName !in foldered }.map { AppHit.Android(it) })
+                                    }
                                 }
                             }
                         }
                     }
                 }
                 if (query.isNotBlank()) AskRow(runtime, linuxState == LinuxState.Installed, query, highlighted == -1, onAsk)
+            }
+        }
+        choosing?.let { app ->
+            val pkg = app.component.packageName
+            val current = DrawerFoldersFile.folderOf(folders, pkg)
+            Popup(alignment = Alignment.Center, onDismissRequest = { choosing = null }, properties = PopupProperties(focusable = true)) {
+                val picks =
+                    folders.map { f -> (if (f.name == current) "\u2022 ${f.name}" else f.name) to { runtime.drawerFolders.move(pkg, f.name) } } +
+                        listOf("no folder" to { runtime.drawerFolders.move(pkg, null) })
+                MenuItems(picks, onDismiss = { choosing = null }, minWidth = 200.dp, itemPadding = 12.dp, fontSize = TextSize.Item)
             }
         }
     }
@@ -829,5 +889,75 @@ internal fun SettingsButton(
                     .background(Palette.red, CircleShape),
             )
         }
+    }
+}
+
+/** A drawer folder: up to four of its apps' icons in a framed square, its name under it, like an [AppCell]. */
+@Composable
+private fun FolderCell(
+    runtime: Runtime,
+    name: String,
+    hits: List<AppHit>,
+    open: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(LauncherStyle.shape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val mono = LauncherStyle.monochromeIcons
+        Box(
+            Modifier.size(52.dp).frame(if (open) 2.dp else 1.dp, if (open) Palette.accent else Palette.border, fill = Palette.surface, radius = 14.dp).padding(6.dp),
+        ) {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                for (r in 0 until 2) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        for (c in 0 until 2) {
+                            val hit = hits.getOrNull(r * 2 + c)
+                            Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                                if (hit != null) {
+                                    val (icon, mask) = hit.icons(runtime)
+                                    if (mono && mask != null) {
+                                        Image(mask, null, Modifier.size(16.dp), colorFilter = ColorFilter.tint(Palette.accent))
+                                    } else if (icon != null) {
+                                        Image(icon, null, Modifier.size(18.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        BasicText(
+            name,
+            style = Mono.copy(fontSize = TextSize.Small, textAlign = TextAlign.Center, color = if (open) Palette.accent else Palette.foreground),
+            maxLines = 2,
+            minLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** An open drawer folder, under the row of its [FolderCell]: framed, its name, then its apps. */
+@Composable
+private fun FolderPanel(
+    name: String,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .frame(1.dp, Palette.border, fill = Palette.surface.copy(alpha = 0.5f), radius = 16.dp)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+    ) {
+        SectionLabel(name, Modifier.padding(start = 8.dp))
+        content()
     }
 }
