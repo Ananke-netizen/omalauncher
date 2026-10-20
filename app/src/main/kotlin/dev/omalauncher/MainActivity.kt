@@ -1,9 +1,13 @@
 package dev.omalauncher
 
+import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.role.RoleManager
 import android.content.Intent
 import android.os.Bundle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
@@ -37,7 +41,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             LauncherRoot(runtime, state)
             LaunchedEffect(Palette.isLight) { applySystemBars(this@MainActivity, Palette.isLight) }
-            val statusBar = LauncherStyle.style[Style.STATUS_BAR_SHOWN]
+            // A face whose statusBar is false takes the status bar's room too.
+            val fullScreen by remember { derivedStateOf { state.fullScreen && runtime.widgets.openScreen == null } }
+            val statusBar = LauncherStyle.style[Style.STATUS_BAR_SHOWN] && !fullScreen
             LaunchedEffect(statusBar) { showStatusBar(this@MainActivity, statusBar) }
         }
         handleDebugExec(intent)
@@ -55,7 +61,7 @@ class MainActivity : ComponentActivity() {
     private fun requestHomeRole() {
         val roles = getSystemService(RoleManager::class.java)
         if (!roles.isRoleAvailable(RoleManager.ROLE_HOME) || roles.isRoleHeld(RoleManager.ROLE_HOME)) return
-        val prefs = getSharedPreferences("launcher", MODE_PRIVATE)
+        val prefs = LauncherData.prefs(this)
         if (prefs.getBoolean("home_role_asked", false)) return
         prefs.edit().putBoolean("home_role_asked", true).apply()
         @Suppress("DEPRECATION")
@@ -124,7 +130,9 @@ class MainActivity : ComponentActivity() {
         handleSharedWidget(intent)
     }
 
+    // Lint flags super.dispatchKeyEvent: ComponentActivity marks its override @RestrictTo, but Activity's is public API.
     /** Launcher shortcuts (Super+key), then typing into a terminal tile that has the keyboard. Back stays the launcher's. */
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.isMetaPressed && event.action == KeyEvent.ACTION_DOWN && shortcut(event.keyCode)) return true
         if (event.keyCode != KeyEvent.KEYCODE_BACK && runtime.terminals.active != null && runtime.keyboard.handle(event)) return true
@@ -153,7 +161,7 @@ class MainActivity : ComponentActivity() {
             KeyEvent.KEYCODE_SPACE -> state.toggle()
             KeyEvent.KEYCODE_A -> state.promptRequest = PromptRequest.Type
             KeyEvent.KEYCODE_F -> if (runtime.launcherReady && runtime.feed.settings.enabled) state.feed.toggle() else return false
-            in KeyEvent.KEYCODE_1..KeyEvent.KEYCODE_9 -> state.requestedPage = keyCode - KeyEvent.KEYCODE_1
+            in KeyEvent.KEYCODE_1..KeyEvent.KEYCODE_9 -> state.requestedPage = keyCode - KeyEvent.KEYCODE_0
             else -> return false
         }
         return true

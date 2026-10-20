@@ -21,6 +21,9 @@ sealed interface HomeItem {
 
     /** App shortcuts are fixed 1x1 icons; only widgets resize. */
     val resizable: Boolean get() = true
+
+    /** A page (`face "…" { }`): it has no cell, and fills a home page of its own; see [WidgetLayout.owner]. */
+    val isFace: Boolean get() = false
 }
 
 /** Equal while its spec is the same object, so pages that didn't change skip recomposition. */
@@ -31,6 +34,8 @@ data class WidgetItem(
     override val page get() = spec.page
     override val size get() = spec.size
     override val minSize get() = spec.minSize
+    override val resizable get() = !spec.isFace
+    override val isFace get() = spec.isFace
 }
 
 /**
@@ -89,8 +94,7 @@ class Shortcuts(
     private val folderEntries = mutableStateListOf<FolderEntry>()
 
     init {
-        // Version 0 (before versioning) is the same array, unwrapped.
-        (Versioned.read(prefs.getString(ITEMS, null), VERSION) { _, data -> data } as? JSONArray)?.let { array ->
+        (Versioned.read(prefs.getString(ITEMS, null), VERSION) as? JSONArray)?.let { array ->
             items += array.mapObjects(::parse)
         }
         (Versioned.read(prefs.getString(FOLDERS, null), VERSION) as? JSONArray)?.let { array ->

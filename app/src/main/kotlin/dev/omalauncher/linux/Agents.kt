@@ -26,6 +26,8 @@ data class Agent(
     val app: String = "",
     /** What starts it without a prompt, when that's more than [bin]. */
     val command: String = bin,
+    /** Whether mise needs node to install it: npm packages run their postinstall scripts with it. */
+    val node: Boolean = pkg.startsWith("npm:"),
 ) {
     val android get() = app.isNotEmpty()
 
@@ -39,7 +41,8 @@ val AGENTS =
         Agent("pantheon", "Pantheon", "Hermes in the Pantheon app, no Linux needed", "", app = PANTHEON_PACKAGE),
         Agent("hermes", "Hermes", "This house's assistant, on the home server", "", remote = true),
         Agent("claude", "Claude Code", "Anthropic's coding agent", "claude"),
-        Agent("opencode", "OpenCode", "Open source agent, any model provider", "opencode"),
+        // mise installs OpenCode 2 from npm (@opencode/cli).
+        Agent("opencode", "OpenCode", "Open source agent, any model provider", "opencode", node = true),
         Agent("codex", "Codex", "OpenAI's coding agent", "codex"),
         Agent("grok", "Grok", "xAI's coding agent", "npm:@xai-official/grok"),
         Agent("copilot", "GitHub Copilot", "GitHub's coding agent", "copilot"),
@@ -125,26 +128,44 @@ fun chipAgents(installed: List<Agent>, picked: Agent?, all: Boolean): List<Agent
     if (all) installed else installed.filter { it.android || it.bin == "hermes" || it.bin == picked?.bin }
 
 /**
- * Starts [agentBin] with a first prompt; OpenCode takes it as --prompt, the others as an argument.
+ * Brings mise itself up to date. Which backend a tool installs from is built into mise, and an old mise
+ * breaks when a tool moves: OpenCode 2 left GitHub releases for npm, and mise 2026.10.8 still looked for
+ * it on GitHub (404). Best effort, since the old mise may still manage.
+ */
+const val MISE_SELF_UPDATE = "{ mise self-update -y || true; }"
+
+/** Adds node to the global config when an installed agent needs it but was installed before it did (OpenCode 1). */
+val MISE_NODE_FOR_AGENTS =
+    AGENTS.filter { it.node }.joinToString(" ", prefix = "if [ -z \"\$(mise ls -g node)\" ] && [ -n \"\$(mise ls -g ", postfix = ")\" ]; then mise use -g node@lts; fi") {
+        shellQuote(it.pkg)
+    }
+
+/**
+ * Starts [agentBin] with a first prompt; OpenCode takes it as --prompt, Antigravity and Copilot as -i (they
+ * refuse a bare argument), the others as an argument.
  * Ori's agent is `ori code`, which stays open only with --interactive. Kimi takes a prompt only in
  * print mode, so the session it ran in is continued after the answer.
- * [readOnly], for reading something untrusted: Claude Code starts in plan mode, where it can read but not
- * run commands or change files whatever the user's settings say. The others have no flag for that we can
- * rely on inside proot, and only have the prompt.
+ * [readOnly], for reading something untrusted: Claude Code and Antigravity start in plan mode, where they
+ * can read but not run commands or change files whatever the user's settings say. The others have no flag
+ * for that we can rely on inside proot, and only have the prompt.
  */
 fun agentInvocation(
     agentBin: String,
     prompt: String,
     readOnly: Boolean = false,
 ): String {
-    val quoted = shellQuote(prompt)
+    // A prompt starting with a dash would be read as an option (claude --settings=... runs hooks); a space in front isn't.
+    val quoted = shellQuote(if (prompt.startsWith("-")) " $prompt" else prompt)
     return when {
         agentBin == "opencode" -> "$agentBin --prompt $quoted"
+        agentBin == "copilot" -> "$agentBin -i $quoted"
         agentBin == "claude" && readOnly -> "$agentBin --permission-mode plan $quoted"
         // Hermes runs on the home server behind the wrapper (see AgentStore); hermes chat takes the prompt with -q.
         agentBin == "hermes" -> "$agentBin -q $quoted"
         agentBin == "ori" -> "ori code --interactive --prompt $quoted"
         agentBin == "kimi" -> "kimi --prompt $quoted && kimi --continue"
+        agentBin == "agy" && readOnly -> "$agentBin --mode plan -i $quoted"
+        agentBin == "agy" -> "$agentBin -i $quoted"
         else -> "$agentBin $quoted"
     }
 }
@@ -243,8 +264,8 @@ class AgentStore(
     /** Installs [agent] with mise, bootstrapping mise itself if needed. */
     fun miseInstallScript(agent: Agent) =
         buildString {
-            if (!mise.exists()) append("curl -fsSL https://mise.run | sh && ")
-            if (agent.pkg.startsWith("npm:")) append("mise use -g node@lts && ")
+            append(if (mise.exists()) "$MISE_SELF_UPDATE && " else "curl -fsSL https://mise.run | sh && ")
+            if (agent.node) append("mise use -g node@lts && ")
             append("mise use -g ${shellQuote(agent.pkg)}")
             // Downloads are only needed during install; storage on phones is tight.
             append(" && mise cache clear && rm -rf ~/.local/share/mise/downloads")
@@ -301,12 +322,9 @@ class AgentStore(
         agent: Agent,
         action: String,
         script: () -> String,
-    ): Boolean =
-        withContext(Dispatchers.IO) {
-            states[agent.bin] = JobState.Working(action, emptyList())
-            val (ok, tail) = proot.runJob(script()) { states[agent.bin] = JobState.Working(action, it) }
-            Log.i("agents", "$action ${agent.bin}: ${if (ok) "ok" else "failed"}")
-            states[agent.bin] = if (ok) JobState.Idle else JobState.Failed(tail.toList())
-            ok
-        }
+    ): Boolean {
+        val (ok, _) = proot.trackedJob(action, withContext(Dispatchers.IO) { script() }) { states[agent.bin] = it }
+        Log.i("agents", "$action ${agent.bin}: ${if (ok) "ok" else "failed"}")
+        return ok
+    }
 }

@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -120,7 +121,10 @@ internal fun IconsPage(
     IconsScreen(runtime, onDismiss = onDismiss, onPick = { picking = it }, onTask = { runIconTask(runtime, it, open) })
     picking?.let { app ->
         BackHandler { picking = null }
-        IconPickerScreen(runtime, app, onDismiss = { picking = null }, onTask = { runIconTask(runtime, it, open) })
+        // Opened from the list, so its chevron goes back to the list, not out of the icons page.
+        CompositionLocalProvider(LocalPanelBack provides { picking = null }) {
+            IconPickerScreen(runtime, app, onDismiss = { picking = null }, onTask = { runIconTask(runtime, it, open) })
+        }
     }
 }
 

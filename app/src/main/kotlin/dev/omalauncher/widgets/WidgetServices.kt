@@ -11,7 +11,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.app.ActivityManager
-import android.content.ActivityNotFoundException
 import android.hardware.display.DisplayManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -25,6 +24,7 @@ import android.os.StatFs
 import android.view.Display
 import android.view.HapticFeedbackConstants
 import android.view.View
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.ImageBitmap
 import dev.omalauncher.BuildConfig
 import android.os.Process
@@ -36,10 +36,17 @@ import android.widget.Toast
 import dev.omalauncher.MainActivity
 import dev.omalauncher.R
 import dev.omalauncher.Runtime
+import dev.omalauncher.linux.Agent
+import dev.omalauncher.linux.agentInvocation
 import dev.omalauncher.linux.GuestShell
 import dev.omalauncher.linux.Proot
 import dev.omalauncher.linux.ShellPool
 import dev.omalauncher.linux.ShellResult
+import dev.omalauncher.openHttp
+import dev.omalauncher.openUrl
+import dev.omalauncher.readUpTo
+import dev.omalauncher.sha256Hex
+import dev.omalauncher.upgrade.writeAtomically
 import dev.omalauncher.widgets.lang.Builtins
 import dev.omalauncher.widgets.lang.Lst
 import dev.omalauncher.widgets.lang.Null
@@ -50,7 +57,13 @@ import dev.omalauncher.widgets.lang.Value
 import dev.omalauncher.widgets.lang.WidgetError
 import dev.omalauncher.widgets.lang.bool
 import dev.omalauncher.androidAppKey
+import dev.omalauncher.ui.AppHit
 import dev.omalauncher.ui.LauncherStyle
+import dev.omalauncher.ui.SettingsPage
+import dev.omalauncher.ui.allApps
+import dev.omalauncher.ui.appIconOf
+import dev.omalauncher.ui.open
+import dev.omalauncher.ui.recentApps
 import dev.omalauncher.widgets.runtime.Alarm
 import dev.omalauncher.widgets.runtime.Media
 import dev.omalauncher.widgets.runtime.Modes
@@ -74,10 +87,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
-import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 private const val MAX_HTTP_BYTES = 1 shl 20
@@ -152,6 +162,8 @@ class WidgetServices(
             "alarm" -> alarm.value()
             "modes" -> modes.value()
             "apps" -> apps()
+            "agents" -> agents()
+            "recent" -> recent()
             else -> throw WidgetError("unknown android source $name")
         }
 
@@ -162,6 +174,10 @@ class WidgetServices(
             "volume" -> volume.updates()
             "alarm" -> alarm.updates()
             "modes" -> modes.updates()
+            // Both read Compose state: the app list and its usage, the installed agents and the one picked.
+            "apps" -> snapshotFlow { apps() }
+            "agents" -> snapshotFlow { agents() }
+            "recent" -> snapshotFlow { recent() }
             "battery" ->
                 callbackFlow {
                     val receiver =
@@ -207,6 +223,8 @@ class WidgetServices(
         val key = androidAppKey(app.component, app.profile)
         return if (LauncherStyle.monochromeIcons) apps.masks[key] else apps.icons[key]
     }
+
+    override fun launcherIcon(key: String) = appIconOf(runtime, key, LauncherStyle.monochromeIcons)
 
     override fun terminal(
         command: String?,
@@ -287,7 +305,7 @@ class WidgetServices(
     }
 
     /**
-     * Launchable Android apps for `source a = android.apps`, each `{key, name, package, component, profile, system, icon, score, last}`.
+     * Launchable Android apps for `source a = android.apps`, updated as apps come and go and are opened, each `{key, name, package, component, profile, system, icon, score, last}`.
      * `key` is [dev.omalauncher.AndroidApp.key], unique across profiles, for `androidApp(a.key)`; `profile` is `work` or
      * `clone` as on notifications, else null; `icon` is the `app:` src for that copy. `score` and `last` are what the
      * search ranks by ([dev.omalauncher.AppUsage]), so a widget can rank apps the same way.
@@ -308,6 +326,59 @@ class WidgetServices(
                         "icon" to Str("app:${app.component.packageName}${kind?.let { "@$it" } ?: ""}"),
                         "score" to Num(Math.round(runtime.usage.score(usage) * 10.0) / 10.0),
                         "last" to (runtime.usage.last(usage)?.let { Num((it / 1000).toDouble()) } ?: Null),
+                    ),
+                )
+            },
+        )
+
+    /**
+     * The coding agents installed in Linux, for `source ag = android.agents`: `{default, installed}`, each agent
+     * `{bin, name, description, command, key, icon}`. `default` is the one the prompt bar asks (null with none
+     * installed) and the one `ask(text)` asks. `key` is its drawer entry's, for `open(...)`, and `icon` its logo.
+     */
+    private fun agents(): Value {
+        fun agent(a: Agent): Value {
+            // The drawer entry AgentStore.managed() writes for it.
+            val key = "l:agent-${a.bin}"
+            return Obj(
+                mapOf(
+                    "bin" to Str(a.bin),
+                    "name" to Str(a.name),
+                    "description" to Str(a.description),
+                    "command" to Str(a.command),
+                    "key" to Str(key),
+                    "icon" to Str("icon:$key"),
+                ),
+            )
+        }
+        val store = runtime.agents
+        return Obj(mapOf("default" to (store.default?.let(::agent) ?: Null), "installed" to Lst(store.installed.map(::agent))))
+    }
+
+    /**
+     * The recent apps strip's apps for `source r = android.recent`, last opened first: Android and Linux apps, owl
+     * apps and shortcuts, each `{key, kind, name, icon, score, last}`. `kind` is `android`, `linux`, `owl` or
+     * `shortcut`; `open(r.key)` opens one and `icon` is its `icon:` src. Like the strip it reorders only once
+     * home is out of sight, so a tap doesn't move what's under the finger.
+     */
+    private fun recent(): Value =
+        Lst(
+            recentApps(runtime, Builtins.MAX_LIST).map { hit ->
+                val kind =
+                    when (hit) {
+                        is AppHit.Android -> "android"
+                        is AppHit.Linux -> "linux"
+                        is AppHit.Owl -> "owl"
+                        is AppHit.Shortcut -> "shortcut"
+                    }
+                Obj(
+                    mapOf(
+                        "key" to Str(hit.key),
+                        "kind" to Str(kind),
+                        "name" to Str(hit.label),
+                        "icon" to Str("icon:" + hit.key),
+                        "score" to Num(Math.round(runtime.usage.score(hit.key) * 10.0) / 10.0),
+                        "last" to (runtime.usage.last(hit.key)?.let { Num((it / 1000).toDouble()) } ?: Null),
                     ),
                 )
             },
@@ -371,12 +442,7 @@ class WidgetServices(
             "terminal" -> runtime.terminal("$arg; exec bash", args.getOrNull(1)?.toString() ?: arg.substringBefore(' '))
             "app" -> runtime.launch(arg)
             // Any scheme an app handles: tel:, geo:, mailto:, ... One nothing handles mustn't crash the launcher.
-            "url" ->
-                try {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(arg)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                } catch (e: ActivityNotFoundException) {
-                    Toast.makeText(context, "no app opens $arg", Toast.LENGTH_SHORT).show()
-                }
+            "url" -> if (!context.openUrl(arg)) Toast.makeText(context, "no app opens $arg", Toast.LENGTH_SHORT).show()
             "launcher" -> launcherAction?.invoke(arg)
             "media" -> media.control(arg)
             "volume" -> volume.control(args[0])
@@ -387,6 +453,8 @@ class WidgetServices(
             "torch" -> modes.torch(args[0])
             "share" -> share(arg)
             "haptic" -> view?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            "open" -> openApp(arg)
+            "ask" -> ask(arg, args.getOrNull(1)?.takeIf { it != Null }?.toString())
         }
         // Anything the action changed should show up without waiting for the next interval.
         scope.launch {
@@ -407,20 +475,25 @@ class WidgetServices(
         url: String,
         headers: Map<String, String>,
         timeoutSeconds: Int,
+        body: ByteArray?,
     ): ShellResult =
         withContext(Dispatchers.IO) {
             if (!url.startsWith("https://") && !url.startsWith("http://")) return@withContext ShellResult("", "not an http(s) URL: $url", -1)
             try {
-                val connection = URL(url).openConnection() as HttpURLConnection
+                val connection = openHttp(url, timeoutSeconds * 1000, timeoutSeconds * 1000)
                 try {
-                    connection.connectTimeout = timeoutSeconds * 1000
-                    connection.readTimeout = timeoutSeconds * 1000
                     connection.setRequestProperty("User-Agent", "omalauncher-widgets")
                     headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
+                    if (body != null) {
+                        connection.requestMethod = "POST"
+                        connection.doOutput = true
+                        connection.setFixedLengthStreamingMode(body.size)
+                        connection.outputStream.use { it.write(body) }
+                    }
                     val code = connection.responseCode
                     val stream = if (code >= 400) connection.errorStream else connection.inputStream
                     // Widgets show a few values; a runaway response mustn't fill memory.
-                    val body = stream?.use { String(readAtMost(it, MAX_HTTP_BYTES), Charsets.UTF_8) }.orEmpty()
+                    val body = stream?.use { String(it.readUpTo(MAX_HTTP_BYTES), Charsets.UTF_8) }.orEmpty()
                     if (code in 200..299) ShellResult(body.trimEnd(), "", code) else ShellResult(body.trimEnd(), connection.responseMessage.orEmpty(), code)
                 } finally {
                     connection.disconnect()
@@ -443,7 +516,7 @@ class WidgetServices(
         if (!url.startsWith("https://")) return null
         return fileLocks.getOrPut(url) { Mutex() }.withLock {
             withContext(Dispatchers.IO) {
-                val file = File(fileCache, MessageDigest.getInstance("SHA-256").digest(url.toByteArray()).joinToString("") { "%02x".format(it) })
+                val file = File(fileCache, sha256Hex(url.toByteArray()))
                 val kept = file.takeIf { it.isFile }
                 if (kept != null && System.currentTimeMillis() - kept.lastModified() < FILE_FRESH_MS) return@withContext kept
                 val failed = fileFailed[url]
@@ -456,10 +529,7 @@ class WidgetServices(
                 }
                 fileFailed.remove(url)
                 runCatching {
-                    fileCache.mkdirs()
-                    val tmp = File(fileCache, file.name + ".tmp")
-                    tmp.writeBytes(bytes)
-                    tmp.renameTo(file)
+                    writeAtomically(file, bytes)
                     pruneFiles()
                     file
                 }.getOrNull()
@@ -469,13 +539,11 @@ class WidgetServices(
 
     /** A file's bytes, or null for anything but a 2xx or a response over [MAX_FILE_BYTES]. */
     private fun download(url: String): ByteArray? {
-        val connection = URL(url).openConnection() as HttpURLConnection
+        val connection = openHttp(url, readTimeout = 20_000)
         try {
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 20_000
             connection.setRequestProperty("User-Agent", "omalauncher-widgets")
             if (connection.responseCode !in 200..299) return null
-            return connection.inputStream.use { readAtMost(it, MAX_FILE_BYTES + 1) }.takeIf { it.size <= MAX_FILE_BYTES }
+            return connection.inputStream.use { it.readUpTo(MAX_FILE_BYTES + 1) }.takeIf { it.size <= MAX_FILE_BYTES }
         } finally {
             connection.disconnect()
         }
@@ -557,6 +625,28 @@ class WidgetServices(
         context.packageManager.getLaunchIntentForPackage(arg)?.let { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)) }
     }
 
+    /** open(key): an app from `android.recent` or `android.agents`, or an `android.apps` key, opened as from the drawer. */
+    private fun openApp(key: String) {
+        val apps = allApps(runtime)
+        (apps.firstOrNull { it.key == key } ?: apps.firstOrNull { it.key == "a:$key" })?.open(runtime)
+    }
+
+    /**
+     * ask(text) or ask(text, bin): a terminal with the agent answering [prompt], as the prompt bar sends it: the
+     * default agent, or the installed one called [bin]. With no agent installed, the agents settings instead.
+     */
+    private fun ask(
+        prompt: String,
+        bin: String?,
+    ) {
+        val p = prompt.trim()
+        if (p.isEmpty()) return
+        val agents = runtime.agents
+        val agent = bin?.let { b -> agents.installed.firstOrNull { it.bin == b } } ?: agents.default
+        if (agent == null) return launcherAction?.invoke("agents") ?: runtime.openSettings(SettingsPage.Agents)
+        runtime.terminal("${agentInvocation(agent.bin, p)}; exec bash", agent.name, agent)
+    }
+
     private fun copy(text: String) {
         context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("widget", text))
         // Android 13+ confirms copies itself.
@@ -594,20 +684,6 @@ class WidgetServices(
                 .build()
         nm.notify(notificationId++, n)
     }
-}
-
-private fun readAtMost(
-    input: InputStream,
-    limit: Int,
-): ByteArray {
-    val out = java.io.ByteArrayOutputStream()
-    val buf = ByteArray(8192)
-    while (out.size() < limit) {
-        val n = input.read(buf, 0, minOf(buf.size, limit - out.size()))
-        if (n < 0) break
-        out.write(buf, 0, n)
-    }
-    return out.toByteArray()
 }
 
 /** An embedded sound, `asset x = base64"..."`, for MediaPlayer. */

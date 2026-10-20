@@ -58,6 +58,8 @@ import dev.omalauncher.widgets.checkSecretsCommand
 import dev.omalauncher.widgets.editWidgetCommand
 import dev.omalauncher.widgets.publishWidgetCommand
 import dev.omalauncher.widgets.reviewSharedWidgetCommand
+import dev.omalauncher.widgets.render.Backdrop
+import dev.omalauncher.widgets.render.LocalBackdrop
 import dev.omalauncher.widgets.render.LocalHomeCovered
 import dev.omalauncher.widgets.render.LocalInputFocus
 
@@ -111,12 +113,14 @@ private fun DesktopScreen(
             }
         }
     }
-    SystemBarFrames()
+    // A face runs under them, so their bands make way for it.
+    if (!state.faceShowing) SystemBarFrames()
     val covered = remember(state) { { state.homeCovered || runtime.widgets.openScreen != null } }
-    CompositionLocalProvider(LocalHomeCovered provides covered) {
-        Column(Modifier.fillMaxSize().safePadding()) {
-            HomeScreen(runtime, state, Modifier.weight(1f))
-        }
+    // What frosted nodes blur: the background drawn above, or by our live wallpaper, slid as far as the pages.
+    val backdrop = remember(runtime, state) { Backdrop({ runtime.themes.background }, { state.wallpaperOffset }) }
+    CompositionLocalProvider(LocalHomeCovered provides covered, LocalBackdrop provides backdrop) {
+        // The whole window: a face fills it, and tiles keep clear of the system bars and the bar themselves.
+        HomeScreen(runtime, state, Modifier.fillMaxSize())
     }
     HomeMenu(runtime, state)
 
@@ -128,15 +132,9 @@ private fun DesktopScreen(
     val highlighted = search.highlighted(state.picked)
 
     fun launch(hit: AppHit) {
-        runtime.usage.record(hit.key)
         state.query = ""
         state.closeNow()
-        when (hit) {
-            is AppHit.Linux -> runtime.launch(hit.app)
-            is AppHit.Android -> runtime.androidApps.open(hit.app)
-            is AppHit.Shortcut -> runtime.androidApps.open(hit.shortcut)
-            is AppHit.Owl -> runtime.openOwlApp(hit.spec.file.name)
-        }
+        hit.open(runtime)
     }
 
     val handlers =
@@ -171,8 +169,7 @@ private fun DesktopScreen(
                 shortcuts = { app -> shortcutMenu(runtime, app, page = { state.currentPage }, onOpen = state::closeNow, onPinned = state::close) },
                 edit = { spec ->
                     state.closeNow()
-                    val agent = runtime.agents.terminalDefault
-                    if (agent == null) state.show(SettingsPage.Agents) else runtime.terminal(editWidgetCommand(agent.bin, spec), "Edit ${spec.name}", agent)
+                    state.withAgent(runtime, "Edit ${spec.name}") { editWidgetCommand(it, spec) }
                 },
                 // The same screen a widget is shared from: a link or QR code, or the store.
                 share = { spec ->
@@ -200,8 +197,8 @@ private fun DesktopScreen(
     // except the bar. A phone's landscape folds them into a rail beside the grid, and unfolds them over it, centered.
     val side = homeSide()
     if (side != null && !panelShown) {
-        if (runtime.terminals.active == null) {
-            SideRail(runtime, state, handlers, side, Modifier.fillMaxSize().safePadding())
+        if (!runtime.terminals.typing) {
+            SideRail(runtime, state, handlers, side, Modifier.fillMaxSize().graphicsLayer { translationX = state.barShift() * size.width }.safePadding())
         }
     } else {
         Column(
@@ -230,13 +227,16 @@ private fun DesktopScreen(
                     )
                 }
             }
-            // Hidden while a terminal tile types: it would sit on the keyboard, over the tile.
-            if (runtime.terminals.active == null || runtime.terminals.keyboardLeaving) {
-                // Home only: the open app list has everything.
-                // Swiping up or down from either does what it does on home, as from the dock on stock launchers.
-                if (LauncherStyle.recentApps && !panelShown) RecentStrip(runtime, handlers, Modifier.homeSwipe(runtime, state))
-                // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.
-                PromptBar(runtime, state, search = search, highlighted = highlighted, onLaunch = handlers.launch, modifier = Modifier.homeSwipe(runtime, state))
+            // Hidden while a tile types: it would sit on the keyboard, over the tile. They slide with the tile pages,
+            // out past a face; swiping up there opens the drawer, which brings them back.
+            if (!runtime.terminals.typing || runtime.terminals.keyboardLeaving) {
+                Column(Modifier.graphicsLayer { if (!panelShown) translationX = state.barShift() * size.width }) {
+                    // Home only: the open app list has everything.
+                    // Swiping up or down from either does what it does on home, as from the dock on stock launchers.
+                    if (LauncherStyle.recentApps && !panelShown) RecentStrip(runtime, handlers, Modifier.homeSwipe(runtime, state))
+                    // Insets itself by the grid gap, so it lines up with the tiles and the gap still takes taps.
+                    PromptBar(runtime, state, search = search, highlighted = highlighted, onLaunch = handlers.launch, modifier = Modifier.homeSwipe(runtime, state))
+                }
             }
         }
     }
@@ -295,10 +295,7 @@ private fun ThemesOverlay(
             link,
             state.currentPage,
             // Stays open underneath, to add it once the agent has had its say.
-            onReview = { path ->
-                val agent = runtime.agents.terminalDefault
-                if (agent == null) state.show(SettingsPage.Agents) else runtime.terminal(reviewSharedWidgetCommand(agent.bin, path), "Review widget", agent)
-            },
+            onReview = { path -> state.withAgent(runtime, "Review widget") { reviewSharedWidgetCommand(it, path) } },
             onDismiss = { state.shared = null },
         )
     }
@@ -313,15 +310,13 @@ private fun ThemesOverlay(
                     {
                         state.sharing = null
                         // The default agent opens a pull request (or an issue) on the store repo.
-                        val agent = runtime.agents.terminalDefault
-                        if (agent == null) state.show(SettingsPage.Agents) else runtime.terminal(publishWidgetCommand(agent.bin, spec), "Publish ${spec.name}", agent)
+                        state.withAgent(runtime, "Publish ${spec.name}") { publishWidgetCommand(it, spec) }
                     }
                 },
             // Closes the screen: what the agent changes would be shared from a fresh one.
             onCheck = {
                 state.sharing = null
-                val agent = runtime.agents.terminalDefault
-                if (agent == null) state.show(SettingsPage.Agents) else runtime.terminal(checkSecretsCommand(agent.bin, spec), "Check ${spec.name}", agent)
+                state.withAgent(runtime, "Check ${spec.name}") { checkSecretsCommand(it, spec) }
             },
             onDismiss = { state.sharing = null },
         )

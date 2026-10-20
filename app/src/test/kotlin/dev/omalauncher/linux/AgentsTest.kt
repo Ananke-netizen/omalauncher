@@ -115,4 +115,42 @@ class AgentsTest {
         assertFalse(askHeadless(hermes, hold = false)) // a tap still dictates into the field, then Enter opens the window
         assertFalse(askHeadless(claude, hold = true)) // a local agent works inside its window
     }
+
+    @Test fun copilotReceivesAnInteractivePromptAsOneLiteralArgument() {
+        val prompt = "Explain \"it's quoted\"; \$(exit 17)\nand keep \$HOME literal."
+        val script = """
+            set -- ${agentInvocation("copilot", prompt)}
+            test "${'$'}#" -eq 3 &&
+            test "${'$'}1" = copilot &&
+            test "${'$'}2" = -i &&
+            test "${'$'}3" = "${'$'}EXPECTED_PROMPT"
+        """.trimIndent()
+        val process = ProcessBuilder("sh", "-c", script)
+            .redirectErrorStream(true)
+            .apply { environment()["EXPECTED_PROMPT"] = prompt }
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        assertEquals(output, 0, process.waitFor())
+    }
+
+    /** A prompt from a widget can't pass the agent an option: claude --settings=... would run its hooks. */
+    @Test fun aPromptStartingWithADashIsNoOption() {
+        val script = """
+            set -- ${agentInvocation("claude", "--settings={}")}
+            test "${'$'}#" -eq 2 &&
+            test "${'$'}2" = " --settings={}"
+        """.trimIndent()
+        val process = ProcessBuilder("sh", "-c", script).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        assertEquals(output, 0, process.waitFor())
+    }
+
+    /** OpenCode installs from before 2 have no node, and mise needs it for OpenCode 2's postinstall. */
+    @Test fun updatesAddNodeForOpencode() {
+        assertEquals(
+            "if [ -z \"\$(mise ls -g node)\" ] && [ -n \"\$(mise ls -g 'opencode' 'npm:@xai-official/grok' 'npm:@moonshot-ai/kimi-code')\" ]; " +
+                "then mise use -g node@lts; fi",
+            MISE_NODE_FOR_AGENTS,
+        )
+    }
 }
