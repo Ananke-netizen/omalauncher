@@ -89,7 +89,8 @@ fun HomeScreen(
     val per = if (showsTwoPages(windowSize())) 2 else 1
     val pageNumbers =
         engine.pages
-            .let { listOf(minOf(it.first(), FACE_PAGE + 1) - 1) + it }
+            // Ours: once a face is there, no empty page waits left of it (a new face goes in from settings › pages).
+            .let { if (it.first() <= FACE_PAGE) it else listOf(minOf(it.first(), FACE_PAGE + 1) - 1) + it }
             .let { if (engine.itemsOn(it.last()).isEmpty()) it else it + (it.last() + 1) }
     // Only faces on screen, or the empty one waiting left of them: they get it whole, the bar's room too (see
     // LauncherState.faceShowing), and the status bar's while all of them say statusBar: false.
@@ -98,7 +99,8 @@ fun HomeScreen(
     val slots = slotsOf(pageNumbers, per, ::full)
     fun slotOf(page: Int) = slots.indexOfFirst { page in it }
     // Home opens on page 1, not left of it; on the first tile page, if a layout from before faces has none numbered 1.
-    val pager = rememberPagerState(initialPage = slotOf(pageNumbers.firstOrNull { it >= 1 } ?: 1).coerceAtLeast(0)) { slots.size }
+    // Ours: with a face, home opens on it (the one nearest page 1): the face is the main screen.
+    val pager = rememberPagerState(initialPage = slotOf(pageNumbers.lastOrNull { isFacePage(it) && faceOn(it) != null } ?: pageNumbers.firstOrNull { it >= 1 } ?: 1).coerceAtLeast(0)) { slots.size }
     // A tile dropped on another page: show that page once the page list has caught up.
     var showPage by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(showPage, slots) {
@@ -142,6 +144,11 @@ fun HomeScreen(
     val listed = remember { arrayOf(slots) }
     LaunchedEffect(pager.currentPage, slots, engine.loaded) {
         if (!engine.loaded) return@LaunchedEffect
+        // Ours: once per process, home starts on the face nearest page 1, if there is one.
+        if (!startedOnFace) {
+            startedOnFace = true
+            pageNumbers.lastOrNull { isFacePage(it) && faceOn(it) != null }?.let { engine.activePage = it }
+        }
         if (slots != listed[0]) {
             listed[0] = slots
             val i = slotOf(engine.activePage)
@@ -577,3 +584,6 @@ internal fun barShift(
         else -> 1f
     }
 }
+
+/** Ours: whether home has been sent to the face once since the process started; see Home. */
+private var startedOnFace = false
