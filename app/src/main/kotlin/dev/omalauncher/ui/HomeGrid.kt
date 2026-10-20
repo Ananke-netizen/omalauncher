@@ -702,7 +702,29 @@ internal fun HomeGrid(
                         // arranged in settings › pages). One that none of them takes opens the menu, as empty space does:
                         // they take it as the press times out, so give them a moment to say so.
                         if (hit?.first?.isFace == true) {
-                            if (!awaitLongPress(down.id, start)) return@awaitEachGesture
+                            // Ours: a face takes the same swipe up as empty space, unless its own nodes take the drag.
+                            var faceCrossing: PointerInputChange? = null
+                            var faceReleased = false
+                            var faceConsumed = false
+                            val pressed =
+                                withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                    while (true) {
+                                        val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                                        if (c.isConsumed) faceConsumed = true
+                                        if (!c.pressed) {
+                                            faceReleased = true
+                                            break
+                                        }
+                                        if ((c.position - start).getDistance() > viewConfiguration.touchSlop) {
+                                            faceCrossing = c
+                                            break
+                                        }
+                                    }
+                                } == null
+                            if (!pressed) {
+                                if (!faceReleased && faceCrossing != null) followEmptySpaceDrag(down.id, start, faceCrossing, faceConsumed)?.let(onSwipe)
+                                return@awaitEachGesture
+                            }
                             val held = SystemClock.uptimeMillis()
                             withTimeoutOrNull(CLAIM_MS) { while (true) awaitPointerEvent(PointerEventPass.Initial) }
                             if (claims.at < held - viewConfiguration.longPressTimeoutMillis) {
