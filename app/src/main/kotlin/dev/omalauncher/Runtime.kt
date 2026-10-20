@@ -92,6 +92,9 @@ class Runtime(
     val androidApps = AndroidAppCatalog(context)
     val usage = AppUsage(context)
 
+    /** The app drawer's folders, from style/drawer.txt. */
+    val drawerFolders = dev.omalauncher.drawer.DrawerFolderStore(context)
+
     /** Where Android apps' icons come from: icon packs and the user's own files. Before [androidApps] starts drawing them. */
     val icons = IconStore(context, style, androidApps, usage)
     val themes = ThemeStore(context, proot, style, isLinux = { linux }, onConfigChanged = ::syncGuest)
@@ -207,6 +210,7 @@ class Runtime(
             }
             themes.load()
             style.start()
+            drawerFolders.start()
             widgets.start()
             // On the first-run screen the download is the screen's job, with progress.
             if (launcherReady) scope.launch { themes.ensureRelease() }

@@ -66,11 +66,14 @@ internal object BackupFormat {
     /** The style, from 0.7: theme, background and the style screen's options. defaults.toml and errors.txt beside it are this app's. */
     const val STYLE = "style/style.toml"
 
+    /** The app drawer's folders, from 0.8.1-ananke.2; see [dev.omalauncher.drawer.DrawerFoldersFile]. */
+    const val DRAWER = "style/drawer.txt"
+
     /**
      * Files under the app's files. The launcher's record of the default widgets it wrote keeps a
      * restored default updating, and one deleted before the backup deleted.
      */
-    val FILES = listOf("launcher-managed.json", STYLE)
+    val FILES = listOf("launcher-managed.json", STYLE, DRAWER)
 
     fun prefsEntry(name: String) = "prefs/$name.json"
 

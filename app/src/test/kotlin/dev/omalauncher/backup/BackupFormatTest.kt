@@ -31,6 +31,7 @@ class BackupFormatTest {
             "prefs/launcher.json",
             "files/launcher-managed.json",
             "files/style/style.toml",
+            "files/style/drawer.txt",
             "files/widgets/clock.owl",
             "files/widgets/examples/gauge.owl",
             "files/widget-state/clock.owl.json",
@@ -153,6 +154,15 @@ class BackupFormatTest {
         // style.toml alone: its defaults and errors are this app's.
         assertEquals("this app's", File(to, "style/defaults.toml").readText())
         assertFalse(File(to, "style/errors.txt").exists())
+    }
+
+    @Test fun drawerFoldersTravelWithTheBackup() {
+        val from = tmp.newFolder("from")
+        File(from, "style/drawer.txt").apply { parentFile.mkdirs() }.writeText("Talk\n  com.whatsapp\n")
+        val zip = ByteArrayOutputStream().also { writeBackup(it, info, emptyMap(), from) }.toByteArray()
+        val to = tmp.newFolder("to")
+        applyFiles(readBackup(ByteArrayInputStream(zip), tmp.newFolder("s")), to) { it.deleteRecursively() }
+        assertEquals("Talk\n  com.whatsapp\n", File(to, "style/drawer.txt").readText())
     }
 
     @Test fun aStyleGoesWhereThereWasNone() {
