@@ -72,6 +72,7 @@ const val HERMES_CLEANUP = "rm -rf ~/.hermes/cache/pnpm ~/.hermes/cache/uv"
 val AGENTS =
     listOf(
         Agent("pantheon", "Pantheon", R.string.linux_agent_pantheon, "", app = PANTHEON_PACKAGE),
+        Agent("claude", "Claude Code", R.string.linux_agent_claude, "claude"),
         // mise installs OpenCode 2 from npm (@opencode/cli).
         Agent("opencode", "OpenCode", R.string.linux_agent_opencode, "opencode", node = true),
         Agent("codex", "Codex", R.string.linux_agent_codex, "codex"),
