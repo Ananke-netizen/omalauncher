@@ -500,7 +500,7 @@ fun HomeScreen(
             per = per,
             onLongPressEmpty = { openMenu(null) },
             feed = { page ->
-                val agent = runtime.agents.default?.name
+                val agent = runtime.agents.terminalDefault?.name
                 PageInvite(
                     stringResource(R.string.home_face_invite_title),
                     agent?.let { stringResource(R.string.home_face_invite_text, it) } ?: stringResource(R.string.home_face_invite_text_no_agent),
@@ -515,7 +515,7 @@ fun HomeScreen(
                 }
             },
             invite = {
-                val agent = runtime.agents.default?.name
+                val agent = runtime.agents.terminalDefault?.name
                 PageInvite(
                     stringResource(R.string.home_widget_invite_title),
                     agent?.let { stringResource(R.string.home_widget_invite_text, it) } ?: stringResource(R.string.home_widget_invite_text_no_agent),

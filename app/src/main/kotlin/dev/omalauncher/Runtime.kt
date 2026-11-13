@@ -22,6 +22,8 @@ import dev.omalauncher.linux.AgentStore
 import dev.omalauncher.linux.AudioBridge
 import dev.omalauncher.linux.Bootstrap
 import dev.omalauncher.linux.EDIT_COMMAND
+import dev.omalauncher.linux.PANTHEON_ASK_AUTHORITY
+import dev.omalauncher.linux.PANTHEON_TICKET_EXTRA
 import dev.omalauncher.linux.FILES_COMMAND
 import dev.omalauncher.linux.VOICE_COMMAND
 import dev.omalauncher.linux.Gpu
@@ -37,6 +39,7 @@ import dev.omalauncher.linux.TerminalFont
 import dev.omalauncher.linux.bundledIcons
 import dev.omalauncher.linux.defaultApps
 import dev.omalauncher.linux.matches
+import dev.omalauncher.linux.pantheonVerb
 import dev.omalauncher.linux.run
 import dev.omalauncher.linux.shellQuote
 import dev.omalauncher.theme.Style
@@ -105,7 +108,13 @@ class Runtime(
     val themes = ThemeStore(context, proot, style, isLinux = { linux }, onConfigChanged = ::syncGuest)
     private val audio = AudioBridge(proot)
     private val openBridge = OpenBridge(context, proot, onOpenFiles = ::openFiles, onOpenVoice = ::openVoice, onEdit = ::edit)
-    val agents = AgentStore(proot, text = { id, arg -> context.getString(id, arg) }, onChanged = ::syncGuest)
+    val agents =
+        AgentStore(
+            proot,
+            text = { id, arg -> context.getString(id, arg) },
+            onChanged = ::syncGuest,
+            appInstalled = { context.packageManager.getLaunchIntentForPackage(it) != null },
+        )
     val pacman = Pacman(context, proot)
     val widgets = WidgetEngine(context, proot, this)
 
@@ -573,6 +582,49 @@ class Runtime(
      * foot app_id, so Recents shows "Grok" or "btop" rather than one "foot" per window.
      * An [agent] session gets the agent's logo and Recents entry whatever it's named.
      */
+    /**
+     * Hands the prompt to Pantheon's ask provider (see Agents.kt). The provider verifies our
+     * signature on its side and returns a ticket; with [hold] the answer arrives as a
+     * notification, else Pantheon opens with the ticket so the reply streams live. Any refusal
+     * just opens Pantheon plainly, so a typed prompt is never lost.
+     */
+    fun askAndroid(agent: Agent, prompt: String, hold: Boolean) {
+        scope.launch {
+            val reply = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.call(
+                        android.net.Uri.parse("content://$PANTHEON_ASK_AUTHORITY"), pantheonVerb(hold), prompt, null,
+                    )
+                }.onFailure { Log.w(TAG, "${agent.name} refused the ask: ${it.message}") }.getOrNull()
+            }
+            if (reply == null || !reply.getBoolean("ok")) {
+                Log.w(TAG, "${agent.name} didn't take the ask; opening it plainly")
+                openApp(agent.app)
+                return@launch
+            }
+            if (hold) {
+                android.widget.Toast.makeText(context, context.getString(R.string.pantheon_asked_toast, agent.name), android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            runCatching {
+                context.startActivity(
+                    android.content.Intent()
+                        .setClassName(agent.app, "${agent.app}.MainActivity")
+                        .putExtra(PANTHEON_TICKET_EXTRA, reply.getString(PANTHEON_TICKET_EXTRA))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.onFailure { Log.w(TAG, "cannot open ${agent.app}", it) }
+        }
+    }
+
+    /** Opens an installed Android app by package, when a plain launch will do. */
+    fun openApp(pkg: String) {
+        context.packageManager.getLaunchIntentForPackage(pkg)?.let {
+            it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(it) }.onFailure { e -> Log.w(TAG, "cannot open $pkg", e) }
+        }
+    }
+
     fun terminal(
         command: String?,
         name: String,

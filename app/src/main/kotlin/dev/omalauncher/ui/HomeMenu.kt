@@ -61,7 +61,7 @@ fun HomeMenu(
 ) {
     if (!state.homeMenuOpen) return
     val engine = runtime.widgets
-    val agent = runtime.agents.default
+    val agent = runtime.agents.terminalDefault
     // These need Linux; without it they open its install sheet.
     val linux = linuxPhase(runtime) == LinuxPhase.Installed
     val scope = rememberCoroutineScope()

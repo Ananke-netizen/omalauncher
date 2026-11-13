@@ -127,22 +127,34 @@ internal fun PromptBar(
         state.show(SettingsPage.Linux)
     }
 
-    fun send(prompt: String) {
+    fun send(prompt: String, hold: Boolean = false) {
         val p = prompt.trim()
         if (p.isEmpty()) return
-        if (!linux) return offerLinux()
         // Looked up now: speech results arrive after the bar may have recomposed.
-        val target = runtime.agents.default
-        if (target == null) {
-            state.query = p
-            state.show(SettingsPage.Agents)
+        val picked = runtime.agents.default
+        fun done() {
+            state.query = ""
+            focusManager.clearFocus()
+            keyboard?.hide()
+            state.closeNow()
+        }
+        fun viaLinux(target: Agent?) {
+            if (!linux) return offerLinux()
+            if (target == null) {
+                state.query = p
+                state.show(SettingsPage.Agents)
+                return
+            }
+            runtime.terminal("${agentInvocation(target.bin, p)}; exec bash", target.name, target)
+            done()
+        }
+        if (picked != null && picked.android) {
+            // Pantheon: no Linux in the path; its provider streams the answer or the app opens.
+            runtime.askAndroid(picked, p, hold)
+            done()
             return
         }
-        runtime.terminal("${agentInvocation(target.bin, p)}; exec bash", target.name, target)
-        state.query = ""
-        focusManager.clearFocus()
-        keyboard?.hide()
-        state.closeNow()
+        viaLinux(picked)
     }
 
     /** The drawer's panel, while it shows: what's typed, Enter and the arrow keys are its. */
@@ -172,7 +184,7 @@ internal fun PromptBar(
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         speech.start(hold) { heard ->
             val full = listOf(typed, heard).filter { it.isNotBlank() }.joinToString(" ") { it.trim() }
-            if (sendWhenDone && heard.isNotEmpty()) send(full) else state.query = full
+            if (sendWhenDone && heard.isNotEmpty()) send(full, hold = true) else state.query = full
         }
     }
 
@@ -183,7 +195,8 @@ internal fun PromptBar(
         }
 
     fun talk(hold: Boolean) {
-        if (!linux) return offerLinux()
+        // Pantheon needs no Linux; every other agent runs in it.
+        if (!linux && runtime.agents.default?.android != true) return offerLinux()
         if (context.hasPermission(Manifest.permission.RECORD_AUDIO)) {
             listen(hold)
         } else {

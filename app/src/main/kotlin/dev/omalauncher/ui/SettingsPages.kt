@@ -102,7 +102,7 @@ private fun SettingsPage(
         title: String,
         command: (String) -> String,
     ) {
-        val agent = runtime.agents.default ?: return stack.push(SettingsPage.Agents)
+        val agent = runtime.agents.terminalDefault ?: return stack.push(SettingsPage.Agents)
         runtime.terminal(command(agent.bin), title, agent)
     }
 
@@ -156,12 +156,12 @@ private fun SettingsPage(
                     onDismiss = close,
                     onOpen = { agent ->
                         close()
-                        runtime.terminal(agent.command, agent.name, agent)
+                        if (agent.android) runtime.openApp(agent.app) else runtime.terminal(agent.command, agent.name, agent)
                     },
                 )
             }
-        SettingsPage.Store -> StoreScreen(runtime.widgets, runtime.agents.installed, homePage, runtime.themes.picked, onDismiss = close, onOpenApp = runtime::openOwlApp)
-        SettingsPage.FaceStore -> StoreScreen(runtime.widgets, runtime.agents.installed, homePage, runtime.themes.picked, onDismiss = close, initialKind = OwlKind.Face, onOpenApp = runtime::openOwlApp)
+        SettingsPage.Store -> StoreScreen(runtime.widgets, runtime.agents.installed.filterNot { it.android }, homePage, runtime.themes.picked, onDismiss = close, onOpenApp = runtime::openOwlApp)
+        SettingsPage.FaceStore -> StoreScreen(runtime.widgets, runtime.agents.installed.filterNot { it.android }, homePage, runtime.themes.picked, onDismiss = close, initialKind = OwlKind.Face, onOpenApp = runtime::openOwlApp)
         SettingsPage.Packages -> PackagesScreen(runtime, onDismiss = close)
         SettingsPage.Linux -> LinuxScreen(runtime, onDismiss = close)
         SettingsPage.Licenses -> LicensesScreen(onDismiss = close)

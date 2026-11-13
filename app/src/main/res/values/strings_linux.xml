@@ -226,4 +226,6 @@
     <string name="licenses_use_androidsvg">draws SVG icons</string>
     <string name="licenses_use_zxing">draws the QR codes widgets are shared with</string>
     <string name="licenses_use_json">reads and writes JSON</string>
+    <string name="linux_agent_pantheon" translatable="false">Hermes in the Pantheon app, no Linux needed</string>
+    <string name="pantheon_asked_toast">asked %1$s · the answer comes as a notification</string>
 </resources>
