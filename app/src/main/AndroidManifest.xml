@@ -32,6 +32,8 @@
         android:required="false" />
 
     <queries>
+        <!-- Pantheon, the bar's Android agent: its ask provider (signature-checked on its side). -->
+        <package android:name="com.axum.pocket" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

@@ -286,4 +286,6 @@
     <string name="link_paused">paused. no device reaches this one and it follows none until you resume.</string>
     <string name="link_activity">activity</string>
     <string name="link_activity_none">nothing yet</string>
+    <string name="linux_agent_pantheon" translatable="false">Hermes in the Pantheon app, no Linux needed</string>
+    <string name="pantheon_asked_toast">asked %1$s · the answer comes as a notification</string>
 </resources>

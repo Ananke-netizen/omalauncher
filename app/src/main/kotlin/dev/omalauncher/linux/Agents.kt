@@ -27,8 +27,10 @@ data class Agent(
     val bin: String,
     val name: String,
     @StringRes val description: Int,
-    /** mise package spec; empty with its [own] installer. */
+    /** mise package spec; empty with its [own] installer, or for the Pantheon entry, which mise never sees. */
     val pkg: String,
+    /** An Android app the bar hands the prompt to: no guest, no Linux needed. */
+    val app: String = "",
     /** What starts it without a prompt, when that's more than [bin]. */
     val command: String = bin,
     /** Whether mise needs node to install it: npm packages run their postinstall scripts with it. */
@@ -36,6 +38,8 @@ data class Agent(
     /** Set for an agent that installs itself instead of through mise. */
     val own: OwnInstaller? = null,
 ) {
+    val android get() = app.isNotEmpty()
+
     /** Its activity alias in the manifest (cursor-agent -> CursorAgentWindow), so Recents names its window after it. */
     val windowAlias get() = bin.split('-').joinToString("") { it.replaceFirstChar(Char::uppercase) } + "Window"
 }
@@ -62,11 +66,12 @@ const val HERMES_CLEANUP = "rm -rf ~/.hermes/cache/pnpm ~/.hermes/cache/uv"
 
 /**
  * Omarchy's agent list (omarchy-default-agent), limited to ones mise can install on arm64, plus Hermes,
- * which Omarchy also installs with Hermes's own installer.
+ * which Omarchy also installs with Hermes's own installer. Pantheon is ours and leads: the first
+ * installed agent takes the prompt bar.
  */
 val AGENTS =
     listOf(
-        Agent("claude", "Claude Code", R.string.linux_agent_claude, "claude"),
+        Agent("pantheon", "Pantheon", R.string.linux_agent_pantheon, "", app = PANTHEON_PACKAGE),
         // mise installs OpenCode 2 from npm (@opencode/cli).
         Agent("opencode", "OpenCode", R.string.linux_agent_opencode, "opencode", node = true),
         Agent("codex", "Codex", R.string.linux_agent_codex, "codex"),
@@ -139,6 +144,14 @@ val AGENTS =
         Agent("amp", "Amp", R.string.linux_agent_amp, "amp[prerelease=true]", node = true),
         Agent("commandcode", "Command Code", R.string.linux_agent_commandcode, "npm:command-code"),
     )
+
+/** Pantheon, the Hermes app on this phone. Its ask provider admits only us, by signature. */
+const val PANTHEON_PACKAGE = "com.axum.pocket"
+const val PANTHEON_ASK_AUTHORITY = "com.axum.pocket.ask"
+const val PANTHEON_TICKET_EXTRA = "ask_ticket"
+
+/** The provider verb: Enter opens Pantheon with the reply streaming; hold-to-talk answers as a notification. */
+fun pantheonVerb(hold: Boolean): String = if (hold) "ask_silent" else "ask_open"
 
 /**
  * Brings mise itself up to date. Which backend a tool installs from is built into mise, and an old mise
@@ -222,6 +235,8 @@ class AgentStore(
     private val text: (Int, String) -> String,
     /** Called when the set of installed agents changed, so their desktop entries follow. */
     private val onChanged: () -> Unit,
+    /** Whether an Android package is on the phone, for [Agent.android] agents. */
+    private val appInstalled: (String) -> Boolean = { false },
 ) {
     private val mise get() = File(proot.home, ".local/bin/mise")
     private val shims get() = File(proot.home, ".local/share/mise/shims")
@@ -230,10 +245,14 @@ class AgentStore(
 
     /**
      * Shims are symlinks to a guest path (/root/.local/bin/mise), so don't follow them from the host. An agent
-     * with its own installer is there once that finished.
+     * with its own installer is there once that finished; an Android agent, once its app is on the phone.
      */
     fun isInstalled(agent: Agent) =
-        if (agent.own != null) File(proot.home, agent.own.done).exists() else Files.exists(File(shims, agent.bin).toPath(), LinkOption.NOFOLLOW_LINKS)
+        when {
+            agent.android -> appInstalled(agent.app)
+            agent.own != null -> File(proot.home, agent.own.done).exists()
+            else -> Files.exists(File(shims, agent.bin).toPath(), LinkOption.NOFOLLOW_LINKS)
+        }
 
     /** The agent picked in the prompt bar, kept in the guest home where scripts can read it too. */
     private val preferredFile get() = File(proot.launcherConfig, "agent")
@@ -243,6 +262,22 @@ class AgentStore(
     fun load() {
         preferred = runCatching { preferredFile.readText().trim() }.getOrNull()
         refresh()
+        promotePantheon()
+    }
+
+    /**
+     * Pantheon becomes the bar's agent once, the first time it's seen on the phone. A later pick
+     * of another agent stands: the marker keeps this from happening again.
+     */
+    private fun promotePantheon() {
+        // The pick lives in the guest home; with no Linux there's none to write (and Pantheon,
+        // first in the list, is the default anyway).
+        if (!proot.home.isDirectory) return
+        val pantheon = installed.firstOrNull { it.android } ?: return
+        val marker = File(proot.launcherConfig, "agent-pantheon-promoted")
+        if (marker.exists()) return
+        choose(pantheon)
+        runCatching { marker.writeText("1\n") }
     }
 
     /** Installed agents in Omarchy's order; re-read from disk after installs and removals. */
@@ -256,8 +291,14 @@ class AgentStore(
     /** The agent the launcher opens for prompts and widget work: the picked one, else the first installed in Omarchy's order. */
     val default: Agent? get() = installed.firstOrNull { it.bin == preferred } ?: installed.firstOrNull()
 
+    /** The agent for work that needs a terminal in the guest (editing widgets): never an Android app. */
+    val terminalDefault: Agent? get() =
+        installed.firstOrNull { it.bin == preferred && !it.android } ?: installed.firstOrNull { !it.android }
+
     fun choose(agent: Agent) {
         preferred = agent.bin
+        // Never create the guest home from here: a missing one means no Linux.
+        if (!proot.home.isDirectory) return
         runCatching {
             preferredFile.parentFile?.mkdirs()
             preferredFile.writeText(agent.bin + "\n")
@@ -276,13 +317,17 @@ class AgentStore(
         }
 
     /** Installs [agent] with its own installer, or with mise, bootstrapping mise itself if needed. */
-    fun installScript(agent: Agent) =
-        agent.own?.install
-            ?: buildString {
-                append(if (mise.exists()) "$MISE_SELF_UPDATE && " else "curl -fsSL https://mise.run | sh && ")
-                if (agent.node) append("mise use -g node@lts && ")
-                append("mise use -g ${shellQuote(agent.pkg)} && $MISE_CLEANUP")
-            }
+    fun installScript(agent: Agent): String =
+        if (agent.android) {
+            error("${agent.name} is an Android app; install it on the phone")
+        } else {
+            agent.own?.install
+                ?: buildString {
+                    append(if (mise.exists()) "$MISE_SELF_UPDATE && " else "curl -fsSL https://mise.run | sh && ")
+                    if (agent.node) append("mise use -g node@lts && ")
+                    append("mise use -g ${shellQuote(agent.pkg)} && $MISE_CLEANUP")
+                }
+        }
 
     /** Call after [installScript] succeeded: makes the agent show up in the drawer. */
     fun onInstalled(agent: Agent) {
@@ -321,7 +366,7 @@ class AgentStore(
 
     /** Drawer entries for the installed agents, with their logos (see [bundledIcons]); each opens in a terminal in the home directory. */
     fun managed(): List<Managed> =
-        installed.map { agent ->
+        installed.filterNot { it.android }.map { agent ->
             Managed.text(File(proot.applications, "agent-${agent.bin}.desktop"), Policy.Owned) {
                 "[Desktop Entry]\nType=Application\nName=${agent.name}\nTerminal=true\nExec=${agent.command}\nIcon=${bundledIcon("agent-${agent.bin}")}\n"
             }

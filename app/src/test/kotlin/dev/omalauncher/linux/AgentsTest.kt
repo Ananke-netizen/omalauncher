@@ -11,12 +11,22 @@ class AgentsTest {
     @Test fun everyAgentHasAWindowAlias() {
         val manifest = File("src/main/AndroidManifest.xml").readText()
         val aliases = Regex("""<activity-alias(.*?)/>""", RegexOption.DOT_MATCHES_ALL).findAll(manifest).map { it.groupValues[1] }.toList()
-        for (agent in AGENTS) {
+        for (agent in AGENTS.filterNot { it.android }) {   // an Android app has no terminal window
             val alias = aliases.firstOrNull { "android:name=\".${agent.windowAlias}\"" in it }
             assertTrue("${agent.bin}: no .${agent.windowAlias} in the manifest", alias != null)
             assertTrue("${agent.bin}: not labelled \"${agent.name}\"", "android:label=\"${agent.name}\"" in alias!!)
             assertTrue("${agent.bin}: no logo", "android:icon=\"@drawable/agent_${agent.bin.replace('-', '_')}\"" in alias)
         }
+    }
+
+    /** Pantheon is the android kind: first in the list, so the default with no pick; no mise, no guest. */
+    @Test fun pantheonIsTheAndroidAgent() {
+        val pantheon = AGENTS.first()
+        assertEquals("pantheon", pantheon.bin)
+        assertTrue(pantheon.android)
+        assertEquals("", pantheon.pkg)
+        assertEquals(1, AGENTS.count { it.android })                   // exactly one app agent, first
+        assertEquals(AGENTS[1], AGENTS.first { !it.android })          // a Linux agent still leads the terminal work
     }
 
     @Test fun copilotReceivesAnInteractivePromptAsOneLiteralArgument() {
