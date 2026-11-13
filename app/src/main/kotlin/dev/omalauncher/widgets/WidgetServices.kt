@@ -1005,7 +1005,8 @@ class WidgetServices(
         val p = prompt.trim()
         if (p.isEmpty()) return
         val agents = runtime.agents
-        val agent = bin?.let { b -> agents.installed.firstOrNull { it.bin == b } } ?: agents.default
+        // A terminal runs it, so never an Android app agent such as Pantheon (which only the bar may hand text to).
+        val agent = bin?.let { b -> agents.installed.firstOrNull { it.bin == b && !it.android } } ?: agents.terminalDefault
         if (agent == null) return launcherAction?.invoke("agents") ?: runtime.openSettings(SettingsPage.Agents)
         runtime.terminal("${agentInvocation(agent.bin, p)}; exec bash", agent.name, agent)
     }

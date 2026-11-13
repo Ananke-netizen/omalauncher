@@ -275,7 +275,8 @@ class Runtime(
     }
 
     /** Installs Linux in the background, with [agents]; progress shows in [Bootstrap.state] and the notification. */
-    fun installLinux(agents: List<Agent>) = runLinux { bootstrap.install(agents) }
+    // Android app agents (Pantheon) are never installed into Linux.
+    fun installLinux(agents: List<Agent>) = runLinux { bootstrap.install(agents.filterNot { it.android }) }
 
     /** Continues a failed install, or a failed update of an installed system. */
     fun retryLinux() = runLinux { bootstrap.run() }

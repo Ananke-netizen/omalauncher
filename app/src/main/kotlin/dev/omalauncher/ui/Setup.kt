@@ -70,7 +70,7 @@ internal fun SetupScreen(runtime: Runtime) {
     val themes = runtime.themes
     var linux by rememberSaveable { mutableStateOf(false) }
     // Claude Code first, like Omarchy's default agent; the first picked becomes the launcher's default.
-    var picked by rememberSaveable { mutableStateOf(listOf(AGENTS.first().bin)) }
+    var picked by rememberSaveable { mutableStateOf(listOf(AGENTS.first { !it.android }.bin)) }
     var started by remember { mutableStateOf(false) }
     val install = rememberLinuxInstall(runtime)
     var error by remember { mutableStateOf<String?>(null) }
@@ -190,7 +190,7 @@ internal fun AgentPicker(
             style = Mono.copy(color = Subtle, fontSize = TextSize.Small),
         )
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (agent in AGENTS) Choice(agent.name, stringResource(agent.description), agent.bin in picked) { onToggle(agent.bin) }
+            for (agent in AGENTS.filterNot { it.android }) Choice(agent.name, stringResource(agent.description), agent.bin in picked) { onToggle(agent.bin) }
         }
     }
 }

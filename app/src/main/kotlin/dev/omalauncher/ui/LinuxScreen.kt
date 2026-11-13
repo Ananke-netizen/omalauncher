@@ -93,7 +93,7 @@ fun rememberLinuxInstall(runtime: Runtime): (List<String>) -> Unit {
 
 @Composable
 private fun InstallOffer(runtime: Runtime) {
-    var picked by rememberSaveable { mutableStateOf(listOf(AGENTS.first().bin)) }
+    var picked by rememberSaveable { mutableStateOf(listOf(AGENTS.first { !it.android }.bin)) }
     val install = rememberLinuxInstall(runtime)
     BasicText(stringResource(R.string.linux_offer_title), style = Mono.copy(fontSize = TextSize.Large))
     Spacer(Modifier.height(8.dp))
